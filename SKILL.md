@@ -44,6 +44,32 @@ Before changing weight or track, record a **governance-admission proof** naming
 the exact trigger. Existing helpers, workflow familiarity, or a preference for
 more bookkeeping are not admission reasons.
 
+## Reasoning-effort routing
+
+Set the reasoning effort explicitly on every new or continued research work
+session:
+
+- Default to `max` for audit, research and analysis, including Opportunity
+  Search, literature/neighbor work, source/code semantics, causal/algebraic/
+  statistical analysis, scientific-contract design, independent verification,
+  adjudication, result interpretation and route decisions.
+- Default to `high` for code implementation and execution, including
+  implementation planning under a frozen contract, coding, debugging,
+  refactoring, tests/builds, environment setup, job launch and deterministic
+  integration.
+- Raise implementation/execution from `high` to `max` when it exposes
+  scientific ambiguity, conflicting evidence or rules, a validity boundary, or
+  complex concurrency/data-integrity risk. Raise `max` further only when the
+  selected model supports it and the decision-critical problem is unusually
+  difficult.
+- Lower effort only after a subtask is demonstrably mechanical and
+  outcome-independent. Do not downshift while unresolved scientific judgment
+  remains.
+
+Use the explicit `thinking`/reasoning-effort parameter when creating or sending
+the next turn to a worker. `Recover` uses `high` for mechanical state
+reconstruction and `max` when it includes evidence interpretation or rerouting.
+
 ## Controller-worker session architecture
 
 For a long-running or multi-session Program, use a persistent controller plus

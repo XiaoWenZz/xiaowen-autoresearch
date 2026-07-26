@@ -58,6 +58,8 @@ handles exactly one admitted Problem Scout, confirmatory contract, or named
 uncertainty. Its contract must state:
 
 - question and single unresolved uncertainty;
+- work type and explicit reasoning effort (`max` for audit/research/analysis
+  by default; `high` for implementation/execution by default);
 - source, data, leakage, and deployment boundary;
 - allowed actions and tools;
 - attention, time, compute, API, and external-action budget;
@@ -166,6 +168,13 @@ limitations, and charge their attention, review, and compute to the same
 Program/Epoch budget. Use a persistent work session instead when the task needs
 owner-visible interaction, long-running jobs, repeated guidance, durable
 recovery, an isolated context, or an auditable evidence trail across turns.
+
+When creating or continuing any work session, pass the reasoning effort
+explicitly. Raise `high` implementation/execution work to `max` when it reveals
+scientific ambiguity, conflicting evidence or rules, a validity boundary, or
+complex concurrency/data-integrity risk. Lower effort only when the remaining
+subtask is demonstrably mechanical and outcome-independent; never downshift
+unresolved scientific judgment.
 
 This session architecture is separate from the governance-track decision. A
 single bounded work session may still be Scout Lite when no durable
