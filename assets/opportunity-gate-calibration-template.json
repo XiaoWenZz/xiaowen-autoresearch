@@ -1,0 +1,76 @@
+{
+  "schema_version": "opportunity-gate-calibration-v1",
+  "domain": "REPLACE_DOMAIN",
+  "gate_version": "high-recall-opportunity-v2",
+  "evidence_freeze": "YYYY-MM-DD",
+  "decision_rule": "Retrospective positives must reach PROBE; negative controls must not reach PROBE. Contribution forecast cannot determine problem admission.",
+  "controls": [
+    {
+      "id": "positive-1",
+      "kind": "retrospective_positive",
+      "pre_signal_state": "REPLACE_WITH_INFORMATION_AVAILABLE_BEFORE_FIRST_SIGNAL",
+      "expected_problem_admission": "PROBE",
+      "observed_problem_admission": "PROBE",
+      "contribution_forecast": "UNASSESSED_PRE_SIGNAL",
+      "gate_decision_rationale": "REPLACE",
+      "source_paths": ["REPLACE"]
+    },
+    {
+      "id": "positive-2",
+      "kind": "retrospective_positive",
+      "pre_signal_state": "REPLACE_WITH_INFORMATION_AVAILABLE_BEFORE_FIRST_SIGNAL",
+      "expected_problem_admission": "PROBE",
+      "observed_problem_admission": "PROBE",
+      "contribution_forecast": "CHALLENGED_NEIGHBOR",
+      "gate_decision_rationale": "REPLACE",
+      "source_paths": ["REPLACE"]
+    },
+    {
+      "id": "positive-3",
+      "kind": "retrospective_positive",
+      "pre_signal_state": "REPLACE_WITH_INFORMATION_AVAILABLE_BEFORE_FIRST_SIGNAL",
+      "expected_problem_admission": "PROBE",
+      "observed_problem_admission": "PROBE",
+      "contribution_forecast": "PLAUSIBLE_IF_SIGNAL",
+      "gate_decision_rationale": "REPLACE",
+      "source_paths": ["REPLACE"]
+    },
+    {
+      "id": "negative-1",
+      "kind": "negative_control",
+      "pre_signal_state": "REPLACE_WITH_EXACT_DUPLICATE_OR_REDUCTION",
+      "expected_problem_admission": "DROP_PROBLEM_EXACT_REDUCTION",
+      "observed_problem_admission": "DROP_PROBLEM_EXACT_REDUCTION",
+      "contribution_forecast": "LIKELY_REPAIR",
+      "gate_decision_rationale": "REPLACE",
+      "source_paths": ["REPLACE"]
+    },
+    {
+      "id": "negative-2",
+      "kind": "negative_control",
+      "pre_signal_state": "REPLACE_WITH_NO_DECISION_LEAD",
+      "expected_problem_admission": "DROP_NO_DECISION",
+      "observed_problem_admission": "DROP_NO_DECISION",
+      "contribution_forecast": "LIKELY_GENERIC",
+      "gate_decision_rationale": "REPLACE",
+      "source_paths": ["REPLACE"]
+    },
+    {
+      "id": "negative-3",
+      "kind": "negative_control",
+      "pre_signal_state": "REPLACE_WITH_MISSING_INFORMATION_OR_CARRIER",
+      "expected_problem_admission": "HOLD_INFORMATION",
+      "observed_problem_admission": "HOLD_INFORMATION",
+      "contribution_forecast": "UNASSESSED_PRE_SIGNAL",
+      "gate_decision_rationale": "REPLACE",
+      "source_paths": ["REPLACE"]
+    }
+  ],
+  "summary": {
+    "control_count": 6,
+    "false_admits": 0,
+    "false_rejects": 0,
+    "negative_controls": 3,
+    "positive_controls": 3
+  }
+}
