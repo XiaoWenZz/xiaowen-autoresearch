@@ -516,9 +516,11 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   `not_decision_changing`. Missing this `idle_proof` invalidates the closure.
   Waiting for GPU does not justify idling outcome-independent work.
 - Only the controller may declare global `explicit_idle`; a route-local worker
-  may close its own backlog but cannot close the portfolio. Complete terminal
-  ACK, global queue recomputation, successor dispatch or validated idle, and
-  watchdog retargeting as one transaction.
+  may close its own backlog but cannot close the portfolio. Recompute the
+  global queue, durably record successor dispatch or validated idle and
+  watchdog intent, then issue the final terminal ACK as one transaction. An
+  early message receipt must be labeled `RECEIPT_ONLY` and cannot close the
+  worker or portfolio.
 - Give every zero-GPU dispatch an event-driven terminal callback to the
   controller. If that callback cannot wake the controller, install one named
   low-frequency continuity fallback. It may only catch an unhandled terminal
@@ -532,6 +534,16 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   leave a slot idle only when no named review can change a decision or when the
   dispatcher is blocked/cooldown-held. Never multiply near-duplicate prompts or
   use Pro for deterministic work.
+- Use Pro at five decision points when applicable: an independent idea-stage
+  divergence map in parallel with local primary-source search; a Scout-contract
+  counterexample review; one named mathematical/theory bottleneck; a
+  post-signal irreducibility/mechanism/specificity challenge; and terminal
+  interpretation or rebuttal. These are stage budgets, not quotas.
+- Every async Pro submit must bind the canonical Codex owner and absolute
+  working directory. Verify the returned callback binding. Record absolute
+  completion/check deadlines; automation retargeting cannot reset them. A
+  broker-completed unread answer is `response_ready` and must enter local
+  adjudication before dependent execution or claim decisions advance.
 - For persistent controller work, keep one compact lane snapshot in the
   existing Program ledger and validate it with
   `scripts/reconcile_research_lanes.py` before reporting terminal closure. See

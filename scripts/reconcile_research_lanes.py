@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,8 @@ QUEUE_AUTHORITY_KINDS = {
     "durable_terminal_packet",
     "frozen_prospective_contract",
 }
+PRO_LIVE_STATES = {"submitted", "generating", "cooldown_held"}
+PRO_DUE_HANDLING = {"in_progress", "dispatcher_busy", "cooldown_held"}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -55,6 +58,21 @@ def task_id(value: Any) -> str | None:
         if isinstance(candidate, str) and candidate.strip():
             return candidate
     return None
+
+
+def parse_utc(value: Any, field: str, errors: list[str]) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{field} must be a non-empty UTC timestamp")
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        errors.append(f"{field} must be an ISO-8601 timestamp")
+        return None
+    if parsed.tzinfo is None:
+        errors.append(f"{field} must include a timezone")
+        return None
+    return parsed.astimezone(timezone.utc)
 
 
 def validate_gpu_queue_authority(
@@ -244,6 +262,28 @@ def validate(record: dict[str, Any]) -> list[str]:
                 errors.append("validated_idle requires zero_gpu_running=explicit_idle")
         if terminal.get("watchdog_state") == "active":
             errors.append("acknowledged terminal cannot retain an active old watchdog")
+        reconciled_at = parse_utc(
+            terminal.get("portfolio_reconciled_at_utc"),
+            "terminal_transaction.portfolio_reconciled_at_utc",
+            errors,
+        )
+        acknowledged_at = parse_utc(
+            terminal.get("acknowledged_at_utc"),
+            "terminal_transaction.acknowledged_at_utc",
+            errors,
+        )
+        if (
+            reconciled_at is not None
+            and acknowledged_at is not None
+            and acknowledged_at < reconciled_at
+        ):
+            errors.append(
+                "final terminal ACK must follow durable portfolio reconciliation"
+            )
+        if terminal.get("delivery_intent_durable") is not True:
+            errors.append(
+                "acknowledged terminal requires delivery_intent_durable=true"
+            )
 
     pro = record.get("pro_advisory_lane")
     if not isinstance(pro, dict):
@@ -251,12 +291,83 @@ def validate(record: dict[str, Any]) -> list[str]:
         pro = {}
     live_jobs = pro.get("live_jobs")
     queued_reviews = pro.get("queue")
+    response_ready = pro.get("response_ready")
     if not isinstance(live_jobs, list):
         errors.append("pro_advisory_lane.live_jobs must be a list")
         live_jobs = []
     if not isinstance(queued_reviews, list):
         errors.append("pro_advisory_lane.queue must be a list")
         queued_reviews = []
+    if not isinstance(response_ready, list):
+        errors.append("pro_advisory_lane.response_ready must be a list")
+        response_ready = []
+    observed_at = parse_utc(
+        record.get("observed_at_utc"),
+        "observed_at_utc",
+        errors,
+    )
+    for index, item in enumerate(live_jobs):
+        prefix = f"pro_advisory_lane.live_jobs[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        for key in (
+            "job_id",
+            "decision",
+            "polling_owner",
+            "completion_callback_thread_id",
+        ):
+            if not isinstance(item.get(key), str) or not item[key].strip():
+                errors.append(f"{prefix} requires non-empty {key}")
+        if item.get("completion_callback_configured") is not True:
+            errors.append(
+                f"{prefix} requires completion_callback_configured=true"
+            )
+        status = item.get("status")
+        if status not in PRO_LIVE_STATES:
+            errors.append(
+                f"{prefix}.status must be one of {sorted(PRO_LIVE_STATES)}"
+            )
+        parse_utc(item.get("submitted_at_utc"), f"{prefix}.submitted_at_utc", errors)
+        due_at = parse_utc(
+            item.get("next_check_due_at_utc"),
+            f"{prefix}.next_check_due_at_utc",
+            errors,
+        )
+        if (
+            status in {"submitted", "generating"}
+            and observed_at is not None
+            and due_at is not None
+            and observed_at >= due_at
+            and item.get("due_handling") not in PRO_DUE_HANDLING
+        ):
+            errors.append(
+                f"{prefix} is due; set due_handling to one of "
+                f"{sorted(PRO_DUE_HANDLING)} without resetting its due time"
+            )
+    if response_ready:
+        first = response_ready[0]
+        if not isinstance(first, dict) or not isinstance(first.get("job_id"), str):
+            errors.append(
+                "pro_advisory_lane.response_ready[0] requires job_id"
+            )
+        elif pro.get("adjudicating_job_id") != first["job_id"]:
+            errors.append(
+                "oldest response_ready Pro job must be claimed for adjudication"
+            )
+        for index, item in enumerate(response_ready):
+            prefix = f"pro_advisory_lane.response_ready[{index}]"
+            if not isinstance(item, dict):
+                errors.append(f"{prefix} must be an object")
+                continue
+            for key in ("job_id", "decision", "owner_thread_id", "response_artifact"):
+                if not isinstance(item.get(key), str) or not item[key].strip():
+                    errors.append(f"{prefix} requires non-empty {key}")
+            parse_utc(
+                item.get("completed_at_utc"),
+                f"{prefix}.completed_at_utc",
+                errors,
+            )
     ready_reviews = [
         item
         for item in queued_reviews
@@ -267,7 +378,12 @@ def validate(record: dict[str, Any]) -> list[str]:
         errors.append(
             "decision-ready Pro review must be submitted while a Pro slot is free"
         )
-    if not live_jobs and not queued_reviews and not pro.get("explicit_idle_reason"):
+    if (
+        not live_jobs
+        and not queued_reviews
+        and not response_ready
+        and not pro.get("explicit_idle_reason")
+    ):
         errors.append(
             "empty Pro lane requires explicit_idle_reason; do not silently leave it idle"
         )

@@ -11,6 +11,26 @@ code, algebra or implementation work while they generate. Give every job a
 unique decision-bound identity and one polling owner. Do not create duplicate
 prompts merely to fill capacity.
 
+For idea-stage cross-checking, keep the Pro pass genuinely independent:
+
+- give Pro the frozen user/problem boundary and public-source date, but not the
+  local candidate ranking or conclusions;
+- run the local primary-source/code/algebra search in parallel;
+- require each side to freeze its own causal fingerprints, direct/partial/
+  generic-reduction map and unresolved uncertainties;
+- merge only after both passes finish; disagreements trigger primary-source or
+  algebra verification rather than majority voting.
+
+For a theory or mathematical bottleneck, do not send a broad research prompt.
+State one target proposition or derivation, its assumptions, the permitted
+tools/evidence, the desired proof or counterexample, and the exact downstream
+decision that the answer can change.
+
+Every async submit must include the canonical `completion_thread_id` and
+absolute `completion_cwd`, and its returned record must confirm that callback
+binding. Store an absolute next-check due time; never reset it when a monitor
+is retargeted.
+
 ## Contents
 
 1. Compile from three layers

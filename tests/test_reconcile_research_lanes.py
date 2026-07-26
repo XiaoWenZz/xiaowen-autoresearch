@@ -27,6 +27,7 @@ def run_record(record: dict[str, object]) -> subprocess.CompletedProcess[str]:
 def base_record() -> dict[str, object]:
     return {
         "controller_thread_id": "controller",
+        "observed_at_utc": "2026-07-27T00:10:00Z",
         "gpu_running": {"task_id": "GPU-1", "owner_thread_id": "gpu-owner"},
         "gpu_queue": [
             {
@@ -58,8 +59,20 @@ def base_record() -> dict[str, object]:
             "next_action": {"kind": "queued"},
         },
         "pro_advisory_lane": {
-            "live_jobs": [{"job_id": "PRO-1"}],
+            "live_jobs": [
+                {
+                    "job_id": "PRO-1",
+                    "decision": "independent idea-stage neighbor map",
+                    "polling_owner": "controller",
+                    "completion_callback_thread_id": "controller",
+                    "completion_callback_configured": True,
+                    "submitted_at_utc": "2026-07-27T00:00:00Z",
+                    "next_check_due_at_utc": "2026-07-27T00:15:00Z",
+                    "status": "submitted",
+                }
+            ],
             "queue": [],
+            "response_ready": [],
             "explicit_idle_reason": None,
         },
     }
@@ -185,6 +198,9 @@ class ResearchLanesTest(unittest.TestCase):
         record["terminal_transaction"] = {
             "callback_state": "acknowledged",
             "portfolio_reconciled": False,
+            "portfolio_reconciled_at_utc": "2026-07-27T00:01:00Z",
+            "acknowledged_at_utc": "2026-07-27T00:02:00Z",
+            "delivery_intent_durable": True,
             "watchdog_state": "paused",
             "next_action": {"kind": "dispatch_next", "task_id": "ZERO-1"},
         }
@@ -201,6 +217,7 @@ class ResearchLanesTest(unittest.TestCase):
         record["pro_advisory_lane"] = {
             "live_jobs": [],
             "queue": [{"task_id": "PRO-READY", "status": "decision_ready"}],
+            "response_ready": [],
             "explicit_idle_reason": None,
         }
         result = run_record(record)
@@ -208,6 +225,73 @@ class ResearchLanesTest(unittest.TestCase):
         self.assertIn("must be submitted", result.stdout)
 
         record["pro_advisory_lane"]["cooldown_held"] = True
+        result = run_record(record)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_live_pro_job_requires_explicit_callback_owner(self) -> None:
+        record = base_record()
+        job = record["pro_advisory_lane"]["live_jobs"][0]
+        job["completion_callback_configured"] = False
+        job["completion_callback_thread_id"] = ""
+        result = run_record(record)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("completion_callback_configured=true", result.stdout)
+        self.assertIn("completion_callback_thread_id", result.stdout)
+
+    def test_due_pro_check_cannot_be_postponed_by_retargeting(self) -> None:
+        record = base_record()
+        record["observed_at_utc"] = "2026-07-27T00:16:00Z"
+        result = run_record(record)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is due", result.stdout)
+
+        job = record["pro_advisory_lane"]["live_jobs"][0]
+        job["due_handling"] = "in_progress"
+        result = run_record(record)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_completed_pro_response_must_enter_adjudication(self) -> None:
+        record = base_record()
+        record["pro_advisory_lane"] = {
+            "live_jobs": [],
+            "queue": [],
+            "response_ready": [
+                {
+                    "job_id": "PRO-DONE",
+                    "decision": "theory bottleneck",
+                    "owner_thread_id": "controller",
+                    "response_artifact": "/evidence/pro-done.json",
+                    "completed_at_utc": "2026-07-27T00:05:00Z",
+                }
+            ],
+            "explicit_idle_reason": None,
+        }
+        result = run_record(record)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must be claimed for adjudication", result.stdout)
+
+        record["pro_advisory_lane"]["adjudicating_job_id"] = "PRO-DONE"
+        result = run_record(record)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_final_ack_must_follow_reconciliation(self) -> None:
+        record = base_record()
+        record["terminal_transaction"] = {
+            "callback_state": "acknowledged",
+            "portfolio_reconciled": True,
+            "portfolio_reconciled_at_utc": "2026-07-27T00:03:00Z",
+            "acknowledged_at_utc": "2026-07-27T00:02:00Z",
+            "delivery_intent_durable": True,
+            "watchdog_state": "paused",
+            "next_action": {"kind": "dispatch_next", "task_id": "ZERO-1"},
+        }
+        result = run_record(record)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("final terminal ACK must follow", result.stdout)
+
+        record["terminal_transaction"]["acknowledged_at_utc"] = (
+            "2026-07-27T00:04:00Z"
+        )
         result = run_record(record)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 

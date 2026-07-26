@@ -59,14 +59,16 @@ Handle a terminal in this order:
 ```text
 read durable evidence and limitations
 -> apply the scoped disposition
--> ACK the idempotent terminal event
 -> recompute the global portfolio queue
 -> start result analysis, dispatch one admitted successor, or validate idle
--> retarget or pause the old callback fallback
+-> durably record dispatch and watchdog intent
+-> ACK the idempotent terminal event
 -> return to the owner
 ```
 
-Do not mark the transaction complete between ACK and portfolio reconciliation.
+An early transport response is `RECEIPT_ONLY`; it has no terminal closure
+authority. Do not issue the final ACK before portfolio reconciliation and
+durable delivery intent.
 A task-specific worker may recommend a local next action, but only the
 controller may set global lane status.
 
@@ -148,6 +150,8 @@ The snapshot records:
 - Opportunity Search state;
 - terminal callback/ACK/watchdog/next-action state;
 - live and queued Pro reviews; and
+- completed `response_ready` Pro jobs plus the job currently being locally
+  adjudicated; and
 - an idle proof only when `zero_gpu_running=explicit_idle`.
 
 Every GPU queue item also records `latest_authority` with
@@ -157,3 +161,39 @@ silently replaced by an older Wiki or atlas state.
 
 The helper checks orchestration consistency only. It does not schedule work,
 inspect remote state, authorize compute, or establish scientific novelty.
+
+## Pro lifecycle and completion delivery
+
+Use Pro as an independent advisory lane at the points where a second reasoning
+path can change a decision:
+
+1. idea divergence in parallel with a local primary-source/code/algebra map;
+2. Scout-contract counterexamples;
+3. one named derivation or theoretical bottleneck;
+4. post-signal reduction, mechanism and specificity challenge; and
+5. terminal interpretation or rebuttal.
+
+At idea divergence, neither side sees the other's conclusions before freezing
+its own neighbor/reduction map. Merge disagreements afterward and verify every
+decision-critical source locally. Do not use Pro as a vote or novelty
+authority.
+
+Every async job records:
+
+```text
+job_id
+decision
+submitted_at_utc
+next_check_due_at_utc
+polling_owner
+completion_callback_thread_id
+completion_callback_configured=true
+status
+```
+
+The broker observer and callback are the primary completion path. Sparse
+checks are fallback only. A heartbeat retarget must preserve the absolute due
+time. On completion, move the job from `live_jobs` to `response_ready`, persist
+the complete answer, and claim the oldest response for local adjudication. An
+unconfigured callback, overdue unhandled check, or unread completed response
+is an unhealthy delivery state, not normal idle.
