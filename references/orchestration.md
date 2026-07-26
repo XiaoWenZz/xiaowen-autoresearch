@@ -138,6 +138,16 @@ lost, or the runtime provides no reliable terminal event. Its checks must be
 bounded and silent while the worker is ordinarily active; it must not become a
 progress-report loop or the normal result-delivery path.
 
+Treat automation tools as user-visible mutations. Before calling one for an
+existing monitor, resolve its durable ID from
+`$CODEX_HOME/automations/<id>/automation.toml` and inspect all matching
+definitions directly. A `view`, `create`, or `update` call renders a persistent
+card in the conversation. If the desired effective fields are unchanged, make
+no tool call. Retarget the same ID and perform at most one create/update
+mutation after the controller has settled the complete next target. Multiple
+historical cards for one ID are not multiple schedulers and must not be
+"fixed" by deleting or recreating the live singleton.
+
 If the runtime has no completion-return mechanism, record a bounded manual
 reclaim deadline and responsible controller in the worker registry. An
 unmonitored work session whose result depends on the owner remembering to ask
