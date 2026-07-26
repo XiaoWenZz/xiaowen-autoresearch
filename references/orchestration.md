@@ -121,6 +121,17 @@ revision are registered with their own callback/watchdog state. For schema
 `1.2+`, record this transaction under `controller_action`; validation must fail
 for a latest terminal `delivered` state or a dangling dispatch target.
 
+The transaction is also incomplete until the controller reconciles the global
+GPU, zero-GPU, result-analysis and Pro lanes. A route-local `explicit_idle`
+recommendation has no global authority. If experiments are merely queued for
+GPU, dispatch the next bounded new-problem Opportunity Search unless a ready
+GPU result analysis preempts it or a complete global idle proof establishes a
+precise block/search-budget exhaustion. Use the compact contract in
+[portfolio-lanes.md](portfolio-lanes.md), not another orchestration state tree.
+Recompute queue authority from the newest validated experiment record or
+durable terminal before using Wiki synthesis; stale candidate maps can nominate
+an audit, but cannot launch or retain a superseded route.
+
 A heartbeat is not a substitute for this completion callback. Use one only as
 a low-frequency failure watchdog when a worker can crash, a callback can be
 lost, or the runtime provides no reliable terminal event. Its checks must be

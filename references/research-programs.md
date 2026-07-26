@@ -264,6 +264,17 @@ scalability, or a paper path remains structurally unresolved. Preserve the
 Problem Scout outcome and consider a different artifact honestly. This is a
 planning test, not publication evidence.
 
+For a deadline-bound venue target, prospectively freeze a submission-facing
+candidate-selection date, a confirmation-start date, and a final
+claim-reduction date. Before the first date, optimize Opportunity Search for
+cheap decision-complete problem evidence. After a material signal, require the
+Contribution Gate to pass importance, surviving novelty residual,
+irreducibility, mechanism identifiability, claimed specificity, evidence
+scalability, and one reviewer-critical test before paper-scale implementation.
+If the gate cannot be resolved before the confirmation-start date, pivot the
+artifact or select another route; do not spend the remaining schedule on a
+method whose novelty or mechanism residual is still unknown.
+
 ## Search-admission calibration
 
 When Opportunity Search rules are new or materially changed, forward-test them

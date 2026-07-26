@@ -121,8 +121,9 @@ to wake the controller.
 5. Read [references/state-schema.md](references/state-schema.md) only before creating, resuming, or validating Managed/Confirmatory task state.
 6. Read [references/research-integrity.md](references/research-integrity.md) before evidence, literature closure, gate changes, or claims.
 7. Read [references/orchestration.md](references/orchestration.md) before work sessions, unattended loops, subagents, callbacks, remote jobs, recovery, or structural pivots.
-8. Read [references/research-map-maintenance.md](references/research-map-maintenance.md) before creating or updating an editable research map and whenever a milestone handoff names one.
-9. Read [references/external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) before constructing a Pro, Deep Research, human-review, or other external Opportunity Search prompt; start from [assets/opportunity-search-prompt-template.md](assets/opportunity-search-prompt-template.md) when a reusable prompt artifact is requested.
+8. Read [references/portfolio-lanes.md](references/portfolio-lanes.md) before dispatching or closing persistent GPU, zero-GPU, result-analysis, or Pro work.
+9. Read [references/research-map-maintenance.md](references/research-map-maintenance.md) before creating or updating an editable research map and whenever a milestone handoff names one.
+10. Read [references/external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) before constructing a Pro, Deep Research, human-review, or other external Opportunity Search prompt; start from [assets/opportunity-search-prompt-template.md](assets/opportunity-search-prompt-template.md) when a reusable prompt artifact is requested.
 
 ## Non-negotiable controls
 
@@ -485,11 +486,20 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
 - While a GPU job runs, use the zero-GPU lane for the next bounded candidate
   whose work remains useful under every feasible live-job outcome. Do not turn
   the zero-GPU worker into a progress poller.
+- Treat an implemented experiment waiting in the ordered GPU queue as the
+  normal trigger to resume bounded Opportunity Search in a substantively new
+  problem space. Waiting for compute is not global research idle. Search only
+  tasks with a distinct actor, estimand or causal bottleneck and a bounded
+  decision-complete terminal; do not manufacture filler or prebuild downstream
+  methods for pending routes.
 - A zero-GPU candidate terminal is incomplete unless it returns exactly one of
   `QUEUE_GPU`, `HOLD` with one reopening fact, or `DROP` with a scoped reason.
 - A GPU queue entry must bind its canonical owner, frozen uncertainty and
   contract, profile and full-run caps, prerequisites, dependency on earlier
-  results, completion callback, and zero-GPU result-analysis owner.
+  results, completion callback, and zero-GPU result-analysis owner. Reconcile
+  it against the newest validated experiment record or durable terminal before
+  admission; a Wiki/atlas candidate cannot override a newer hold, generic
+  routing or cancellation.
 - GPU completion preempts ordinary zero-GPU preparation: validate raw evidence,
   independently recompute the frozen estimand, interpret the scoped terminal,
   and reroute the queue.
@@ -505,6 +515,10 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   audits; route each as `admitted`, `blocked` with one reopening fact, or
   `not_decision_changing`. Missing this `idle_proof` invalidates the closure.
   Waiting for GPU does not justify idling outcome-independent work.
+- Only the controller may declare global `explicit_idle`; a route-local worker
+  may close its own backlog but cannot close the portfolio. Complete terminal
+  ACK, global queue recomputation, successor dispatch or validated idle, and
+  watchdog retargeting as one transaction.
 - Give every zero-GPU dispatch an event-driven terminal callback to the
   controller. If that callback cannot wake the controller, install one named
   low-frequency continuity fallback. It may only catch an unhandled terminal
@@ -513,6 +527,16 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
 - Report four separate fields: `gpu_running`, ordered `gpu_queue`,
   `zero_gpu_running`, and `result_analysis_queue`. “No currently executable
   queue item” must not be reported as “no experiment exists.”
+- Also report `pro_advisory_lane`. Submit up to three distinct decision-ready
+  Pro reviews through the shared dispatcher while local research continues;
+  leave a slot idle only when no named review can change a decision or when the
+  dispatcher is blocked/cooldown-held. Never multiply near-duplicate prompts or
+  use Pro for deterministic work.
+- For persistent controller work, keep one compact lane snapshot in the
+  existing Program ledger and validate it with
+  `scripts/reconcile_research_lanes.py` before reporting terminal closure. See
+  [references/portfolio-lanes.md](references/portfolio-lanes.md). Do not create
+  a separate state tree solely for lane scheduling.
 
 ### 6. Record evidence before interpretation
 
@@ -639,5 +663,8 @@ Run with Python 3.10+ on POSIX; append locking uses `fcntl`.
 - `scripts/validate_prospective_frame.py`: derive prospective/claim-exposed/design-exposed tiers from one append-only cross-task exposure ledger and fail on a stale declared frame.
 - `scripts/validate_opportunity_prompt.py`: lint a high-recall-v2 external Opportunity Search prompt for unresolved placeholders, stage/pass inversion, missing two-state admission, unguarded natural-carrier burden, missing joint-feasibility semantics, and an incomplete decision contract.
 - `scripts/validate_opportunity_gate_calibration.py`: validate a retrospective broad-gate decision table with at least three pre-signal positives, three negatives, and zero false rejects/admissions under the proposed gate.
+- `scripts/reconcile_research_lanes.py`: reject route-local false idle,
+  un-reconciled terminal ACKs, stranded ready result analysis, and unsent
+  decision-ready Pro reviews in one compact global lane snapshot.
 
 Script success establishes structural validity only; it never establishes scientific truth.

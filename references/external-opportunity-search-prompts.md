@@ -5,6 +5,12 @@ Research, another LLM, or a human reviewer. The external response is advisory
 search evidence, never authorization to create a repository, run a Scout, or
 claim novelty.
 
+When multiple distinct decisions are ready, submit up to three asynchronous
+Pro reviews through the shared dispatcher and continue local primary-source,
+code, algebra or implementation work while they generate. Give every job a
+unique decision-bound identity and one polling owner. Do not create duplicate
+prompts merely to fill capacity.
+
 ## Contents
 
 1. Compile from three layers
@@ -61,6 +67,12 @@ required output fields:
 legal terminal labels:
 actions not authorized by the review:
 ```
+
+For a venue-targeted innovation review, ask the reviewer to challenge both
+stages separately: the bounded obvious-neighbor obligation before GPU queue
+placement and the publication-grade novelty/irreducibility gate after a
+material signal. A review may expose missing neighbors or reductions, but it
+cannot certify novelty or acceptance probability.
 
 Count the review against the active Program's external-review and attention
 budget. A reviewer may recommend `probe`, `hold`, or `drop`; it cannot replenish
