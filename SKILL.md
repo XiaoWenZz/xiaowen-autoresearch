@@ -284,6 +284,10 @@ Apply these to both governance tracks:
   inside the authorized budget. Record each root cause, patch, exact-path
   smoke, new run ID, and cumulative charge. After observing an estimand,
   reruns are replication or follow-up.
+- Neither a compact artifact limit, a review-cycle limit, a retry alarm, nor
+  the 20% governance alarm can convert an unresolved hard defect into `PASS`.
+  Outcome-blind repairs use isolated attempt identities; after protected
+  outcome access, the frozen stop and no-rescue rules control.
 - Freeze decision invariants before evidence and record implementation identity
   at launch. Do not promote incidental filenames, hashes, or verifier identities
   into gates unless changing them could change the scientific decision.
