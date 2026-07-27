@@ -573,11 +573,24 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   leave a slot idle only when no named review can change a decision or when the
   dispatcher is blocked/cooldown-held. Never multiply near-duplicate prompts or
   use Pro for deterministic work.
-- Use Pro at five decision points when applicable: an independent idea-stage
-  divergence map in parallel with local primary-source search; a Scout-contract
-  counterexample review; one named mathematical/theory bottleneck; a
-  post-signal irreducibility/mechanism/specificity challenge; and terminal
-  interpretation or rebuttal. These are stage budgets, not quotas.
+- Use Pro throughout research and implementation when it can provide an
+  independent source map, derivation, counterexample, joint-carrier critique,
+  source-fidelity check, architecture review, or test-blind-spot inventory.
+  Do not reserve it only for formal decision forks. Start an async review while
+  local literature/code work continues; never make a fast local implementation
+  wait merely to keep the two paths synchronized.
+- Choose the conversation mode by epistemic purpose. Use a new, no-local-
+  conclusion conversation when anchoring would weaken independent divergence
+  or falsification. Use a follow-up in the existing Pro conversation when the
+  question is whether a new local diff, contract, experiment design, or failure
+  diagnosis addresses earlier concerns. Send only the evidence needed for that
+  check, and independently verify every decision-critical claim.
+- Applicable Pro stages include idea divergence, primary-source/operation-map
+  supplementation, Scout-contract attack, implementation architecture and
+  source-fidelity review, test/negative-fixture blind spots, a named theory
+  bottleneck, post-signal contribution challenge, and terminal interpretation.
+  These are opportunities for parallel quality control, not mandatory waits or
+  quotas; skip deterministic mechanical work and near-duplicate prompts.
 - Every async Pro submit must bind the canonical Codex owner and absolute
   working directory. Verify the returned callback binding. Record absolute
   completion/check deadlines; automation retargeting cannot reset them. A
