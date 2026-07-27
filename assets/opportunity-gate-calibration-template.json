@@ -1,9 +1,9 @@
 {
-  "schema_version": "opportunity-gate-calibration-v1",
+  "schema_version": "opportunity-gate-calibration-v2",
   "domain": "REPLACE_DOMAIN",
-  "gate_version": "high-recall-opportunity-v2",
+  "gate_version": "high-recall-opportunity-v3",
   "evidence_freeze": "YYYY-MM-DD",
-  "decision_rule": "Retrospective positives must reach PROBE; negative controls must not reach PROBE. Contribution forecast cannot determine problem admission.",
+  "decision_rule": "Retrospective positives should reach PROBE and must remain retained; negative controls must not reach PROBE. Contribution forecast cannot determine problem admission.",
   "controls": [
     {
       "id": "positive-1",
@@ -11,6 +11,8 @@
       "pre_signal_state": "REPLACE_WITH_INFORMATION_AVAILABLE_BEFORE_FIRST_SIGNAL",
       "expected_problem_admission": "PROBE",
       "observed_problem_admission": "PROBE",
+      "retention_state": "PROBE_READY",
+      "next_evidence_action": "RUN_CHEAP_PROBLEM_SCOUT",
       "contribution_forecast": "UNASSESSED_PRE_SIGNAL",
       "gate_decision_rationale": "REPLACE",
       "source_paths": ["REPLACE"]
@@ -21,6 +23,8 @@
       "pre_signal_state": "REPLACE_WITH_INFORMATION_AVAILABLE_BEFORE_FIRST_SIGNAL",
       "expected_problem_admission": "PROBE",
       "observed_problem_admission": "PROBE",
+      "retention_state": "PROBE_READY",
+      "next_evidence_action": "RUN_CHEAP_PROBLEM_SCOUT",
       "contribution_forecast": "CHALLENGED_NEIGHBOR",
       "gate_decision_rationale": "REPLACE",
       "source_paths": ["REPLACE"]
@@ -31,6 +35,8 @@
       "pre_signal_state": "REPLACE_WITH_INFORMATION_AVAILABLE_BEFORE_FIRST_SIGNAL",
       "expected_problem_admission": "PROBE",
       "observed_problem_admission": "PROBE",
+      "retention_state": "PROBE_READY",
+      "next_evidence_action": "RUN_CHEAP_PROBLEM_SCOUT",
       "contribution_forecast": "PLAUSIBLE_IF_SIGNAL",
       "gate_decision_rationale": "REPLACE",
       "source_paths": ["REPLACE"]
@@ -41,6 +47,8 @@
       "pre_signal_state": "REPLACE_WITH_EXACT_DUPLICATE_OR_REDUCTION",
       "expected_problem_admission": "DROP_PROBLEM_EXACT_REDUCTION",
       "observed_problem_admission": "DROP_PROBLEM_EXACT_REDUCTION",
+      "retention_state": "CLOSED",
+      "next_evidence_action": "NONE_EXACT_REDUCTION",
       "contribution_forecast": "LIKELY_REPAIR",
       "gate_decision_rationale": "REPLACE",
       "source_paths": ["REPLACE"]
@@ -51,6 +59,8 @@
       "pre_signal_state": "REPLACE_WITH_NO_DECISION_LEAD",
       "expected_problem_admission": "DROP_NO_DECISION",
       "observed_problem_admission": "DROP_NO_DECISION",
+      "retention_state": "CLOSED",
+      "next_evidence_action": "NONE_NO_DECISION",
       "contribution_forecast": "LIKELY_GENERIC",
       "gate_decision_rationale": "REPLACE",
       "source_paths": ["REPLACE"]
@@ -61,6 +71,8 @@
       "pre_signal_state": "REPLACE_WITH_MISSING_INFORMATION_OR_CARRIER",
       "expected_problem_admission": "HOLD_INFORMATION",
       "observed_problem_admission": "HOLD_INFORMATION",
+      "retention_state": "EVIDENCE_GAP_LEAD",
+      "next_evidence_action": "RESOLVE_ONE_NAMED_INFORMATION_GAP",
       "contribution_forecast": "UNASSESSED_PRE_SIGNAL",
       "gate_decision_rationale": "REPLACE",
       "source_paths": ["REPLACE"]
@@ -69,8 +81,10 @@
   "summary": {
     "control_count": 6,
     "false_admits": 0,
-    "false_rejects": 0,
+    "hard_false_rejects": 0,
     "negative_controls": 3,
-    "positive_controls": 3
+    "over_retained_negatives": 1,
+    "positive_controls": 3,
+    "probe_misses": 0
   }
 }

@@ -118,12 +118,13 @@ to wake the controller.
 2. Read [references/problem-space.md](references/problem-space.md) before grounding or reframing an opportunity and before applying specificity or preserving-reduction tests.
 3. Read [references/portfolio-search.md](references/portfolio-search.md) before Opportunity Search, candidate ranking, Contribution Gate, or negative synthesis.
 4. Read [references/research-programs.md](references/research-programs.md) before opening or revising a multi-candidate Program/Epoch, starting a second Scout, changing mechanism families, or continuing after repeated route closures.
-5. Read [references/state-schema.md](references/state-schema.md) only before creating, resuming, or validating Managed/Confirmatory task state.
-6. Read [references/research-integrity.md](references/research-integrity.md) before evidence, literature closure, gate changes, or claims.
-7. Read [references/orchestration.md](references/orchestration.md) before work sessions, unattended loops, subagents, callbacks, remote jobs, recovery, or structural pivots.
-8. Read [references/portfolio-lanes.md](references/portfolio-lanes.md) before dispatching or closing persistent GPU, zero-GPU, result-analysis, or Pro work.
-9. Read [references/research-map-maintenance.md](references/research-map-maintenance.md) before creating or updating an editable research map and whenever a milestone handoff names one.
-10. Read [references/external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) before constructing a Pro, Deep Research, human-review, or other external Opportunity Search prompt; start from [assets/opportunity-search-prompt-template.md](assets/opportunity-search-prompt-template.md) when a reusable prompt artifact is requested.
+5. Read [references/gate-backtesting.md](references/gate-backtesting.md) before retrospectively evaluating Opportunity Search rules against published or rejected papers, venue labels, or presentation tiers.
+6. Read [references/state-schema.md](references/state-schema.md) only before creating, resuming, or validating Managed/Confirmatory task state.
+7. Read [references/research-integrity.md](references/research-integrity.md) before evidence, literature closure, gate changes, or claims.
+8. Read [references/orchestration.md](references/orchestration.md) before work sessions, unattended loops, subagents, callbacks, remote jobs, recovery, or structural pivots.
+9. Read [references/portfolio-lanes.md](references/portfolio-lanes.md) before dispatching or closing persistent GPU, zero-GPU, result-analysis, or Pro work.
+10. Read [references/research-map-maintenance.md](references/research-map-maintenance.md) before creating or updating an editable research map and whenever a milestone handoff names one.
+11. Read [references/external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) before constructing a Pro, Deep Research, human-review, or other external Opportunity Search prompt; start from [assets/opportunity-search-prompt-template.md](assets/opportunity-search-prompt-template.md) when a reusable prompt artifact is requested.
 
 ## Non-negotiable controls
 
@@ -249,9 +250,18 @@ Apply these to both governance tracks:
 - Before trusting a new or materially changed Opportunity Search gate, test a
   broad-domain gate on at least three retrospective positives at their
   pre-signal information states and three obvious negatives/duplicates. Every
-  positive must reach a cheap probe and every negative must stay out of one. If
-  publication-stage unknowns reject a positive, the search gate is
-  miscalibrated.
+  positive must remain actionable: preferably `PROBE`, otherwise one explicit
+  `HOLD_INFORMATION`/`HOLD_CARRIER` evidence-acquisition step. No positive may
+  be hard-dropped only because publication-stage facts are unknown, and every
+  negative must stay out of `PROBE`. Report probe misses separately from hard
+  false rejects; a retained evidence-gap lead is not a successful probe.
+- When live search produces many grounded briefs but almost no probes, run a
+  temporally blinded publication backtest before tightening or reopening the
+  gate. Freeze each gate decision before opening venue, acceptance, oral,
+  spotlight, poster, award, or citation labels, and limit neighbor evidence to
+  the paper's declared historical cutoff. Use
+  [references/gate-backtesting.md](references/gate-backtesting.md); venue rank
+  is an external calibration label, not scientific truth.
 - Treat a change from method to benchmark, systems artifact, certificate, or
   reproduction as a Contribution-Gate reframe. Open a new charter only before
   collecting evidence for the new artifact; do not erase the existing signal.
@@ -331,11 +341,23 @@ Do not promote every concern into a gate. Do not hide a true hard block as “ex
   `contribution_forecast = UNASSESSED_PRE_SIGNAL | CHALLENGED_NEIGHBOR |
   LIKELY_REPAIR | LIKELY_GENERIC | PLAUSIBLE_IF_SIGNAL`. Never use the second
   state to determine the first.
+- Also record one operational retention state:
+  `retention_state = PROBE_READY | EVIDENCE_GAP_LEAD |
+  BROADER_ARTIFACT_LEAD | CLOSED`. Map `PROBE` to `PROBE_READY`,
+  `HOLD_INFORMATION`/`HOLD_CARRIER` to `EVIDENCE_GAP_LEAD`,
+  `ROUTE_BROADER_ARTIFACT` to `BROADER_ARTIFACT_LEAD`, and only the two
+  `DROP_*` states to `CLOSED`. Every retained lead must name one bounded next
+  evidence action or one exact reopening fact.
 - Apply source/code/algebra checks before compute. Drop an opportunity only
   when the actor-level problem is absent, solved by a verified and jointly
   feasible preserving reduction under matched information/cost/dynamics/
   deployment, unmeasurable under the contract, or no feasible outcome changes
   a decision.
+- Do not let an Explorer or Auditor translate `HOLD_*` or
+  `ROUTE_BROADER_ARTIFACT` into “no candidate” without preserving the retained
+  lead and its next evidence action in the portfolio ledger. Search-budget
+  exhaustion may mean no `PROBE_READY` item exists; it does not erase retained
+  evidence-gap or broader-artifact leads.
 - Before a multi-paper composition closes a problem, certify that its
   observables, operation order, client rendezvous, state/storage, objective and
   architecture, bytes/latency/compute, and deployment recipient coexist under
@@ -673,8 +695,8 @@ Run with Python 3.10+ on POSIX; append locking uses `fcntl`.
 - `scripts/update_state.py`: append immutable JSONL records or atomically refresh a heartbeat lease.
 - `scripts/validate_task.py`: validate track, state consistency, run manifests, evidence/claim links, stale accounting, and ready gates.
 - `scripts/validate_prospective_frame.py`: derive prospective/claim-exposed/design-exposed tiers from one append-only cross-task exposure ledger and fail on a stale declared frame.
-- `scripts/validate_opportunity_prompt.py`: lint a high-recall-v2 external Opportunity Search prompt for unresolved placeholders, stage/pass inversion, missing two-state admission, unguarded natural-carrier burden, missing joint-feasibility semantics, and an incomplete decision contract.
-- `scripts/validate_opportunity_gate_calibration.py`: validate a retrospective broad-gate decision table with at least three pre-signal positives, three negatives, and zero false rejects/admissions under the proposed gate.
+- `scripts/validate_opportunity_prompt.py`: lint a high-recall-v3 external Opportunity Search prompt for unresolved placeholders, stage/pass inversion, missing admission/retention separation, erased evidence-gap or broader-artifact leads, unguarded natural-carrier burden, missing joint-feasibility semantics, and an incomplete decision contract.
+- `scripts/validate_opportunity_gate_calibration.py`: validate a retrospective broad-gate decision table. Version 2 distinguishes probe misses, hard false rejects, false admits, and over-retained negatives instead of treating every non-probe positive as the same failure.
 - `scripts/reconcile_research_lanes.py`: reject route-local false idle,
   un-reconciled terminal ACKs, stranded ready result analysis, and unsent
   decision-ready Pro reviews in one compact global lane snapshot.

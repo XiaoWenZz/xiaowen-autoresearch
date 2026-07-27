@@ -23,9 +23,9 @@ def validate(text: str) -> tuple[list[str], list[str]]:
 
     if not has_any(
         text,
-        (r"OPPORTUNITY_SEARCH_SCHEMA\s*:\s*high-recall-v2",),
+        (r"OPPORTUNITY_SEARCH_SCHEMA\s*:\s*high-recall-v3",),
     ):
-        errors.append("missing high-recall-v2 schema marker")
+        errors.append("missing high-recall-v3 schema marker")
 
     placeholders = sorted(set(re.findall(r"\{\{[A-Z0-9_]+\}\}", text)))
     if placeholders:
@@ -58,6 +58,30 @@ def validate(text: str) -> tuple[list[str], list[str]]:
             r"contribution_forecast",
             r"contribution forecast",
             r"贡献预判",
+        ),
+        "separate retention state": (
+            r"retention_state",
+            r"retention state",
+            r"保留状态",
+        ),
+        "evidence-gap retention": (
+            r"EVIDENCE_GAP_LEAD",
+            r"evidence[- ]gap lead",
+            r"证据缺口.*保留",
+        ),
+        "broader-artifact retention": (
+            r"BROADER_ARTIFACT_LEAD",
+            r"broader[- ]artifact lead",
+            r"更广.*产物.*保留",
+        ),
+        "only drops are closed": (
+            r"only[^.\n]{0,160}DROP[^.\n]{0,160}CLOSED",
+            r"only the two[^.\n]{0,160}DROP",
+            r"只有[^。\n]{0,120}DROP[^。\n]{0,120}CLOSED",
+        ),
+        "retained lead next action": (
+            r"retained lead[^.\n]{0,180}(next evidence action|reopening fact)",
+            r"保留.*(?:下一证据动作|重新开启事实)",
         ),
         "forecast cannot determine admission": (
             r"never use[^.\n]{0,120}contribution_forecast[^.\n]{0,120}problem_admission",
@@ -101,6 +125,10 @@ def validate(text: str) -> tuple[list[str], list[str]]:
         "one selected Scout": (r"at most one", r"最多选择一个", r"唯一.*Scout"),
         "Scout admission terminal": (r"ADMIT_TO_PROBLEM_SCOUT",),
         "search-exhaustion terminal": (r"SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION",),
+        "search exhaustion preserves retained leads": (
+            r"SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION[\s\S]{0,900}(retained|EVIDENCE_GAP_LEAD|BROADER_ARTIFACT_LEAD)",
+            r"搜索预算耗尽[\s\S]{0,600}保留",
+        ),
         "exact-reduction admission status": (r"DROP_PROBLEM_EXACT_REDUCTION",),
         "no-decision admission status": (r"DROP_NO_DECISION",),
         "broader-artifact route": (r"ROUTE_BROADER_ARTIFACT",),

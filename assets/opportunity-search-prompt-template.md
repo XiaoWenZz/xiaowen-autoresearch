@@ -1,6 +1,6 @@
 # External Opportunity Search prompt
 
-`OPPORTUNITY_SEARCH_SCHEMA: high-recall-v2`
+`OPPORTUNITY_SEARCH_SCHEMA: high-recall-v3`
 
 You are an expert research PI. Conduct a fresh, high-recall but
 evidence-bounded Opportunity Search for `{{DOMAIN}}`.
@@ -131,7 +131,15 @@ problem_admission:
 contribution_forecast:
   UNASSESSED_PRE_SIGNAL | CHALLENGED_NEIGHBOR | LIKELY_REPAIR |
   LIKELY_GENERIC | PLAUSIBLE_IF_SIGNAL
+retention_state:
+  PROBE_READY | EVIDENCE_GAP_LEAD | BROADER_ARTIFACT_LEAD | CLOSED
 ```
+
+Map `PROBE` to `PROBE_READY`, `HOLD_INFORMATION`/`HOLD_CARRIER` to
+`EVIDENCE_GAP_LEAD`, `ROUTE_BROADER_ARTIFACT` to
+`BROADER_ARTIFACT_LEAD`, and only the two `DROP_*` states to `CLOSED`.
+Every retained lead must state one bounded next evidence action or one exact
+reopening fact. Do not translate a hold or broader route into “no candidate.”
 
 Additional domain-specific required fields:
 
@@ -184,6 +192,11 @@ Select at most one `ADMIT_TO_PROBLEM_SCOUT` candidate. It needs:
 Do not require a provisional method implementation, full novelty matrix,
 multi-setting confirmation, or conference paper path in this response.
 
+In addition, retain at most one oldest `EVIDENCE_GAP_LEAD` and one
+`BROADER_ARTIFACT_LEAD` when their next evidence action is bounded. They are
+not selected Scouts, do not authorize repositories or GPU, and do not consume
+the selected-Scout slot.
+
 ## 11. Terminal semantics
 
 If one opportunity is worth measuring, return:
@@ -201,6 +214,10 @@ SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION
 
 The second state is an operational search terminal, not a field-level NO-GO or
 proof that `{{DOMAIN}}` has no strong ideas.
+It must also enumerate every retained `EVIDENCE_GAP_LEAD` or
+`BROADER_ARTIFACT_LEAD`, its bounded next evidence action or reopening fact,
+and why it is not yet `PROBE_READY`. Search exhaustion closes the current
+budget, not the retained lead.
 
 ## 12. Required output order
 

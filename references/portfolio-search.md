@@ -88,6 +88,19 @@ method kernel, failed narrow specificity, or missing paper path can challenge a
 future method contribution while the actor-level problem remains worth a cheap
 measurement.
 
+Add one operational state without changing the scientific labels:
+
+```text
+retention_state:
+  PROBE_READY | EVIDENCE_GAP_LEAD | BROADER_ARTIFACT_LEAD | CLOSED
+```
+
+Map `PROBE` to `PROBE_READY`, `HOLD_INFORMATION`/`HOLD_CARRIER` to
+`EVIDENCE_GAP_LEAD`, `ROUTE_BROADER_ARTIFACT` to
+`BROADER_ARTIFACT_LEAD`, and only the two `DROP_*` states to `CLOSED`.
+This prevents a batch-level “no nominee” terminal from silently erasing a
+problem that remains actionable but is not yet launch-ready.
+
 ## Opportunity brief and admission
 
 Keep a pre-signal brief to one screen:
@@ -102,6 +115,8 @@ Keep a pre-signal brief to one screen:
 6. positive/negative/ambiguous actions, cost, and deadline;
 7. causal fingerprint and prior-closure check;
 8. separate `problem_admission` and `contribution_forecast`.
+9. `retention_state` plus one bounded evidence-acquisition action or exact
+   reopening fact for every retained lead.
 
 Create no repository or remote job before one brief has
 `problem_admission: PROBE`; a local one-screen ledger is sufficient.
@@ -110,6 +125,14 @@ An unverified neighbor blocks a novelty claim, not a problem measurement. Mark
 the opportunity `HOLD_INFORMATION` or `HOLD_CARRIER` only when the missing
 source, observable, or carrier could show that the actor-level problem itself
 is solved or that every feasible witness is uninterpretable.
+
+Keep `HOLD_INFORMATION` and `HOLD_CARRIER` in a retained evidence-gap backlog
+when one bounded source, code, algebra, carrier-discovery, or controlled-witness
+step could change admission. If no such step exists, record the precise
+reopening fact and close only the active search transaction, not the lead.
+Keep `ROUTE_BROADER_ARTIFACT` live when the broadened thesis remains inside the
+owner's research boundary; narrow FedFT specificity cannot silently discard a
+valid systems, optimization, benchmark, audit, or theory problem.
 
 A source-grounded controlled carrier is adequate for a scoped
 problem-existence Scout. Require a natural carrier before the Scout only when
@@ -225,6 +248,9 @@ method implementation or expensive evidence collection.
 3. Prefer the cheapest decisive witness; break ties by problem magnitude and
    decision importance.
 4. Select one `PROBE`; mark alternatives with one precise admission state.
+   Preserve at most one oldest `EVIDENCE_GAP_LEAD` and one
+   `BROADER_ARTIFACT_LEAD` with bounded next actions. They do not enter the GPU
+   queue and do not count as selected Scouts.
 5. Make the probe a problem-existence or mechanism-necessity witness on the
    smallest adequate carrier. Do not begin with a new method or publication
    matrix.
@@ -250,9 +276,14 @@ Before relying on a new or materially changed Opportunity Search gate, test:
   or exactly reduced negatives.
 
 The gate must admit every positive to a cheap probe and keep every negative out
-of `PROBE`. Report false rejects and false admits. If a positive fails only
+of `PROBE`. In a two-tier replay, report both strict probe recall and retained
+recall: a positive routed to `EVIDENCE_GAP_LEAD` is a probe miss but not a hard
+false reject; a positive routed to `CLOSED` is a hard false reject. Report
+false admits and over-retained negatives separately. If a positive closes only
 because publication-stage novelty, natural external validity, specificity,
-scalability, or paper path is unknown, revise the gate before using it.
+scalability, or paper path is unknown, revise the gate before using it. For
+publication- and presentation-tier backtests, follow
+[gate-backtesting.md](gate-backtesting.md).
 Calibration is a rule-based replay, not evidence that the historical paper
 would have succeeded prospectively.
 

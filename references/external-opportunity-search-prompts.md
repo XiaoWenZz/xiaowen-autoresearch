@@ -152,6 +152,11 @@ The forecast cannot determine admission. A direct neighbor may make a method
 contribution unlikely while the actor-level problem still deserves a cheap
 measurement.
 
+Also require `retention_state`: `PROBE_READY`, `EVIDENCE_GAP_LEAD`,
+`BROADER_ARTIFACT_LEAD`, or `CLOSED`. Only exact/no-decision drops are closed.
+Every hold or broader route must remain visible with one bounded next evidence
+action or reopening fact, even when the current search budget exhausts.
+
 ## Request problem theses, not method names
 
 Ask for raw leads across several problem spaces, then collapse them by causal
