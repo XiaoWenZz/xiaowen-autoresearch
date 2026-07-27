@@ -34,6 +34,11 @@ Use this reference before literature synthesis, experiment design, statistical i
   selective reporting, threshold relaxation, or repeated tuning until success.
 - Define each candidate's budget, gate, and terminal conditions before its
   outcomes are visible. Start a fresh charter when moving to another candidate.
+- A prospectively frozen staged design may expand only through its declared
+  action table and maximum ceiling. A material screening signal may justify a
+  prospective GPU-envelope amendment for future or disjoint evidence, but it
+  cannot enlarge the observed attempt, change its analysis, or rescue it after
+  protected-outcome access.
 - Treat “A-tier viable,” venue fit, and reviewer-interest labels as planning
   judgments only. They cannot establish acceptance probability, scientific
   quality, or a publication-facing claim.
@@ -75,10 +80,11 @@ Before an evidentiary run, record:
 1. research question and hypothesis;
 2. independent, dependent, and control variables;
 3. primary metric and directional expectation;
-4. sample size or compute budget rationale;
-5. exclusions, data cleaning, and failure handling;
-6. stopping rule and statistical analysis;
-7. the claim the run can support or falsify.
+4. initial sample or complete paired-seed tranche and its power rationale;
+5. maximum staged ceiling and `expand | futility | hold` actions;
+6. exclusions, data cleaning, and failure handling;
+7. stopping rule, sequential adjustment or disjoint follow-up analysis;
+8. the claim the run can support or falsify.
 
 If these change after results are visible, preserve the original plan, record the amendment, and label the new analysis exploratory. Never silently redefine success.
 
@@ -108,6 +114,16 @@ If these change after results are visible, preserve the original plan, record th
 
 ## Statistics
 
+- Freeze every staged-sampling branch before outcomes: complete paired seed
+  bundles, initial tranche, maximum ceiling, and explicit expansion, futility,
+  and hold decisions. Schedule every arm of one paired bundle on the same GPU;
+  parallelize only complete bundles across GPUs.
+- Treat a positive from a small initial tranche as screening `SCOUT_SIGNAL`,
+  not final method evidence. Final inference must use a valid predeclared
+  sequential adjustment or a disjoint set of follow-up seeds.
+- Close a route from a weak or null small tranche only when a predeclared
+  adequately powered futility boundary is met. Otherwise report
+  `HOLD_INFORMATION`; absence of a screening signal is not a powered negative.
 - Do not add trials merely because a result is non-significant. Use a preregistered fixed sample size, a justified power analysis, or a valid sequential design.
 - Report uncertainty appropriate to the sampling unit. Multiple samples from one model checkpoint do not replace independent training seeds.
 - Separate problem-sampling uncertainty, training-seed variance, evaluator variance, and API/model-version drift.
@@ -180,6 +196,11 @@ Do not infer “nothing is worth doing” from overlap, one failed implementatio
    actor under one timing/state/communication contract;
 2. a replicated high-confidence negative on an adequate carrier against the strongest relevant baseline;
 3. failure of a preregistered minimum practical-effect threshold.
+
+A weak or null initial tranche satisfies item 3 only when the prospectively
+declared futility analysis had adequate power at that tranche. Otherwise the
+route remains `HOLD_INFORMATION` pending the frozen next tranche or a new
+reopening fact.
 
 “A related method exists” establishes a nearest neighbor, not closure. A simple method solving the frozen problem is scientifically informative and may close only the need for a more complex method under that contract. Record assumptions, scope, confidence, and explicit reopening conditions for every negative decision.
 

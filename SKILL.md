@@ -1,6 +1,6 @@
 ---
 name: xiaowen-autoresearch
-description: "Run or recover bounded research from broad opportunity discovery through problem-existence Scouts, contribution selection, confirmation, verification, adjudication, and handoff. Use for autonomous or long-horizon literature, ML or systems research, direction search, evidence-bounded Pro or external-review prompt construction, remote experiment loops, claim audits, stalled projects, and repeated pivots. Separates high-recall opportunity admission from publication-grade novelty and irreducibility gates while preserving fixed budgets, reproducible evidence, positive-signal attribution, and scoped closure. Do not use for one-off questions, a single code edit, or unbounded unattended execution."
+description: "Run or recover bounded research from broad opportunity discovery through problem-existence Scouts, contribution selection, confirmation, verification, adjudication, and handoff. Use for autonomous or long-horizon literature, ML or systems research, direction search, evidence-bounded Pro or external-review prompt construction, remote experiment loops, claim audits, stalled projects, and repeated pivots. Separates high-recall opportunity admission from publication-grade novelty and irreducibility gates while preserving hard per-attempt ceilings, prospectively managed GPU planning envelopes, reproducible evidence, positive-signal attribution, and scoped closure. Do not use for one-off questions, a single code edit, or unbounded unattended execution."
 ---
 
 # Xiaowen AutoResearch
@@ -130,7 +130,10 @@ to wake the controller.
 
 Apply these to both governance tracks:
 
-- Freeze the question, hypothesis, primary metric, strongest relevant baseline, data/leakage boundary, seed or schedule policy, fixed budget, stop condition, and exact claim boundary before evidentiary execution.
+- Freeze the question, hypothesis, primary metric, strongest relevant baseline,
+  data/leakage boundary, seed or schedule policy, protected-data boundary,
+  per-job safety and paid-service ceilings, maximum staged attempt ceiling,
+  stop condition, and exact claim boundary before evidentiary execution.
 - Create a run manifest before execution; preserve code/config/data/environment identity, raw outputs, failed runs, anomalies, and deviations.
 - Separate liveness, engineering progress, scientific progress, and claim status. A heartbeat proves only that a process is alive.
 - Count falsification, negative results, justified replication, and resolved diagnostics as progress when they reduce uncertainty.
@@ -270,13 +273,34 @@ Apply these to both governance tracks:
 
 ## Governance budget
 
-- Freeze Program/Epoch identity, cumulative budgets, search clock, evidence
-  clock, observation boundary, and remaining budget before evidence.
+- Freeze Program/Epoch identity, search and attention budgets, aggregate GPU
+  planning envelope, search clock, evidence clock, observation boundary, and
+  remaining authorized capacity before evidence.
 - Apply the action-admission, attention, circuit-breaker, and positive-signal
   attribution rules in
   [references/research-programs.md](references/research-programs.md); reuse one
   living ledger and never reset budget through a new name, session, carrier,
   repository, or context window.
+- Treat an aggregate Program/portfolio GPU budget as a planning envelope for
+  allocation and queue order, never as an automatic scientific stop. Per-job
+  safety, paid-service, protected-data, and explicit attempt ceilings remain
+  hard. A material signal may justify a prospective numeric envelope amendment
+  for later tranches or a new attempt, but never retroactively alter an observed
+  attempt or rescue work after protected-outcome access.
+- Before staged sampling, freeze complete paired seed bundles, the smallest
+  valid initial tranche, a maximum staged ceiling, `expand | futility | hold`
+  actions, and the final inference path. Keep every paired bundle's arms on one
+  GPU; distribute complete bundles, not arms, across GPUs. Later tranches inside
+  the frozen ceiling and action table are pre-authorized and need no repeated
+  owner approval.
+- When two or more ideas are launch-ready, allocate the smallest prospectively
+  valid seed tranche to each before adding many seeds to one route, unless a
+  frozen dependency or hard safety gate blocks that breadth-first order.
+- Treat a small-tranche positive as screening `SCOUT_SIGNAL` only. Final
+  inference requires a valid predeclared sequential adjustment or disjoint
+  follow-up seeds. A weak or null tranche closes the route only under an
+  adequately powered predeclared futility rule; otherwise use
+  `HOLD_INFORMATION`.
 - Treat two outcome-blind engineering retries or 20% governance attention as
   an efficiency alarm, never as an automatic scientific terminal. Continue
   the same engineering loop while protected outcomes remain unread, the
@@ -387,9 +411,12 @@ Do not promote every concern into a gate. Do not hide a true hard block as “ex
 - Unverified novelty, failed narrow specificity, missing paper path, or an
   occupied proposed method may block method promotion but do not block a cheap
   problem-existence probe when the underlying problem remains.
-- Select at most one active Problem Scout. Prefer the cheapest decisive
-  witness, then problem magnitude. Venue potential may break a tie but is not a
-  hard admission gate.
+- Select at most one new Problem Scout per Opportunity Search pass. Prefer the
+  cheapest decisive witness, then problem magnitude. Venue potential may break
+  a tie but is not a hard admission gate. Multiple independently frozen,
+  launch-ready GPU-queue entries may coexist at portfolio level and receive
+  breadth-first initial tranches; this does not admit multiple candidates from
+  one pass without separate prospective selection.
 - Before repository creation or GPU queue placement, require a dated
   `BOUNDED_NEIGHBOR_MAP_COMPLETE` record for the selected candidate containing
   exact, partial-operation and generic-reduction neighbors, occupied claims,
@@ -553,11 +580,17 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
 - A zero-GPU candidate terminal is incomplete unless it returns exactly one of
   `QUEUE_GPU`, `HOLD` with one reopening fact, or `DROP` with a scoped reason.
 - A GPU queue entry must bind its canonical owner, frozen uncertainty and
-  contract, profile and full-run caps, prerequisites, dependency on earlier
-  results, completion callback, and zero-GPU result-analysis owner. Reconcile
+  contract, per-job safety/profile cap, initial tranche, pre-authorized staged
+  ceiling, `expand | futility | hold` plan, final inference path, prerequisites,
+  dependency on earlier results, completion callback, and zero-GPU
+  result-analysis owner. Reconcile
   it against the newest validated experiment record or durable terminal before
   admission; a Wiki/atlas candidate cannot override a newer hold, generic
   routing or cancellation.
+- When multiple independent queue entries are launch-ready, start one smallest
+  valid complete paired-seed tranche for each before allocating later tranches
+  to a route that already has screening evidence. Do not split one paired
+  bundle's arms across GPUs.
 - GPU completion preempts ordinary zero-GPU preparation: validate raw evidence,
   independently recompute the frozen estimand, interpret the scoped terminal,
   and reroute the queue.
@@ -647,9 +680,11 @@ Classify an iteration as `progress`, `negative_result`, `replication`, `diagnost
   [references/portfolio-search.md](references/portfolio-search.md). Keep
   unrelated negatives separate; do not assemble them into a paper narrative.
 - Close a route after two related Scouts fail the same causal link. Unrelated
-  failures consume the frozen Program budget but do not justify a scientific
-  Program-level closure. When a broad Program exhausts resources, report
-  search exhaustion rather than `no viable candidate`.
+  failures consume the frozen search/attention budget and used GPU capacity but
+  do not justify a scientific Program-level closure. When a broad Program
+  exhausts its search/attention resources, report search exhaustion rather than
+  `no viable candidate`; aggregate GPU planning-envelope exhaustion alone
+  routes to `HOLD`, replanning, or prospective amendment.
 - Require every synthesis prerequisite: a shared target-estimand family, one
   mechanism that predicts all results and exceptions, compatible protocols and
   strongest baselines or a preserving reduction, purposeful carrier coverage,
@@ -710,7 +745,11 @@ For Confirmatory claims:
 
 ### 9. Stop or hand off cleanly
 
-Stop on a charter condition, exhausted budget, repeated hard blocker, completed objective, or required approval. Handoff:
+Stop on a charter condition, an exhausted hard per-attempt/paid-service or
+search/attention budget, repeated hard blocker, completed objective, or
+required approval. Aggregate GPU planning-envelope exhaustion alone routes to
+`HOLD`, replanning, or prospective amendment rather than scientific closure.
+Handoff:
 
 - Program/Epoch identity, status, consumed and remaining cumulative budget,
   mechanism fingerprint, closure-ledger effect, and any circuit breaker;

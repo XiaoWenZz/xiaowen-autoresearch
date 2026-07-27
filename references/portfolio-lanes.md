@@ -52,6 +52,35 @@ authority ID, evidence path, owner, launch prerequisite and the explicit
 `queue_gpu` disposition. A ready result-analysis item likewise binds the
 terminal ID and evidence path that made it ready.
 
+## Staged breadth-first GPU allocation
+
+When two or more independent ideas are launch-ready, give each the smallest
+prospectively valid initial seed tranche before assigning later tranches or
+many seeds to one route. Deviate only for a frozen dependency or hard safety
+gate, not because one early estimate looks favorable.
+
+For each staged queue item, freeze in the existing contract or queue record:
+
+- complete paired seed bundles, with all arms of one bundle on one GPU;
+- the smallest valid initial tranche and maximum staged ceiling;
+- explicit `expand | futility | hold` actions;
+- valid sequential adjustment or disjoint follow-up seeds for final inference;
+- the per-job safety and paid-service ceilings; and
+- the protected-data and exposure boundary.
+
+Complete bundles may run on different GPUs. Later tranches inside the frozen
+action table and maximum ceiling are pre-authorized and need no repeated owner
+approval. Aggregate Program/portfolio GPU exhaustion triggers queue replanning,
+`HOLD` with a reopening fact, or a prospective numeric amendment; it never
+converts a screening result into a scientific terminal. A material signal may
+justify such an amendment only for future tranches or a new attempt, without
+changing an observed attempt or bypassing protected-outcome no-rescue rules.
+
+An initial-tranche positive is screening `SCOUT_SIGNAL`. A weak or null tranche
+closes only when its predeclared futility rule is adequately powered at that
+stage; otherwise keep the route at `HOLD_INFORMATION`. Do not reuse screening
+seeds as unadjusted final evidence.
+
 ## Atomic terminal transaction
 
 Handle a terminal in this order:
@@ -158,6 +187,11 @@ Every GPU queue item also records `latest_authority` with
 `checked_against_latest_terminal=true`, its source kind, authority ID, evidence
 path and `queue_disposition=queue_gpu`. This prevents a current hold from being
 silently replaced by an older Wiki or atlas state.
+
+The same queue item binds its initial tranche, complete paired bundles,
+maximum staged ceiling, staged action table, final-inference path, hard per-job
+ceilings, and exposure boundary. Reuse this record for later admitted tranches;
+do not create a new schema or approval record for each stage.
 
 The helper checks orchestration consistency only. It does not schedule work,
 inspect remote state, authorize compute, or establish scientific novelty.

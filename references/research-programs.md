@@ -52,9 +52,17 @@ For Scout Lite, a compact planning record containing `program_id`, `epoch_id`,
 budgets, fingerprints, and decisions is sufficient. Do not initialize managed
 state solely to represent this hierarchy.
 
+The one-Scout rule applies to each active Epoch and Opportunity Search
+selection pass. A portfolio may retain multiple independently frozen,
+launch-ready GPU-queue entries and schedule their initial tranches
+breadth-first. Queue coexistence does not merge their contracts or admit a
+second candidate without its own prospective selection.
+
 ## Program and epoch budgets
 
-Freeze cumulative budgets before evidence. Defaults:
+Freeze search, attention, review, and repository limits before evidence. Also
+record an aggregate Program/portfolio GPU planning envelope and the hard
+per-job or per-attempt ceilings separately. Defaults for search governance:
 
 | Scope | Default cumulative limit |
 |---|---:|
@@ -67,15 +75,39 @@ Freeze cumulative budgets before evidence. Defaults:
 | pre-evidence external reviews in one Program | 2 |
 | new experiment repositories in one Program | 2 |
 
-A prospectively justified Program may use different limits when the task
-genuinely requires purposeful replications or heterogeneous mechanisms. Freeze
-the reason and cap before results; never expand them because prior outcomes
-were negative. Closing an Epoch does not replenish Program budget.
+A prospectively justified Program may use different search-governance limits
+when the task genuinely requires purposeful replications or heterogeneous
+mechanisms. Freeze the reason and cap before results; never expand them merely
+because prior outcomes were negative. Closing an Epoch does not replenish
+search or attention budget.
+
+Treat the aggregate Program/portfolio GPU budget as a planning envelope for
+allocation, queue order, and capacity forecasting. Exhausting it triggers a
+portfolio replan, `HOLD` with one reopening fact, or a prospective amendment;
+it is not a scientific negative, route closure, or automatic Program stop.
+Keep per-job safety ceilings, paid-service authorization, protected-data access
+boundaries, and the explicit ceiling of the current attempt hard and
+fail-closed. A material signal may justify a prospective numeric envelope
+amendment for a later tranche or new attempt when its decision value, power
+rationale, and total cost are recorded before that evidence is accessed. Do
+not retroactively enlarge an observed attempt, relax its stopping rule, or use
+an amendment as protected-outcome rescue.
+
+When two or more independent ideas are launch-ready, allocate the smallest
+prospectively valid initial seed tranche to each before assigning many seeds to
+one route, unless a frozen dependency or hard safety gate blocks that order.
+Before first access, freeze complete paired seed bundles, the initial tranche,
+maximum staged ceiling, `expand | futility | hold` actions, and whether final
+inference uses valid sequential adjustment or disjoint follow-up seeds. Keep
+all arms for one paired seed bundle on one GPU; complete bundles may run on
+different GPUs. Later tranches admitted by the frozen action table and maximum
+ceiling are pre-authorized and do not require repeated owner approval.
 
 Two related Scouts failing the same causal link normally close that route.
-Two unrelated mechanisms failing consume the Program resource budget but do
-not establish a scientific Program-level NO-GO. If a broad Program exhausts
-its frozen resources without selection, report:
+Two unrelated mechanisms failing consume the Program's frozen search/attention
+budget and used GPU capacity but do not establish a scientific Program-level
+NO-GO. If a broad Program exhausts its frozen search/attention resources
+without selection, report:
 
 ```text
 SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION
@@ -303,15 +335,18 @@ changes scientific thresholds or promotes the historical case.
 Pause the Program or Epoch when any condition holds:
 
 1. two related Scouts fail the same causal link; close that route;
-2. the frozen resource/attention budget is exhausted; report operational
-   search exhaustion unless the boundary is narrow enough for scientific
-   closure;
+2. the frozen search, review, or attention budget is exhausted; report
+   operational search exhaustion unless the boundary is narrow enough for
+   scientific closure. Exhaustion of an aggregate GPU planning envelope alone
+   is not a circuit breaker;
 3. a new portfolio filename or version is used without a substantive Epoch
    change;
 4. planning/review artifacts outnumber decision-changing evidence artifacts
    by more than 3:1;
-5. the next action changes only carrier, seed, rank, checkpoint, horizon,
-   component identity, selector, or threshold;
+5. the next action changes only carrier, rank, checkpoint, horizon, component
+   identity, selector, threshold, or an ad hoc seed. A later complete paired
+   seed tranche explicitly admitted by the frozen staged action table is not
+   this breaker;
 6. governance or implementation grows while the target estimand remains
    unobserved;
 7. the initial opportunity map and its one refresh return no probe; report
@@ -321,7 +356,7 @@ Pause the Program or Epoch when any condition holds:
    reduction while proposing no distinct causal prediction; do not apply this
    circuit breaker to distinct actor-level opportunity theses;
 10. after a material signal, the same defect root recurs after a complete
-    inventory and consolidated recheck and no bounded within-budget remediation
+    inventory and consolidated recheck and no bounded authorized remediation
     remains before another decision-changing observation.
 
 After a circuit breaker, permit only a route closure/synthesis record,
@@ -420,9 +455,11 @@ candidate, gate, claim boundary, or next action. In that case:
 2. replace the next experiment with a source/algebraic check or a more direct
    estimand when possible;
 3. if the same intervention and gate would remain, do not repeat the experiment
-   shape;
+   shape except for the next complete paired-seed tranche prospectively
+   admitted by the frozen staged action table;
 4. return to the unresolved causal-quantity map rather than changing only the
-   carrier, name, rank, seed, checkpoint, or selector.
+   carrier, name, rank, an ad hoc seed outside the staged design, checkpoint,
+   or selector.
 5. mark any downstream artifact created before its parent gate inactive and
    count the effort as process waste; preserve only necessary provenance and
    do not use sunk cost as a reason to continue.
@@ -459,8 +496,10 @@ Record:
 ```text
 program_id:
 program_objective:
-program_budget:
-program_budget_remaining:
+program_budget: <search, attention, review, and hard paid-service limits>
+program_budget_remaining: <same units as program_budget>
+gpu_planning_envelope:
+gpu_staging_plan: <initial tranche, paired bundles, maximum ceiling, actions, inference>
 epoch_id:
 epoch_question:
 epoch_fingerprint:

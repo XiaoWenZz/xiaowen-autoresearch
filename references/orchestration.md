@@ -86,7 +86,9 @@ push path over periodic status polling. The callback contract must:
 - remain quiet and avoid extra polling while ordinary work is still active;
 - read evidence and limitations before controller adjudication rather than
   forwarding the worker's verdict as accepted;
-- preserve the frozen Program/Epoch budgets and action table;
+- preserve hard per-job and per-attempt ceilings plus the prospectively
+  recorded Program/Epoch GPU planning envelope and authorized staged action
+  table;
 - disable or pause itself after a terminal controller result or owner blocker
   is recorded, preventing duplicate adjudications.
 
@@ -156,19 +158,28 @@ for status is incomplete orchestration, not a valid handoff.
 The owner may inspect or talk directly to a work session. Operational guidance
 that preserves the frozen scientific contract may be executed there. A request
 that changes the question, estimand, primary metric, strongest baseline, data
-boundary, seed or schedule policy, budget, stopping rule, or claim boundary is
-a proposed amendment only: pause affected evidence collection, send it to the
-controller, record approval and budget impact, then redispatch the amended
-contract. A side conversation never silently rewrites the scientific record.
+boundary, seed or schedule policy, a hard per-job/per-attempt, paid-service, or
+maximum staged ceiling, stopping rule, or claim boundary is a proposed
+amendment only: pause affected evidence collection, send it to the controller,
+record approval and budget impact, then redispatch the amended contract.
+Updating the aggregate GPU planning envelope alone is a prospective controller
+planning action, not a scientific-contract amendment, provided no hard ceiling
+or protected-data gate changes. Launching the next complete paired-seed tranche
+already admitted by the frozen action table and maximum staged ceiling is not
+another amendment or owner-approval round. A side conversation never silently
+rewrites the scientific record.
 
 Create a work session only after its candidate or named uncertainty is admitted
 and its decision-complete contract is frozen. Do not create parallel generic
 idea-generator sessions before `probe`, or use a new session, repository,
 worker, label, or context window to reset Program/Epoch budgets. Default to one
-evidence work session. Add one verifier or adversarial-audit session only when
-a named procedural uncertainty cannot be resolved more cheaply; prospectively
-freeze its access boundary and stop rule. Any higher concurrency must be
-explicitly justified and budgeted in the charter.
+evidence work session per admitted Scout or frozen contract. Multiple
+independently frozen, launch-ready portfolio entries may each retain one owner
+and receive breadth-first initial tranches; this does not authorize parallel
+generic idea generation. Add one verifier or adversarial-audit session only
+when a named procedural uncertainty cannot be resolved more cheaply;
+prospectively freeze its access boundary and stop rule. Any higher concurrency
+must be explicitly justified and budgeted in the charter.
 
 Subagents are an execution layer inside an owning controller or work session.
 They are appropriate for concrete, bounded, outcome-invariant tasks such as
@@ -212,10 +223,12 @@ Use Scout for bounded, reversible problem-existence or falsification work. Use C
 For Scout:
 
 1. default to Scout Lite; use Managed Scout only for a concrete orchestration need;
-2. start an evidence clock and require the first frozen estimand within at most
-   two outcome-blind engineering repairs or 20% of total Scout budget,
-   whichever comes first; a repair cannot read protected outcomes or change
-   model, data, split, metric, threshold, seed, baseline, or stopping policy;
+2. start an evidence clock and target the first frozen estimand before either
+   two outcome-blind engineering repairs or governance-only work reaching 20%
+   of total Scout attention. Either threshold is an efficiency alarm, not an
+   automatic scientific stop; a repair cannot read protected outcomes or
+   change model, data, split, metric, threshold, seed policy, baseline, or
+   stopping policy;
 3. prefer cached/cheap witnesses and one real end-to-end smoke before the evidentiary run;
 4. treat unchanged-protocol code bugs as one engineering loop, not new contracts, schemas, activation states, or approval rounds;
 5. implement only controls that can change the witness decision;
@@ -279,6 +292,8 @@ Execute without additional approval when in scope:
 - run local tests, lint, builds, parsers, or dry runs;
 - inspect logs, queues, APIs, and read-only external state;
 - record state and produce reports.
+- update an aggregate GPU planning envelope prospectively while remaining
+  inside every hard ceiling and frozen staged authorization;
 - repair and retest an in-scope implementation bug without changing the frozen scientific protocol or budget;
 
 ### Class B: preauthorized external execution
@@ -286,6 +301,8 @@ Execute without additional approval when in scope:
 Execute only when the charter names the action type, target, and budget:
 
 - submit or resubmit a bounded compute job;
+- launch a later complete paired-seed tranche admitted by the frozen staged
+  action table and maximum staged ceiling;
 - call paid APIs within the recorded cap;
 - write to an isolated remote experiment directory;
 - restart a failed worker or scheduled callback.
@@ -297,7 +314,8 @@ Record the authorization, command or action, cost/compute estimate, ID, logs, an
 Pause before:
 
 - changing the research question, hypothesis class, data split, primary metric, seed policy, baseline, stopping rule, or claim boundary;
-- increasing time, money, token, API, or compute budgets;
+- increasing hard time, money, token, API, per-job/per-attempt compute, or
+  maximum staged ceilings;
 - using credentials for a new purpose;
 - changing production or shared state, publishing, merging, messaging third parties, or creating external commitments;
 - deleting, overwriting, resetting, force-pushing, or performing other destructive actions;
@@ -327,8 +345,10 @@ Do not ask the owner again when all delegated conditions hold; resume the same
 work session and preserve the cumulative budget. If any condition fails or is
 ambiguous, standing delegation does not apply and explicit approval remains
 required. It never covers public-test access, outcome-conditioned protocol
-changes, budget increases, destructive/shared/production actions,
-publication/third-party commitments, or promotion to another governance stage.
+changes, increases beyond a hard ceiling or prospectively authorized maximum
+staged ceiling, destructive/shared/production actions, publication/third-party
+commitments, or promotion to another governance stage. An ordinary later
+tranche already admitted inside that ceiling is not a budget increase.
 
 Changing `governance_track` is a charter amendment. Promotion from Scout to Confirmatory is expected when a frozen promotion gate passes; downgrading is not allowed for actions or evidence already meeting Confirmatory triggers.
 
@@ -402,6 +422,13 @@ On callback or context recovery:
 
 ## Stop and escalation
 
-Stop execution and report when a Class C decision is required, budget is exhausted, validation shows the protocol is invalid, the same concrete blocker survives documented recovery attempts, or continuing would create unsupported claims. A stop is not a completed research objective; label the status accurately.
+Stop execution and report when a Class C decision is required; a hard
+per-job/per-attempt or paid-service ceiling, protected-data gate, or search or
+attention budget is exhausted; validation shows the protocol is invalid; the
+same concrete blocker survives documented recovery attempts; or continuing
+would create unsupported claims. Exhaustion of an aggregate Program/portfolio
+GPU planning envelope alone routes to `HOLD`, replanning, or prospective
+amendment; it is not an automatic scientific stop. A stop is not a completed
+research objective; label the status accurately.
 
 Do not use `NO-GO` as an orchestration shortcut. Close only the exact estimand/carrier supported by a preserving formal reduction, a replicated high-confidence negative against the strongest baseline, or a preregistered minimum-effect failure. Otherwise use `challenged`, `hold`, `inconclusive`, or `carrier-level stop` and preserve the reopening condition.
