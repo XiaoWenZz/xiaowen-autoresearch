@@ -511,6 +511,15 @@ workspaces that do not define one.
 - Do not claim a watchdog is active from a manifest field alone. The durable
   automation definition must bind the job/thread targets, next due time, and
   callback owner before the worker returns control.
+- A watchdog that detects a terminal, missing, failed, or stalled job must send
+  one idempotent terminal-detection callback to the Controller and receive a
+  successful tool receipt before pausing or deleting itself. Include the job,
+  canonical worker, terminal evidence, exposure boundary, and whether an
+  unchanged-contract outcome-blind repair is already admitted. A heartbeat
+  `NOTIFY` or local final is not recovery. If the repair is admitted, the
+  Controller resumes the canonical worker in the same terminal transaction;
+  if callback delivery fails, the watchdog remains active for exactly-once
+  retry.
 - While a job, reviewer, scheduler, or approval is pending, do only
   action-admitted work that is useful under every feasible pending outcome.
   Do not spend downstream method, confirmation, or publication budget merely
