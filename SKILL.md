@@ -501,6 +501,16 @@ workspaces that do not define one.
 - Execute Class B only when the charter names type, target, and budget.
 - Stop for Class C approval; continue safe independent work when it cannot bias the pending decision.
 - For a long job, verify submission and record ID, environment, logs, artifacts, and check/cancel commands. Do not continuously poll unless monitoring was requested.
+- Treat the first observed scheduler `RUNNING` state as provisional. When the
+  process has no native completion callback, retarget the existing singleton
+  watchdog for one launch-stabilization check two minutes later (and no later
+  than three minutes), limited to scheduler state, terminal-marker existence,
+  the first progress marker, and a bounded log tail. If healthy, switch that
+  same watchdog to the normal ETA cadence; if terminal or missing, wake the
+  canonical worker immediately. Do not create a second monitor.
+- Do not claim a watchdog is active from a manifest field alone. The durable
+  automation definition must bind the job/thread targets, next due time, and
+  callback owner before the worker returns control.
 - While a job, reviewer, scheduler, or approval is pending, do only
   action-admitted work that is useful under every feasible pending outcome.
   Do not spend downstream method, confirmation, or publication budget merely
@@ -565,6 +575,13 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   low-frequency continuity fallback. It may only catch an unhandled terminal
   or invalid idle state and dispatch an already admitted successor; it must not
   poll GPU/protected evidence, invent filler, or outlive the bounded route.
+- On every continuity wake, take one compact `wait_threads(timeoutMs=0)`
+  snapshot of the registered active sessions. Wake the controller if a worker
+  becomes idle/completed without an acknowledged callback, a terminal remains
+  unreconciled, a live remote job lacks its active watchdog, or all zero-GPU
+  workers are idle despite an admitted backlog item. This is lost-work
+  detection only; route selection and evidence interpretation remain with the
+  controller.
 - Report four separate fields: `gpu_running`, ordered `gpu_queue`,
   `zero_gpu_running`, and `result_analysis_queue`. “No currently executable
   queue item” must not be reported as “no experiment exists.”
