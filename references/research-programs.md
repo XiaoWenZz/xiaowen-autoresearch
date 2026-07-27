@@ -173,10 +173,11 @@ next scientific decision:
 direct evidence that would decide it:
 named validity blocker:
 how the blocker could invalidate that evidence:
-one repair cap:
-one binary recheck:
+complete defect inventory owner:
+root-cause acceptance tests:
+consolidated recheck:
 fallback executable claim or artifact:
-remaining attention and governance 20% cap:
+remaining attention and governance 20% target:
 ```
 
 Treat work as **governance-only** when it adds no target, mechanism, source,
@@ -187,18 +188,21 @@ the single named blocker preventing that direct evidence.
 
 Apply these defaults until the next decision-changing scientific observation:
 
-1. permit one bounded patch and one recheck restricted to the predeclared
-   executable witnesses;
-2. spend no more than 20% of the remaining active-attention budget on
-   governance-only work;
-3. do not let a recheck expand into open-ended red teaming; record a newly
-   discovered blocker as a challenge rather than automatically opening another
-   repair;
-4. if the new blocker would invalidate the next observation after the repair
-   allowance is consumed, emit
-   `GOVERNANCE_BUDGET_EXCEEDED_POST_SIGNAL` and choose
-   `DOWNGRADE_CLAIM_TO_EXECUTABLE_BOUNDARY` or `HOLD_VALIDITY`;
-5. do not create another version, schema family, verifier family, trust layer,
+1. require one whole-path, root-cause-grouped defect inventory before repair;
+2. repair ordinary outcome-blind defects together in the canonical
+   implementation session and run one consolidated recheck;
+3. treat 20% governance-only attention as an efficiency target. A breach
+   requires immediate simplification and root-cause review, not automatic
+   scientific closure;
+4. do not let a recheck expand into open-ended red teaming. If a root recurs or
+   the defect set does not shrink, change implementation strategy, owner,
+   or toolchain instead of opening serial predicate patches. A carrier change
+   requires prospective re-contracting, exposure revalidation, and budget
+   authorization;
+5. if a real hard block or budget boundary still prevents valid evidence,
+   choose `DOWNGRADE_CLAIM_TO_EXECUTABLE_BOUNDARY` or `HOLD_VALIDITY` while
+   preserving the scientific question;
+6. do not create another version, schema family, verifier family, trust layer,
    or review round to escape this terminal.
 
 Preserve the material Scout signal when this gate trips. It blocks only the
@@ -316,19 +320,21 @@ Pause the Program or Epoch when any condition holds:
 9. two contribution briefs fail the same specificity deletion or preserving
    reduction while proposing no distinct causal prediction; do not apply this
    circuit breaker to distinct actor-level opportunity theses;
-10. after a material signal, the single governance repair/recheck allowance or
-    its 20% attention cap is exhausted before another decision-changing
-    scientific observation.
+10. after a material signal, the same defect root recurs after a complete
+    inventory and consolidated recheck and no bounded within-budget remediation
+    remains before another decision-changing observation.
 
 After a circuit breaker, permit only a route closure/synthesis record,
 knowledge handoff, `SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION`, a justified
 narrow-boundary no-opportunity result, or a substantively new Program
 proposal. Do not launch a new Scout from the pause itself.
 
-For circuit breaker 10, preserve the observed signal and use the post-signal
-terminal: downgrade the claim or artifact to its executable valid boundary, or
-hold validity. Do not open another governance version. Direct source, code, or
-algebraic evidence that does not depend on the blocked machinery may still
+For circuit breaker 10, preserve the observed signal and change the
+implementation strategy, owner, or toolchain. A carrier change requires a new
+prospective contract, exposure validation, and budget authorization. Downgrade
+the claim or artifact, or hold validity, only when a real hard block or budget
+boundary remains. Do not open another governance version. Direct source, code,
+or algebraic evidence that does not depend on the blocked machinery may still
 resolve the next scientific decision.
 
 ## External review

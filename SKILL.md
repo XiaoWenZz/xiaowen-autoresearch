@@ -277,22 +277,35 @@ Apply these to both governance tracks:
   [references/research-programs.md](references/research-programs.md); reuse one
   living ledger and never reset budget through a new name, session, carrier,
   repository, or context window.
-- Produce the frozen Scout estimand within at most two outcome-blind engineering
-  repairs or 20% of its total budget, whichever comes first. A repair is legal
-  only when protected outcomes remain unread and model, data, split, metric,
-  threshold, seed, baseline, and stopping policy are unchanged. Record each
-  prospective patch, exact-path smoke, new run ID, and cumulative charge.
-  After observing an estimand, reruns are replication or follow-up.
+- Treat two outcome-blind engineering retries or 20% governance attention as
+  an efficiency alarm, never as an automatic scientific terminal. Continue
+  the same engineering loop while protected outcomes remain unread, the
+  scientific contract is unchanged, and the total-cost forecast remains
+  inside the authorized budget. Record each root cause, patch, exact-path
+  smoke, new run ID, and cumulative charge. After observing an estimand,
+  reruns are replication or follow-up.
 - Freeze decision invariants before evidence and record implementation identity
   at launch. Do not promote incidental filenames, hashes, or verifier identities
   into gates unless changing them could change the scientific decision.
+- Require one independent, root-cause-grouped defect inventory over the whole
+  executable path, then repair ordinary outcome-blind defects together in the
+  canonical implementation session and perform one consolidated recheck. If a
+  root recurs or the defect set does not shrink, change the implementation
+  strategy, owner, or toolchain instead of adding predicate patches, schemas,
+  or review generations. A carrier change is not an engineering repair: it
+  requires prospective re-contracting, exposure revalidation, and budget
+  authorization. Hold execution only for a real hard block or budget boundary;
+  repair count alone never closes the scientific route.
+- After reading this `SKILL.md` completely, an unchanged-contract outcome-blind
+  repair worker need not load the full Program/Epoch reference. Load that
+  reference only when making a Program, Epoch, or circuit-breaker decision;
+  still read the applicable `AGENTS.md` chain and frozen contract/run manifest.
 - After the first material signal, apply the **post-signal evidence priority
   gate** in [references/research-programs.md](references/research-programs.md):
-  permit at most one bounded repair and one witness-scoped recheck, cap
-  governance-only attention at 20%, and use one proportionate verifier. A
-  second distinct governance blocker before new scientific evidence forces
-  claim/artifact downgrade or `HOLD`; do not open another governance version.
-  Tests, commits, and governance artifacts are not scientific progress.
+  keep governance-only attention near 20% and use one proportionate verifier.
+  Exceeding the target triggers workflow simplification and a root-cause
+  review, not automatic idea rejection. Tests, commits, and governance
+  artifacts are not scientific progress.
 - Report the uncertainty retired, whether the next decision changed, actual
   compute/attention, retries, and decision-critical artifacts. A positive Scout
   is only `SCOUT_SIGNAL`, never an accepted method claim.
