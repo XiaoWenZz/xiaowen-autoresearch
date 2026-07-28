@@ -579,6 +579,13 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   methods for pending routes.
 - A zero-GPU candidate terminal is incomplete unless it returns exactly one of
   `QUEUE_GPU`, `HOLD` with one reopening fact, or `DROP` with a scoped reason.
+- A `HOLD` is not a worker stop by itself. Persist it as one blocked backlog
+  item with the same outcome-blind reopening predicate, named observer, and
+  either an event trigger or absolute next-check time. Record one concrete
+  next evidence action. If the frozen contract admits repair, redesign or
+  another bounded evidence step, classify and dispatch that step as
+  `admitted`; otherwise bind the external reopening trigger. Never leave an
+  owner idle behind an unobserved or unregistered hold.
 - A GPU queue entry must bind its canonical owner, frozen uncertainty and
   contract, per-job safety/profile cap, initial tranche, pre-authorized staged
   ceiling, `expand | futility | hold` plan, final inference path, prerequisites,
@@ -612,6 +619,23 @@ zero-GPU prepare or audit -> ordered GPU queue -> GPU evidence
   watchdog intent, then issue the final terminal ACK as one transaction. An
   early message receipt must be labeled `RECEIPT_ONLY` and cannot close the
   worker or portfolio.
+- A successor is `running` only after a successful dispatch receipt and one
+  compact post-dispatch observation supplies task-bound activation evidence.
+  Bind `task_id + owner_thread_id + dispatch_id + lease_epoch`, reasoning
+  effort, terminal callback and an absolute next-progress deadline across the
+  active task, callback and recovery evidence. Generic thread activity does
+  not count. Persist the maximum issued epoch and current lease in the existing
+  worker registry and advance it through the locked durable chronology
+  watermark used by `reconcile_research_lanes.py`; a snapshot may not lower
+  that prior floor. One owner holds
+  at most one current lease. A delivered terminal carries the same source lease
+  into the terminal idempotency history. Once recovery is dispatched, revoke
+  the old lease and install the activated higher epoch before reporting work as
+  running; stale-epoch events are rejected.
+- A launch-ready GPU item with no live process must likewise have one active
+  lease-bound launch owner and dispatch receipt. A live job must bind its task,
+  execution ID, owner/target thread, terminal key, wake owner and active
+  singleton watchdog with an absolute next due time.
 - Give every zero-GPU dispatch an event-driven terminal callback to the
   controller. If that callback cannot wake the controller, install one named
   low-frequency continuity fallback. It may only catch an unhandled terminal
@@ -793,7 +817,9 @@ Run with Python 3.10+ on POSIX; append locking uses `fcntl`.
 - `scripts/validate_opportunity_prompt.py`: lint a high-recall-v3 external Opportunity Search prompt for unresolved placeholders, stage/pass inversion, missing admission/retention separation, erased evidence-gap or broader-artifact leads, unguarded natural-carrier burden, missing joint-feasibility semantics, and an incomplete decision contract.
 - `scripts/validate_opportunity_gate_calibration.py`: validate a retrospective broad-gate decision table. Version 2 distinguishes probe misses, hard false rejects, false admits, and over-retained negatives instead of treating every non-probe positive as the same failure.
 - `scripts/reconcile_research_lanes.py`: reject route-local false idle,
-  un-reconciled terminal ACKs, stranded ready result analysis, and unsent
+  un-reconciled terminal ACKs, stale or receipt-less worker declarations,
+  orphan holds, launch-ready GPU work without an active launch owner, live GPU
+  work without its watchdog, stranded ready result analysis, and unsent
   decision-ready Pro reviews in one compact global lane snapshot.
 
 Script success establishes structural validity only; it never establishes scientific truth.

@@ -34,6 +34,20 @@ whose output remains useful under every pending GPU outcome.
 Do not use lack of an immediately executable experiment as proof of global
 idle.
 
+Do not use a static lane declaration as proof that work is running. A
+`zero_gpu_running` task binds its canonical owner, explicit reasoning effort,
+terminal callback, successful dispatch receipt, and
+`task_id + owner_thread_id + dispatch_id + lease_epoch` activation evidence,
+plus an absolute next-progress deadline. Generic active-thread status does not
+count. The worker registry supplies the durable maximum epoch and exact current
+lease. Validate every live controller snapshot against and atomically advance
+one locked durable watermark with `reconcile_research_lanes.py --state`; a
+snapshot cannot lower its predecessor's floor. An overdue task may carry a bound
+continuity check, but after redispatch the old lease must be revoked and the
+activated higher epoch must replace it. One owner may hold at most one current
+lease. Acknowledged terminal transactions bind the delivered callback's source
+lease to the terminal idempotency history.
+
 Before admitting or retaining any GPU queue entry, reconcile it against the
 latest durable authority in this order:
 
@@ -51,6 +65,14 @@ hold or terminal cancellation. Bind each queue entry to the latest checked
 authority ID, evidence path, owner, launch prerequisite and the explicit
 `queue_gpu` disposition. A ready result-analysis item likewise binds the
 terminal ID and evidence path that made it ready.
+
+Classify each GPU queue item as `blocked` with one blocking fact or
+`launch_ready`. If a launch-ready item has no live GPU execution, bind one
+active launch owner, terminal key and successful dispatch receipt. A live GPU
+entry binds its task, execution ID, target/owner thread, terminal event, wake
+owner and active job-specific singleton watchdog with the next absolute check
+time. This prevents a nominal queue or a watchdog for another job from masking
+unused hardware after all launch prerequisites are satisfied.
 
 ## Staged breadth-first GPU allocation
 
@@ -100,6 +122,12 @@ authority. Do not issue the final ACK before portfolio reconciliation and
 durable delivery intent.
 A task-specific worker may recommend a local next action, but only the
 controller may set global lane status.
+
+A `HOLD` next action is durable only when one blocked zero-GPU backlog item
+has the same task, outcome-blind reopening predicate, named observer,
+event/absolute-check trigger and next evidence action. If the current contract
+admits outcome-blind improvement, that improvement is an admitted successor
+and must be dispatched; it is not an implicit idle state.
 
 GPU result analysis preempts ordinary Opportunity Search. Finish or checkpoint
 the bounded search task without reading the result, then run the frozen
@@ -182,6 +210,21 @@ The snapshot records:
 - completed `response_ready` Pro jobs plus the job currently being locally
   adjudicated; and
 - an idle proof only when `zero_gpu_running=explicit_idle`.
+
+For active zero-GPU work it also records the actual owner status, reasoning
+effort, current dispatch/lease tuple, task-bound activation, callback,
+dispatch receipt, durable worker-registry epoch and next-progress deadline.
+Acknowledged terminals also record callback lease provenance from the durable
+terminal idempotency history. For live or launch-ready GPU work
+it records the exactly bound execution/watchdog or active launch-owner lease,
+respectively. For every blocked item it records the reopening predicate,
+observer, trigger and next evidence action.
+
+The snapshot also carries `lease_transitions`. Whenever the durable current
+lease changes, exactly one transition must bind the prior current tuple and
+prior maximum epoch to the new tuple (or explicit revocation), with a receipt
+and timestamp. Controller closure uses the reconciler's default atomic state
+advance; `--check-only` is diagnostic and has no closure authority.
 
 Every GPU queue item also records `latest_authority` with
 `checked_against_latest_terminal=true`, its source kind, authority ID, evidence

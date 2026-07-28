@@ -27,7 +27,7 @@ def run(*args: object) -> subprocess.CompletedProcess[str]:
 
 
 class BoundaryValidatorsTest(unittest.TestCase):
-    def test_high_recall_v2_template_passes_when_filled(self) -> None:
+    def test_high_recall_v3_template_passes_when_filled(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             prompt = Path(temp) / "prompt.md"
             text = PROMPT_TEMPLATE.read_text(encoding="utf-8")
@@ -64,7 +64,7 @@ class BoundaryValidatorsTest(unittest.TestCase):
             )
             result = run(PROMPT_VALIDATOR, prompt)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("missing high-recall-v2 schema marker", result.stdout)
+            self.assertIn("missing high-recall-v3 schema marker", result.stdout)
             self.assertIn("missing separate problem admission", result.stdout)
             self.assertIn("missing separate contribution forecast", result.stdout)
 
@@ -85,7 +85,10 @@ class BoundaryValidatorsTest(unittest.TestCase):
             artifact.write_text(json.dumps(payload), encoding="utf-8")
             result = run(GATE_VALIDATOR, artifact)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("retrospective false rejects", result.stdout)
+            self.assertIn(
+                "retention_state must be EVIDENCE_GAP_LEAD",
+                result.stdout,
+            )
 
     def test_exposure_ledger_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

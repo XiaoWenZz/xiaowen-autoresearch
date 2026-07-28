@@ -92,6 +92,19 @@ push path over periodic status polling. The callback contract must:
 - disable or pause itself after a terminal controller result or owner blocker
   is recorded, preventing duplicate adjudications.
 
+Dispatch intent is not liveness. Persist the successful dispatch receipt, then
+take one compact post-dispatch task snapshot. Record a worker as active only if
+that evidence echoes the current
+`task_id + owner_thread_id + dispatch_id + lease_epoch`. The same tuple binds
+explicit reasoning effort, terminal callback and an absolute
+next-progress/reclaim deadline. Generic thread activity is insufficient. One
+owner holds at most one current task lease. The living worker registry stores
+the maximum issued epoch and exact current lease. The lane reconciler reads and
+atomically advances one locked external chronology watermark, so a later
+snapshot cannot lower the prior floor by rewriting its own fields. When the deadline is due, recovery evidence must echo the same
+tuple; once redispatch occurs, revoke the old lease and install the activated
+higher epoch before calling the lane running. Ignore late stale-epoch events.
+
 For Codex work sessions, terminal delivery is **callback-first**. The worker
 must persist and validate its terminal packet, call `send_message_to_thread`
 to the registered controller, and receive a successful tool receipt before
@@ -103,7 +116,9 @@ completed final exactly once using the terminal event or final-turn ID.
 Do not treat a visible `completed` thread state as proof that controller
 delivery occurred.
 
-Treat `terminal_event_id` as an idempotency key. Append delivery and
+Treat `terminal_event_id` as an idempotency key. Each delivered record carries
+its source `task_id + owner_thread_id + dispatch_id + lease_epoch` and callback
+receipt. Append delivery and
 acknowledgement records rather than overwriting history. A repeated callback
 with the same terminal event may refresh operational metadata but must not
 create a second scientific decision. When acknowledgement is recorded, mark
@@ -122,6 +137,12 @@ completed event's watchdog, and commit exactly one next action:
 revision are registered with their own callback/watchdog state. For schema
 `1.2+`, record this transaction under `controller_action`; validation must fail
 for a latest terminal `delivered` state or a dangling dispatch target.
+
+`dispatch_next` additionally requires the successful dispatch receipt and
+matching task-bound activation/callback lease evidence. `explicit_hold`
+requires one matching blocked backlog record with the same outcome-blind
+reopening predicate, observer, event/absolute-check trigger and next evidence
+action; otherwise it is an orphaned stop, not a closed controller transaction.
 
 The transaction is also incomplete until the controller reconciles the global
 GPU, zero-GPU, result-analysis and Pro lanes. A route-local `explicit_idle`
