@@ -1,8 +1,14 @@
 # Global research lanes
 
-Use this reference when a controller dispatches or closes persistent research
-work. It fixes one concrete failure: a route-local terminal must not strand the
-global zero-GPU or Pro capacity.
+Load this managed-control-plane reference only when multiple sessions, a
+remote/GPU or unattended process, a durable shared queue/lease, callback-loss
+risk, or Confirmatory ownership actually exists. A Lite single-session route
+and a pure frozen-contract executor do not read it and do not create lane,
+lease, watchdog, or continuity state.
+
+Use it when a managed controller dispatches or closes persistent research work.
+It fixes one concrete failure: a route-local terminal must not strand the global
+zero-GPU or Pro capacity.
 
 ## Invariant
 
@@ -152,6 +158,69 @@ A new problem-space search is admitted only when it has:
 Search is filler when it merely consumes idle capacity, repeats a closed causal
 fingerprint, prebuilds a downstream method, produces no decision-changing
 output, or has no bounded stop condition.
+
+### True saturation and continuous search
+
+<!-- dirty-semantic-block-1:start -->
+- Do not stop new-idea search merely because one bounded Opportunity Search
+  exhausted its budget or because any item appears in `gpu_queue`. Continue
+  successive bounded searches in substantively new problem spaces while the
+  authorized GPU fleet can still absorb another smallest valid complete
+  tranche. Define backlog saturation narrowly: every currently usable
+  authorized GPU card is occupied by valid live work after breadth-first
+  tranche allocation, and at least one additional independently frozen,
+  launch-ready item is waiting solely for GPU capacity. A blocked item, an item
+  awaiting implementation/profile gates, unavailable hardware, or an empty GPU
+  does not count. Only this saturated state, an explicit owner pause, or a hard
+  scientific/safety/paid-service limit may pause new-idea search. Preserve the
+  existing Program/Epoch and cumulative attention budget; after three
+  consecutive no-Probe searches, perform the required recall audit before
+  generating another batch.
+<!-- dirty-semantic-block-1:end -->
+
+### Solve-or-bind and finite HOLD lifecycle
+
+<!-- dirty-semantic-block-2:start -->
+- Apply `solve-or-bind` before retaining any `HOLD`. If one outcome-blind,
+  in-scope repair, source/code/algebra audit, redesign or bounded evidence step
+  can resolve the blocker, dispatch it in the same Controller transaction
+  instead of holding. Otherwise the blocked record must also state the exact
+  unresolved question, why current evidence is insufficient, an absolute
+  `resolution_deadline`, and the scoped `DROP_* | ROUTE_*` fallback if no
+  reopening fact arrives. An unknown or infinite deadline is invalid.
+- Re-evaluate a `HOLD` when its event fires or `next_check_at` arrives, without
+  waiting for a user reminder. At `resolution_deadline`, dispatch the admitted
+  action, close/route the current charter, or renew at most once using a new
+  material fact and a new finite deadline. Repeating the same predicate or
+  explanation is not renewal evidence. An external dependency that may remain
+  unavailable indefinitely becomes a non-active archived evidence-gap lead
+  with an event-based reopening predicate; it may not keep a worker lease,
+  queue slot or active `HOLD`.
+- `no rerun`, `no rescue` and protected-outcome rules close the frozen attempt,
+  not every prospective diagnosis. When a bounded outcome-blind audit can
+  decide whether a new carrier, estimand or contract is warranted, schedule
+  that audit; do not convert scientific caution into permanent inactivity.
+  Conversely, solving the problem never authorizes threshold changes, subset
+  mining or outcome-informed retries.
+<!-- dirty-semantic-block-2:end -->
+
+### Post-negative diagnosis without rescue
+
+<!-- dirty-semantic-block-3:start -->
+- After an independently verified negative, do not equate closure of the exact
+  rerun path with absence of zero-GPU follow-up. Before declaring
+  `explicit_idle` or moving to an unrelated Opportunity Search, test whether
+  one bounded post-negative diagnosis from already authorized aggregate
+  evidence and source/code/algebra can distinguish mechanism non-activation or
+  a preserving reduction, activated state with a carrier-insensitive outcome,
+  or an unidentifiable estimand. Automatically dispatch it when that distinction
+  can change `DROP | HOLD | prospective new Scout`; otherwise record it as
+  `not_decision_changing`. This diagnosis is explanatory, not a rescue: it may
+  not rerun, rescore, change metrics or thresholds, mine subsets, reopen
+  protected raw outputs, or overturn the valid negative. If higher-priority GPU
+  terminal analysis preempts it, persist one pause/resume cursor and resume it
+  afterward instead of losing the admitted task.
+<!-- dirty-semantic-block-3:end -->
 
 ## ICLR-targeted innovation contract
 

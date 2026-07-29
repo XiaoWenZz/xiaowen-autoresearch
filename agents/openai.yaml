@@ -1,4 +1,4 @@
 interface:
   display_name: "Xiaowen AutoResearch"
-  short_description: "Discover, scout, and delegate research rigorously"
-  default_prompt: "Use $xiaowen-autoresearch to construct an evidence-bounded external Opportunity Search prompt or run the cheapest decisive Scout before applying contribution and confirmation gates."
+  short_description: "Control bounded research, not frozen pure execution"
+  default_prompt: "Use $xiaowen-autoresearch to select one research-control route, load only its direct references, freeze the smallest valid contract, and delegate any fully frozen pure implementation task without loading the research skill or parent history."
