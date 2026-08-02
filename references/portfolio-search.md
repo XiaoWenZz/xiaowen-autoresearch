@@ -54,11 +54,40 @@ Neither stage is an acceptance forecast.
 
 Do not generate and kill ideas in one pass.
 
+### Source observatory
+
+For a broad or recency-sensitive search, run a source-first observatory before
+the divergent pass:
+
+- screen the current and previous 18 months of the relevant primary
+  proceedings, recent forward neighbors, appendices, limitations, negative
+  ablations, sensitivity results, and paper-declared official code;
+- extract empirical anomalies, failed assumptions, unresolved tail behavior,
+  missing controls, and expensive or unstable operations;
+- target at least 20 primary papers for a day-scale FedFT/FedPEFT search unless
+  a named source-access blocker makes that impossible; and
+- keep one source/anomaly table. For each row, record a stable
+  `source_family_id` and descriptive `assumption_lineage` for the actor,
+  information, chronology, state, or deployment premise it inherits. Treat a
+  paper, its appendix, declared official code, and maintainer-authored issue or
+  PR as one source family. Do not create one governance packet per paper.
+
+The observatory is a search-input refresh, not evidence that a paper's claimed
+problem or method is correct. It prevents a stale atlas or bottom-up component
+taxonomy from defining the full candidate universe.
+
+Source-family and assumption-lineage fields are descriptive retrieval
+telemetry. Record reused, correlated, and unknown ancestry rather than
+manufacturing distinct labels. Paper or family counts cannot establish
+conceptual diversity, independence, novelty, or problem admission, and no
+numeric LLM or expert novelty score may replace the source/reduction checks.
+
 ### Divergent pass
 
-- Generate raw problem leads without `probe`, `hold`, `drop`, novelty, venue,
+- Generate up to 20 raw problem leads without `probe`, `hold`, `drop`, novelty, venue,
   or reviewer scores.
-- Cover at least four substantively different problem spaces by default.
+- Cover at least six substantively different problem spaces by default for a
+  broad FedFT/FedPEFT batch.
 - State only the actor, decision, suspected material loss, causal transition,
   and one falsifiable prediction. A raw lead may be broad or incomplete.
 - Do not require a natural carrier, complete preserving composition, method
@@ -70,7 +99,8 @@ Do not generate and kill ideas in one pass.
 ### Convergent pass
 
 - Ground the raw leads in sources, merge them by causal fingerprint, and create
-  a bounded number of opportunity briefs.
+  at most eight causal fingerprints and at most six one-screen opportunity
+  briefs.
 - Apply prior exact closures and actor-level reductions only now.
 - Record problem admission and contribution forecast as independent fields:
 
@@ -82,6 +112,16 @@ contribution_forecast:
   UNASSESSED_PRE_SIGNAL | CHALLENGED_NEIGHBOR | LIKELY_REPAIR |
   LIKELY_GENERIC | PLAUSIBLE_IF_SIGNAL
 ```
+
+Also record one descriptive, non-binding `mechanism_depth` value:
+
+```text
+NEW_ACTOR_DECISION | NEW_INFORMATION_CHRONOLOGY_STATE |
+NEW_CAUSAL_MECHANISM | OPERATION_RECOMBINATION
+```
+
+This field is retrieval and cross-merge telemetry, not a novelty claim, score,
+admission gate, or contribution verdict.
 
 The contribution forecast must not determine problem admission. An occupied
 method kernel, failed narrow specificity, or missing paper path can challenge a
@@ -188,6 +228,13 @@ If any decision-critical field is unverified, label the composition
 cannot close the actor-level problem before measurement. A standalone canary,
 rollback, or oracle is not deployable unless its representative data, timing,
 and cost are part of this certificate.
+
+Do not satisfy this certificate by imagining a controller that can copy every
+lawful observable. Require one implementation, formal construction, or
+source-faithful executable microcase for the complete composition. Without
+that witness, `copyable`, `centralizable`, `generic`, and failed
+federation/PEFT specificity are contribution challenges rather than
+problem-admission failures.
 
 ## Contribution brief and exclusions
 
@@ -318,7 +365,7 @@ new claim.
 
 Opportunity table:
 
-`opportunity | actor/loss | evidence status | estimand/MPE | constraints | strongest problem reduction | joint feasibility | carrier/source | witness/outcomes/cost | causal fingerprint | problem admission | contribution forecast`
+`opportunity | actor/loss | evidence status | source family/assumption lineage | estimand/MPE | constraints | strongest problem reduction | joint feasibility | carrier/source | witness/outcomes/cost | causal fingerprint | mechanism depth | problem admission | contribution forecast`
 
 Contribution table after signal:
 

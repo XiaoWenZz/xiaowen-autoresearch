@@ -6,17 +6,18 @@ Use this reference before literature synthesis, experiment design, statistical i
 
 1. Claim discipline
 2. Outcome conditioning and venue labels
-3. Specificity claims
-4. Pre-registration
-5. Proxy estimands and gate calibration
-6. Statistics
-7. Baselines and controls
-8. Literature and citations
-9. Evidence and negative results
-10. Scientific progress versus activity
-11. Scoped closure and NO-GO
-12. Review and adjudication
-13. Reporting
+3. Result-blind source access
+4. Specificity claims
+5. Pre-registration
+6. Proxy estimands and gate calibration
+7. Statistics
+8. Baselines and controls
+9. Literature and citations
+10. Evidence and negative results
+11. Scientific progress versus activity
+12. Scoped closure and NO-GO
+13. Review and adjudication
+14. Reporting
 
 ## Claim discipline
 
@@ -51,6 +52,39 @@ Use this reference before literature synthesis, experiment design, statistical i
   scalability, or venue readiness to block a cheap, interpretable
   problem-existence witness. Apply those gates at Contribution Selection after
   a material signal.
+
+## Result-blind source access
+
+Result-blind means preventing result-bearing bytes from entering the model
+context, not reading them and promising to ignore them. Freeze a safe source
+tree before retrieval:
+
+1. allow only exact files, URLs, API fields, archive members, or source-code
+   paths needed for identity, method, configuration, license, or algebra;
+2. deny result-bearing and transitive auto-load surfaces by default, including
+   search snippets, repository or package `README` files, index/list pages,
+   preview cards, rendered landing pages, cached summaries, tables, metrics,
+   plots, predictions, labels, logits, and public-test outputs;
+3. prefer field-selective APIs or exact raw objects. When raw bytes require
+   filtering, download without rendering them into model-visible output and
+   pass them through one deterministic allowlist/result-strip step before the
+   model reads the sanitized packet; and
+4. bind the sanitized packet to the exact source identities and validate both
+   the allowed schema and absence of forbidden fields/sections before use.
+
+Do not use general search or repository browsing to discover sources inside a
+result-blind task because snippets and `README` previews can co-load results.
+Use an already frozen safe source tree, a deterministic non-model preparer, or
+an explicitly authorized unblinded preparer. If none exists, return
+`HOLD_ACCESS_CHANNEL` before fetching rather than weakening the exposure
+contract.
+
+If a result-bearing snippet, `README`, preview, or other auto-load reaches the
+task, fail closed for that exact attempt and exclude the value from reasoning.
+Record the scoped hold once in the existing final/terminal. Do not create an
+exposure artifact family, dispatch an automatic fresh owner, or self-retry.
+Reopen only when one result-stripped safe source tree exists. Exposure is a
+protocol-control event, never a scientific negative or candidate drop.
 
 ## Specificity claims
 
@@ -87,6 +121,32 @@ Before an evidentiary run, record:
 8. the claim the run can support or falsify.
 
 If these change after results are visible, preserve the original plan, record the amendment, and label the new analysis exploratory. Never silently redefine success.
+
+### Proportional readiness
+
+Use `R0`--`R3` only as shorthand inside the existing planning record, not as a
+new lifecycle, state tree, or artifact family:
+
+- `R0`: freeze the smallest carrier/next-cell envelope—actor, lawful inputs,
+  exact next cell, identities needed to make it interpretable, protected-
+  outcome boundary, matched-cost invariant, hard invalidators, and cap.
+- `R1`: freeze and run at most one outcome-blind synthetic or train-source
+  mechanical smoke/profile for that exact cell. It carries no protected,
+  public-test, held-out, or scientific payload and permits no scientific
+  interpretation.
+- `R2`: only after `R1` mechanically passes, freeze the decision-complete
+  scientific contract: exact code/config/data/model/carrier/attempt identity;
+  full cells, arms, and seeds; estimand, MPE, primary metric, strongest
+  baseline, power and thresholds; analysis/action table; stop, exposure,
+  budget, immutable-evidence, and callback requirements.
+- `R3`: begin scientific execution only after `R2` and every applicable
+  integrity, fairness, provenance, exposure, and authority control passes.
+
+An `R1` failure is engineering or carrier evidence, never a scientific
+negative. Full-program portability, future profiles, or Confirmatory surfaces
+cannot block `R1` unless they change the next cell's identity or safety. Expose
+no scientific outcome before `R2` is frozen; any later scientific-contract
+change follows the existing amendment, new-attempt, and no-rescue rules.
 
 ## Proxy estimands and gate calibration
 

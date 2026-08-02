@@ -69,6 +69,13 @@ Before assembly, resolve:
 - the exact prior fingerprints that must not be revived;
 - the intended artifact family and venue target, if any.
 
+For a broad, current-field search, add a source-observatory layer before local
+fingerprints: ask for current and previous 18-month primary proceedings,
+appendices, limitations, negative ablations, sensitivity findings, and
+paper-declared code behavior. Ask the reviewer to derive candidate problems
+from those observed source loci rather than from a pre-enumerated list of
+downstream component nouns.
+
 ## Freeze the external-review contract
 
 An external Opportunity Search prompt must state:
@@ -111,6 +118,12 @@ Novelty, specificity, irreducibility, scalability, reviewer resistance, and
 venue path become method-selection gates only after a material Problem Scout
 signal. At Opportunity Search they may be named `challenge` fields that shape
 the witness.
+
+Likewise, do not require a federation-only or non-copyable observable before a
+controlled Problem Scout. A generic repair or centralized analogue challenges
+the future contribution; it closes the problem only when one verified complete
+implementation or formal construction already solves the same actor decision
+under matched information, chronology, state, cost, recipients, and estimand.
 
 ## Inject closures without poisoning recall
 
@@ -182,6 +195,12 @@ Require labels such as `FACT`, `INFERENCE`, and `HYPOTHESIS`. A varying score,
 taxonomy gap, missing keyword, formal ambiguity, larger oracle, or efficiency
 gain is not an actor-level problem unless it reaches the target decision unit.
 
+For day-scale FedFT/FedPEFT discovery, default the external request to at least
+20 screened primary papers, 12--20 source-backed raw anomaly cards, at most
+eight causal fingerprints, at most six grounded briefs, and at most one
+selected Scout. These are one batch, not a license to create paper-specific
+reports or validators.
+
 ## Require joint feasibility before reduction closure
 
 Do not accept “paper A + paper B + paper C + canary” as a preserving reduction
@@ -232,6 +251,11 @@ Start from `assets/opportunity-search-prompt-template.md`. Replace every
 ```bash
 python3 scripts/validate_opportunity_prompt.py /path/to/prompt.md
 ```
+
+The assembled prompt must retain
+`OPPORTUNITY_SEARCH_SCHEMA: source-first-high-recall-v4`. Freeze that schema
+value, prompt SHA-256, and validator PASS in the dispatch record before
+activation. A legacy or bespoke prompt without this PASS remains draft-only.
 
 The validator checks structure only. It cannot verify scientific novelty,
 source accuracy, closure correctness, candidate quality, or venue viability.

@@ -21,7 +21,9 @@ EXPOSURE_SEVERITY = {
     "model": 2,
     "design": 2,
     "execution": 2,
+    "protected": 2,
 }
+ACCESS_EXPOSURE_TYPES = {"result", "data", "model", "design", "execution", "protected"}
 
 
 class ValidationError(ValueError):
@@ -40,31 +42,28 @@ def parse_time(value: Any, context: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def load_manifest(path: Path) -> dict[str, Any]:
+def load_manifest(path: Path) -> tuple[dict[str, Any], str]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        payload = path.read_bytes()
+        value = json.loads(payload)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValidationError(f"cannot read manifest {path}: {exc}") from exc
     if not isinstance(value, dict) or not isinstance(value.get("entries"), list):
         raise ValidationError("manifest must be an object with an entries array")
-    return value
+    return value, hashlib.sha256(payload).hexdigest()
 
 
-def load_ledger(path: Path) -> list[dict[str, Any]]:
+def load_ledger(
+    path: Path, *, require_append_only_chronology: bool = False
+) -> tuple[list[dict[str, Any]], str]:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
+        payload = path.read_bytes()
+        lines = payload.decode("utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
         raise ValidationError(f"cannot read exposure ledger {path}: {exc}") from exc
     records: list[dict[str, Any]] = []
     event_ids: set[str] = set()
+    previous_time: datetime | None = None
     for line_number, line in enumerate(lines, start=1):
         if not line.strip():
             continue
@@ -86,9 +85,18 @@ def load_ledger(path: Path) -> list[dict[str, Any]]:
             raise ValidationError(
                 f"ledger line {line_number} has unsupported exposure_type: {exposure_type}"
             )
-        parse_time(record["observed_at"], f"ledger line {line_number}")
+        observed_at = parse_time(record["observed_at"], f"ledger line {line_number}")
+        if (
+            require_append_only_chronology
+            and previous_time is not None
+            and observed_at < previous_time
+        ):
+            raise ValidationError(
+                f"trusted access ledger line {line_number} regresses append-only chronology"
+            )
+        previous_time = observed_at
         records.append(record)
-    return records
+    return records, hashlib.sha256(payload).hexdigest()
 
 
 def derive_tier(
@@ -132,10 +140,23 @@ def validate(
     fresh_tier: str,
     claim_tier: str,
     design_tier: str,
+    trusted_access_ledger_path: Path | None = None,
+    plan_frozen_at_raw: str | None = None,
 ) -> dict[str, Any]:
-    manifest = load_manifest(manifest_path)
-    ledger = load_ledger(ledger_path)
+    manifest, manifest_sha256 = load_manifest(manifest_path)
+    trusted_is_exposure_ledger = (
+        trusted_access_ledger_path is not None
+        and trusted_access_ledger_path.resolve() == ledger_path.resolve()
+    )
+    ledger, ledger_sha256 = load_ledger(
+        ledger_path,
+        require_append_only_chronology=trusted_is_exposure_ledger,
+    )
     freeze_at = parse_time(freeze_at_raw, "freeze_at")
+    if (trusted_access_ledger_path is None) != (plan_frozen_at_raw is None):
+        raise ValidationError(
+            "trusted access chronology requires both trusted_access_ledger and plan_frozen_at"
+        )
     entries = manifest["entries"]
     artifact_ids: set[str] = set()
     events_by_artifact: dict[str, list[dict[str, Any]]] = {}
@@ -188,18 +209,82 @@ def validate(
             )
 
     unknown_ledger_artifacts = sorted(set(events_by_artifact) - artifact_ids)
+    access_chronology: dict[str, Any] = {
+        "status": "NOT_EVALUATED",
+        "reason": "no trusted append-only access ledger was supplied",
+    }
+    chronology_invalid = False
+    if trusted_access_ledger_path is not None and plan_frozen_at_raw is not None:
+        if trusted_is_exposure_ledger:
+            access_events = ledger
+            access_ledger_sha256 = ledger_sha256
+        else:
+            access_events, access_ledger_sha256 = load_ledger(
+                trusted_access_ledger_path,
+                require_append_only_chronology=True,
+            )
+        plan_frozen_at = parse_time(plan_frozen_at_raw, "plan_frozen_at")
+        protected_accesses = [
+            event
+            for event in access_events
+            if event["exposure_type"] in ACCESS_EXPOSURE_TYPES
+        ]
+        protected_accesses.sort(
+            key=lambda event: (
+                parse_time(event["observed_at"], f"event {event['event_id']}"),
+                event["event_id"],
+            )
+        )
+        first_access = protected_accesses[0] if protected_accesses else None
+        first_access_at = (
+            parse_time(
+                first_access["observed_at"],
+                f"event {first_access['event_id']}",
+            )
+            if first_access is not None
+            else None
+        )
+        chronology_invalid = (
+            first_access_at is not None and plan_frozen_at >= first_access_at
+        )
+        access_chronology = {
+            "status": (
+                "INVALID_PLAN_ACCESS_CHRONOLOGY"
+                if chronology_invalid
+                else "PASS_PLAN_BEFORE_ACCESS"
+            ),
+            "plan_frozen_at": plan_frozen_at_raw,
+            "first_protected_access": (
+                {
+                    "event_id": first_access["event_id"],
+                    "exposure_type": first_access["exposure_type"],
+                    "observed_at": first_access["observed_at"],
+                    "source": first_access["source"],
+                }
+                if first_access is not None
+                else None
+            ),
+            "path": str(trusted_access_ledger_path),
+            "sha256": access_ledger_sha256,
+            "event_count": len(access_events),
+        }
+    status = "PASS_FRESHNESS_LEDGER"
+    if mismatches:
+        status = "INVALID_FRESHNESS_LEDGER"
+    elif chronology_invalid:
+        status = "INVALID_ACCESS_CHRONOLOGY"
     return {
         "schema_version": "prospective-frame-validation-v1",
-        "status": "PASS_FRESHNESS_LEDGER" if not mismatches else "INVALID_FRESHNESS_LEDGER",
+        "status": status,
         "freeze_at": freeze_at_raw,
         "manifest": {
             "path": str(manifest_path),
-            "sha256": sha256_file(manifest_path),
+            "sha256": manifest_sha256,
             "entry_count": len(entries),
         },
         "exposure_ledger": {
             "path": str(ledger_path),
-            "sha256": sha256_file(ledger_path),
+            "sha256": ledger_sha256,
             "event_count": len(ledger),
             "unknown_artifact_count": len(unknown_ledger_artifacts),
             "unknown_artifacts": unknown_ledger_artifacts,
@@ -213,6 +298,7 @@ def validate(
         },
         "mismatch_count": len(mismatches),
         "mismatches": mismatches,
+        "access_chronology": access_chronology,
         "entries": sorted(derived_entries, key=lambda item: item["artifact_id"]),
     }
 
@@ -227,6 +313,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fresh-tier", default="P")
     parser.add_argument("--claim-tier", default="E")
     parser.add_argument("--design-tier", default="D")
+    parser.add_argument(
+        "--trusted-access-ledger",
+        type=Path,
+        help="trusted append-only exposure ledger used only for plan/access chronology",
+    )
+    parser.add_argument(
+        "--plan-frozen-at",
+        help="RFC3339 prospective plan freeze time; required with --trusted-access-ledger",
+    )
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
 
@@ -243,6 +338,8 @@ def main() -> int:
             args.fresh_tier,
             args.claim_tier,
             args.design_tier,
+            args.trusted_access_ledger,
+            args.plan_frozen_at,
         )
     except ValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

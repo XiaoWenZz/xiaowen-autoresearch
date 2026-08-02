@@ -1,9 +1,9 @@
 {
   "schema_version": "opportunity-gate-calibration-v2",
   "domain": "REPLACE_DOMAIN",
-  "gate_version": "high-recall-opportunity-v3",
+  "gate_version": "source-first-high-recall-opportunity-v4",
   "evidence_freeze": "YYYY-MM-DD",
-  "decision_rule": "Retrospective positives should reach PROBE and must remain retained; negative controls must not reach PROBE. Contribution forecast cannot determine problem admission.",
+  "decision_rule": "Retrospective positives should reach a cheap PROBE and must remain retained; negative controls must not reach PROBE. Contribution forecast, specificity, naturality, novelty and paper path cannot determine pre-signal problem admission. Exact closure requires one verified complete executable or formal reduction under matched information, chronology, cost, state, recipients and estimand.",
   "controls": [
     {
       "id": "positive-1",

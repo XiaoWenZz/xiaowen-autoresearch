@@ -23,9 +23,9 @@ def validate(text: str) -> tuple[list[str], list[str]]:
 
     if not has_any(
         text,
-        (r"OPPORTUNITY_SEARCH_SCHEMA\s*:\s*high-recall-v3",),
+        (r"OPPORTUNITY_SEARCH_SCHEMA\s*:\s*source-first-high-recall-v4",),
     ):
-        errors.append("missing high-recall-v3 schema marker")
+        errors.append("missing source-first-high-recall-v4 schema marker")
 
     placeholders = sorted(set(re.findall(r"\{\{[A-Z0-9_]+\}\}", text)))
     if placeholders:
@@ -49,6 +49,25 @@ def validate(text: str) -> tuple[list[str], list[str]]:
         "strongest preserving reduction": (r"strongest preserving", r"最强.*保持.*约化"),
         "divergent pass": (r"divergent pass", r"发散.*pass", r"发散阶段"),
         "convergent pass": (r"convergent pass", r"收敛.*pass", r"收敛阶段"),
+        "source-first observatory": (
+            r"source[- ]first observatory",
+            r"source observatory",
+            r"来源优先.*观测",
+        ),
+        "recent primary proceedings": (
+            r"current and previous 18 months",
+            r"最近 18 个月",
+        ),
+        "source anomaly inputs": (
+            r"negative ablations[\s\S]{0,500}limitations[\s\S]{0,500}sensitivity",
+            r"负向消融[\s\S]{0,500}局限[\s\S]{0,500}敏感性",
+        ),
+        "source-family and assumption-lineage telemetry": (
+            r"source_family_id[\s\S]{0,700}assumption_lineage",
+        ),
+        "non-binding source-family telemetry": (
+            r"(?:source.family|family counts)[\s\S]{0,700}(?:non-binding|do not establish)[\s\S]{0,700}(?:independence|novelty|problem_admission)",
+        ),
         "label-free ideation": (
             r"do not assign[^.\n]{0,160}(PROBE|HOLD|DROP)",
             r"不(?:要|得)[^。\n]{0,120}(?:PROBE|HOLD|DROP)",
@@ -123,6 +142,18 @@ def validate(text: str) -> tuple[list[str], list[str]]:
         "primary-source contract": (r"primary[- ]source", r"primary source", r"原始来源"),
         "scoped closure semantics": (r"scoped closure", r"exact fingerprint", r"精确.*关闭"),
         "one selected Scout": (r"at most one", r"最多选择一个", r"唯一.*Scout"),
+        "proportional readiness ladder": (
+            r"R0\s*->\s*R1\s*->\s*R2\s*->\s*R3",
+        ),
+        "scientific contract precedes scientific outcome": (
+            r"R2[\s\S]{0,350}(?:identity|power)[\s\S]{0,350}before any scientific[\s\S]{0,80}outcome",
+        ),
+        "R1 is non-scientific": (
+            r"R1[\s\S]{0,500}(?:no scientific payload|outcome-blind)[\s\S]{0,500}not a scientific negative",
+        ),
+        "no numeric novelty admission score": (
+            r"numeric LLM or expert novelty score as an admission threshold",
+        ),
         "Scout admission terminal": (r"ADMIT_TO_PROBLEM_SCOUT",),
         "search-exhaustion terminal": (r"SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION",),
         "search exhaustion preserves retained leads": (
@@ -136,6 +167,19 @@ def validate(text: str) -> tuple[list[str], list[str]]:
         "deferred publication burden": (
             r"do not require[^.\n]{0,240}(paper path|conference|novelty matrix)",
             r"不(?:要|得)要求[^。\n]{0,180}(?:论文路径|完整创新性|会议)",
+        ),
+        "no federation-only or non-copyable pre-signal gate": (
+            r"do not require[^.\n]{0,240}federation[- ]only[^.\n]{0,240}non[- ]copyable",
+            r"不(?:要|得)要求[^。\n]{0,180}(?:联邦专属|federation[- ]only)[^。\n]{0,180}(?:不可复制|non[- ]copyable)",
+        ),
+        "single complete reduction witness": (
+            r"one verified complete (?:(?:executable|formal)(?: or (?:executable|formal))? )?witness",
+            r"single verified complete (?:implementation|witness|construction)",
+            r"一个(?:已验证|可验证)的完整(?:可执行|形式化)?见证",
+        ),
+        "generic operation stays a challenge": (
+            r"generic (?:operation|repair|analogue)[^.]{0,260}(?:challenge|baseline)[^.]{0,260}(?:before signal|pre-signal)",
+            r"通用(?:操作|修复|类比)[^。\n]{0,160}(?:挑战|基线)[^。\n]{0,160}(?:信号前|预信号)",
         ),
     }
     for label, patterns in required.items():
@@ -155,6 +199,80 @@ def validate(text: str) -> tuple[list[str], list[str]]:
 
     if has_any(text, (r"\bNO_STRONG_IDEA\b", r"\bNO_VIABLE_IDEA\b")):
         warnings.append("broad no-idea label present; verify it is prohibited rather than allowed")
+
+    inversion_patterns = (
+        r"(?:must|required?|only if|hard gate|reject)[^.\n]{0,220}(?:federation[- ]only|non[- ]copyable)",
+        r"(?:federation[- ]only|non[- ]copyable)[^.\n]{0,220}(?:must|required?|hard gate|reject)",
+        r"HARD_BOUNDARY_UNSATISFIED[\s\S]{0,500}(?:federation[- ]only|non[- ]copyable)",
+        r"(?:DROP_PROBLEM_EXACT_REDUCTION|DROP_NO_DECISION)[^.\n]{0,220}(?:copyable|centralizable)",
+        r"(?:copyable|centralizable)[^.\n]{0,220}(?:DROP_PROBLEM_EXACT_REDUCTION|DROP_NO_DECISION)",
+    )
+    for pattern in inversion_patterns:
+        matches = re.finditer(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+        hard_match = False
+        for match in matches:
+            sentence_start = max(
+                text.rfind(".", 0, match.start()),
+                text.rfind("!", 0, match.start()),
+                text.rfind("?", 0, match.start()),
+                text.rfind("。", 0, match.start()),
+            )
+            sentence_end_candidates = [
+                position
+                for position in (
+                    text.find(".", match.end()),
+                    text.find("!", match.end()),
+                    text.find("?", match.end()),
+                    text.find("。", match.end()),
+                )
+                if position >= 0
+            ]
+            sentence_end = min(sentence_end_candidates) if sentence_end_candidates else len(text)
+            sentence = text[sentence_start + 1 : sentence_end]
+            if has_any(
+                sentence,
+                (
+                    r"\bdo not\b",
+                    r"\bmust not\b",
+                    r"\bnever\b",
+                    r"\bnot required\b",
+                    r"\bcannot determine\b",
+                    r"不(?:要|得|应)",
+                    r"不能决定",
+                ),
+            ):
+                continue
+            hard_match = True
+            break
+        if hard_match:
+            errors.append(
+                "pre-signal hard-gate inversion: federation-only, non-copyable, "
+                "copyability, or hypothetical centralizability cannot determine "
+                "problem admission"
+            )
+            break
+
+    process_delta_inversions = {
+        "source-family telemetry cannot gate problem admission": (
+            r"source_family_id[^.\n]{0,220}(?:Jaccard|overlap|threshold)[^.\n]{0,220}(?:DROP_|PROBE|problem_admission)",
+        ),
+        "mechanism depth cannot determine problem admission": (
+            r"mechanism_depth[^.\n]{0,220}determines?[^.\n]{0,220}(?:problem_admission|PROBE|DROP_)",
+        ),
+        "R1 cannot access scientific outcomes": (
+            r"R1[^.\n]{0,220}(?:may|must|can)[^.\n]{0,220}(?:read|expose|interpret)[^.\n]{0,220}(?:protected|public-test|held-out|scientific) outcomes?",
+        ),
+        "R2 cannot follow scientific outcomes": (
+            r"R2[^.\n]{0,220}after[^.\n]{0,220}scientific outcomes?",
+            r"scientific outcomes?[^.\n]{0,220}before[^.\n]{0,220}R2",
+        ),
+        "numeric novelty score cannot gate admission": (
+            r"numeric[^.\n]{0,120}novelty score[^.\n]{0,120}>=?[^.\n]{0,120}determines?[^.\n]{0,120}(?:problem_admission|PROBE|DROP_)",
+        ),
+    }
+    for error, patterns in process_delta_inversions.items():
+        if has_any(text, patterns):
+            errors.append(error)
 
     divergent_position = text.lower().find("divergent pass")
     convergent_position = text.lower().find("convergent pass")

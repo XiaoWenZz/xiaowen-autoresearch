@@ -78,6 +78,14 @@ inadequate first carrier as permission for post-hoc carrier hopping.
 
 Record `survives`, `broadens`, or `fails` for each applicable test:
 
+At Opportunity Search, these tests set `contribution_forecast`; they do not
+close a concrete actor-level problem merely because federation, PEFT, or a
+proposed method kernel can be deleted. A broadened problem remains eligible
+for a cheap controlled witness when it is inside the owner's research
+boundary. Use deletion as a pre-signal `DROP_PROBLEM_EXACT_REDUCTION` only when
+the deletion also supplies a verified complete solution to the same actor
+decision under the closure rule below.
+
 1. **Federation deletion**: if centralized pooling or a single trainer replaces
    federation, does the same failure, operation, and estimand remain? If yes,
    identify the exact federation constraint that changes the solution;
@@ -135,6 +143,30 @@ Classify the reduction before disposition:
 Do not add carriers, names, auxiliary losses, routers, or review rounds to
 rescue an exactly reduced method.
 
+### Pre-signal closure rule
+
+A generic reduction may close an actor-level problem before measurement only
+when all of these are true:
+
+1. one primary implementation, formal construction, or source-faithful
+   executable microcase witnesses the complete reduction;
+2. the same actor can execute it before the decision using only the same lawful
+   observables;
+3. operation order, rendezvous, persistent state, storage, work, physical
+   bytes, latency, serving path, recipients, and estimand are preserved or
+   explicitly matched;
+4. the witness already determines the relevant action or removes every
+   decision-changing outcome of the proposed Scout; and
+5. no empirical remainder about the actor-level loss survives.
+
+A composition assembled from separate papers, a hypothetical omniscient
+central controller, or a statement that an observable is "copyable" is not
+such a witness. It is `CHALLENGE_UNVERIFIED_JOINT_FEASIBILITY` and belongs in
+the Scout baseline until compatibility is demonstrated. Likewise, a known
+generic repair may make the future contribution `LIKELY_REPAIR` without
+eliminating the need to measure whether the broken operation causes a material
+loss.
+
 ## Apply the zero-compute falsification ladder
 
 Before opening a repository or spending empirical budget, try to kill the
@@ -159,6 +191,11 @@ that source inspection and analysis cannot decide. Exclude the candidate when
 the audit falsifies its premise or reduces it to an existing operation. Hold it
 when the operative source or preservation map remains unverified. Only an
 unresolved empirical remainder may consume Scout evidence budget.
+
+Here "unresolved" includes a source-supported or analytically plausible
+actor-level loss whose effect size is unknown. Do not require the remainder to
+be federation-only, non-copyable, naturally occurring, or publication-novel
+before a scoped controlled Scout.
 
 This ladder is not experimental evidence and does not prove effectiveness. Its
 purpose is to prevent experiments whose only possible contribution is

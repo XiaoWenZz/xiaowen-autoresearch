@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -88,6 +89,41 @@ class StateHelpersTest(unittest.TestCase):
     def append(self, stream: str, record: dict[str, object]) -> subprocess.CompletedProcess[str]:
         return run(UPDATE, "append", self.root, stream, "--record-json", json.dumps(record))
 
+    def write_completed_run(
+        self,
+        *,
+        config: dict[str, object],
+        artifacts: object,
+    ) -> Path:
+        task_id = json.loads(
+            (self.root / "state" / "charter.json").read_text(encoding="utf-8")
+        )["task_id"]
+        run_path = self.root / "runs" / "RUN-D05.json"
+        write_json(
+            run_path,
+            {
+                "schema_version": "1.0",
+                "run_id": "RUN-D05",
+                "task_id": task_id,
+                "status": "completed",
+                "question": "Does local integrity remain bound?",
+                "started_at": "2026-07-22T00:00:00Z",
+                "ended_at": "2026-07-22T00:01:00Z",
+                "code_version": {"git_commit": "abc123"},
+                "config": config,
+                "dataset": {"name": "synthetic", "version": "v1", "split": "test"},
+                "environment": {"host": "local"},
+                "seeds": [1],
+                "primary_metrics": ["integrity"],
+                "artifacts": artifacts,
+                "validation": [{"command": "local-check", "status": "pass"}],
+                "result_summary": "outcome unobserved",
+                "anomalies": [],
+                "protocol_deviations": [],
+            },
+        )
+        return run_path
+
     def test_init_uses_explicit_track_and_weight(self) -> None:
         charter = json.loads((self.root / "state" / "charter.json").read_text(encoding="utf-8"))
         self.assertEqual(charter["schema_version"], "1.2")
@@ -121,6 +157,115 @@ class StateHelpersTest(unittest.TestCase):
         result = run(VALIDATE, self.root, "--ready")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("operating_weight=managed", result.stdout)
+
+    def test_d05_declared_config_digest_is_recomputed(self) -> None:
+        config_path = self.root / "configs" / "frozen.json"
+        config_path.parent.mkdir()
+        config_path.write_bytes(b'{"frozen":true}\n')
+        artifact_path = self.root / "artifacts" / "legacy.txt"
+        artifact_path.write_text("legacy\n", encoding="utf-8")
+        digest = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        run_path = self.write_completed_run(
+            config={"path": "configs/frozen.json", "sha256": digest},
+            artifacts=["artifacts/legacy.txt"],
+        )
+        healthy = run(VALIDATE, self.root)
+        self.assertEqual(healthy.returncode, 0, healthy.stdout + healthy.stderr)
+
+        config_path.write_bytes(b'{"frozen":false}\n')
+        mismatch = run(VALIDATE, self.root)
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn("config sha256 mismatch", mismatch.stdout)
+
+        config_path.write_bytes(b'{"frozen":true}\n')
+        manifest = json.loads(run_path.read_text(encoding="utf-8"))
+        manifest["config"]["sha256"] = "malformed"
+        write_json(run_path, manifest)
+        malformed = run(VALIDATE, self.root)
+        self.assertNotEqual(malformed.returncode, 0)
+        self.assertIn("canonical 64-hex sha256", malformed.stdout)
+
+        manifest["config"] = {
+            "path": config_path.as_uri(),
+            "sha256": digest,
+        }
+        write_json(run_path, manifest)
+        file_uri_healthy = run(VALIDATE, self.root)
+        self.assertEqual(
+            file_uri_healthy.returncode,
+            0,
+            file_uri_healthy.stdout + file_uri_healthy.stderr,
+        )
+        manifest["config"]["sha256"] = "0" * 64
+        write_json(run_path, manifest)
+        file_uri_mismatch = run(VALIDATE, self.root)
+        self.assertNotEqual(file_uri_mismatch.returncode, 0)
+        self.assertIn("config sha256 mismatch", file_uri_mismatch.stdout)
+
+        manifest["status"] = "running"
+        manifest["config"] = {
+            "path": "configs/frozen.json",
+            "sha256": "0" * 64,
+        }
+        manifest["artifacts"] = [
+            {"path": "configs/frozen.json", "sha256": "0" * 64}
+        ]
+        write_json(run_path, manifest)
+        running_mismatch = run(VALIDATE, self.root)
+        self.assertNotEqual(running_mismatch.returncode, 0)
+        self.assertIn("config sha256 mismatch", running_mismatch.stdout)
+        self.assertIn("artifact sha256 mismatch", running_mismatch.stdout)
+
+    def test_d05_declared_local_artifact_digest_is_recomputed(self) -> None:
+        config_path = self.root / "configs" / "frozen.json"
+        config_path.parent.mkdir()
+        config_path.write_bytes(b'{"frozen":true}\n')
+        artifact_path = self.root / "artifacts" / "bound.bin"
+        artifact_path.write_bytes(b"frozen-artifact")
+        run_path = self.write_completed_run(
+            config={
+                "path": "configs/frozen.json",
+                "sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+            },
+            artifacts=[
+                {
+                    "path": "artifacts/bound.bin",
+                    "sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+                },
+                "https://example.invalid/remote-artifact",
+            ],
+        )
+        healthy = run(VALIDATE, self.root)
+        self.assertEqual(healthy.returncode, 0, healthy.stdout + healthy.stderr)
+
+        artifact_path.write_bytes(b"mutated-artifact")
+        mismatch = run(VALIDATE, self.root)
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn("artifact sha256 mismatch", mismatch.stdout)
+
+        artifact_path.write_bytes(b"frozen-artifact")
+        manifest = json.loads(run_path.read_text(encoding="utf-8"))
+        manifest["artifacts"] = [
+            {
+                "path": artifact_path.as_uri(),
+                "sha256": "0" * 64,
+            }
+        ]
+        write_json(run_path, manifest)
+        file_uri_mismatch = run(VALIDATE, self.root)
+        self.assertNotEqual(file_uri_mismatch.returncode, 0)
+        self.assertIn("artifact sha256 mismatch", file_uri_mismatch.stdout)
+
+        (self.root / "path").write_text("decoy\n", encoding="utf-8")
+        (self.root / "sha256").write_text("decoy\n", encoding="utf-8")
+        manifest["artifacts"] = {
+            "path": "artifacts/missing.bin",
+            "sha256": "0" * 64,
+        }
+        write_json(run_path, manifest)
+        malformed_container = run(VALIDATE, self.root)
+        self.assertNotEqual(malformed_container.returncode, 0)
+        self.assertIn("artifacts must be a non-empty list", malformed_container.stdout)
 
     def test_invalid_track_weight_pair_fails(self) -> None:
         charter_path = self.root / "state" / "charter.json"

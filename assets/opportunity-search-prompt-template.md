@@ -1,6 +1,6 @@
 # External Opportunity Search prompt
 
-`OPPORTUNITY_SEARCH_SCHEMA: high-recall-v3`
+`OPPORTUNITY_SEARCH_SCHEMA: source-first-high-recall-v4`
 
 You are an expert research PI. Conduct a fresh, high-recall but
 evidence-bounded Opportunity Search for `{{DOMAIN}}`.
@@ -54,7 +54,28 @@ Current problem-space map and primary-source neighborhood:
 
 {{PROBLEM_SPACE_AND_NEIGHBORS}}
 
-## 4. Scoped closures
+## 4. Source-first observatory
+
+Before enumerating local component nouns, run one source-first observatory over
+the current and previous 18 months of relevant primary proceedings plus
+paper-declared official code. Extract observed failures and anomalies from
+appendices, negative ablations, limitations, sensitivity results, unexpected
+baselines, and executable code paths. Freeze one label-free source/anomaly
+table before applying `PROBE`, `HOLD`, `DROP`, novelty, or route labels.
+
+For a day-scale FedFT/FedPEFT batch, screen at least 20 primary papers unless
+one named source-access blocker makes that impossible. The count is a coverage
+floor, not evidence that any paper's claim is correct.
+
+In the same table, record `source_family_id` and descriptive
+`assumption_lineage`. Treat a paper, appendix, declared official code, and
+maintainer-authored issue or PR from the same originating work as one family;
+mark reused, correlated, or unknown ancestry honestly. These fields are
+non-binding retrieval telemetry: paper/family counts do not establish
+conceptual diversity, independence, novelty, or `problem_admission`. Do not
+use a numeric LLM or expert novelty score as an admission threshold.
+
+## 5. Scoped closures
 
 Treat every entry below as an exact fingerprint closure, not a keyword or
 field-level NO-GO.
@@ -67,7 +88,7 @@ selector, representation, or name. A candidate may remain distinct by changing
 the actor-level decision, target estimand, causal bottleneck, information
 contract, or deployment constraint with a new falsifiable prediction.
 
-## 5. Source contract
+## 6. Source contract
 
 {{PRIMARY_SOURCE_CONTRACT}}
 
@@ -76,7 +97,7 @@ order when summarizing a brief. If only metadata, an abstract, or a secondary
 report is available, mark the internal operation unverified. “No exact
 duplicate found” is corpus-scoped, not an absence proof.
 
-## 6. Admission calibration
+## 7. Admission calibration
 
 Before searching, reconstruct at least three retrospective positives using only
 their pre-signal information and at least three negative controls: exact
@@ -87,7 +108,7 @@ out of `PROBE`. Report false rejects and false admits. If a positive is rejected
 because novelty, naturality, specificity, scalability, or paper path is
 unknown, revise the gate before relying on the search terminal.
 
-## 7. Divergent pass
+## 8. Divergent pass
 
 Generate at least `{{RAW_LEAD_MINIMUM}}` raw leads across at least
 `{{PROBLEM_SPACE_MINIMUM}}` substantively different problem spaces.
@@ -104,7 +125,7 @@ this pass. Do not require a natural carrier, complete preserving composition,
 method kernel, specificity proof, or paper path. Preserve broader artifact
 routes instead of killing them for failing narrow specificity.
 
-## 8. Convergent pass and counted briefs
+## 9. Convergent pass and counted briefs
 
 Ground the raw leads in primary sources and collapse them by causal fingerprint
 into at most `{{COUNTED_BRIEF_CAP}}` counted briefs. Keep at most three active
@@ -133,6 +154,9 @@ contribution_forecast:
   LIKELY_GENERIC | PLAUSIBLE_IF_SIGNAL
 retention_state:
   PROBE_READY | EVIDENCE_GAP_LEAD | BROADER_ARTIFACT_LEAD | CLOSED
+mechanism_depth:
+  NEW_ACTOR_DECISION | NEW_INFORMATION_CHRONOLOGY_STATE |
+  NEW_CAUSAL_MECHANISM | OPERATION_RECOMBINATION
 ```
 
 Map `PROBE` to `PROBE_READY`, `HOLD_INFORMATION`/`HOLD_CARRIER` to
@@ -140,6 +164,8 @@ Map `PROBE` to `PROBE_READY`, `HOLD_INFORMATION`/`HOLD_CARRIER` to
 `BROADER_ARTIFACT_LEAD`, and only the two `DROP_*` states to `CLOSED`.
 Every retained lead must state one bounded next evidence action or one exact
 reopening fact. Do not translate a hold or broader route into “no candidate.”
+`mechanism_depth` is descriptive cross-merge telemetry, not a novelty claim,
+numeric score, admission gate, or contribution verdict.
 
 Additional domain-specific required fields:
 
@@ -151,7 +177,17 @@ constitutes the actor, event timing, resource constraint, or information
 asymmetry. Otherwise move naturality and external validity to Contribution or
 Confirmatory.
 
-## 9. Joint-feasibility certificate
+Do not require a federation-only or non-copyable observable before a controlled
+Problem Scout. A generic operation, repair, or centralized analogue remains a
+baseline or contribution challenge before signal. It may close the problem
+only when one verified complete executable or formal witness already solves
+the same actor decision under matched lawful observables, chronology,
+rendezvous, state, storage, work, physical bytes, latency, recipients, serving
+path, and estimand. A hypothetical controller, a multi-paper composition
+without one joint witness, or an assertion that an observable is copyable is
+not exact reduction evidence.
+
+## 10. Joint-feasibility certificate
 
 Before a composition of papers or operations can assign
 `DROP_PROBLEM_EXACT_REDUCTION`, certify all of:
@@ -171,7 +207,7 @@ If any decision-critical field is unverified, return
 `CHALLENGE_UNVERIFIED_JOINT_FEASIBILITY`. The composition may be a mandatory
 Scout baseline, but it cannot close the actor-level problem before measurement.
 
-## 10. Selection
+## 11. Selection
 
 Compare the Top 3 on problem importance, plausibility, identifiability,
 joint-feasibility risk, Scout cost, and decision value before
@@ -192,12 +228,23 @@ Select at most one `ADMIT_TO_PROBLEM_SCOUT` candidate. It needs:
 Do not require a provisional method implementation, full novelty matrix,
 multi-setting confirmation, or conference paper path in this response.
 
+For the selected candidate's readiness handoff, return an `R0`
+carrier/next-cell envelope and one proposed `R1` outcome-blind mechanical
+smoke/profile; do not execute `R1` or author the full `R2` contract here.
+The Controller preserves the proportional sequence
+`R0 -> R1 -> R2 -> R3`: `R2` freezes complete identity, cells, power,
+thresholds, stop/action rules, budget, and exposure before any scientific
+outcome; only `R3` may execute science. `R1` has no scientific payload or
+interpretation, and its failure is not a scientific negative. Full-program
+portability or future Confirmatory surfaces cannot block `R1` unless required
+for the next cell's identity or safety.
+
 In addition, retain at most one oldest `EVIDENCE_GAP_LEAD` and one
 `BROADER_ARTIFACT_LEAD` when their next evidence action is bounded. They are
 not selected Scouts, do not authorize repositories or GPU, and do not consume
 the selected-Scout slot.
 
-## 11. Terminal semantics
+## 12. Terminal semantics
 
 If one opportunity is worth measuring, return:
 
@@ -219,7 +266,7 @@ It must also enumerate every retained `EVIDENCE_GAP_LEAD` or
 and why it is not yet `PROBE_READY`. Search exhaustion closes the current
 budget, not the retained lead.
 
-## 12. Required output order
+## 13. Required output order
 
 {{REQUIRED_OUTPUT_ORDER}}
 

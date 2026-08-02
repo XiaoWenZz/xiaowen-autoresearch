@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 
 TASK_STATUSES = {"draft", "ready", "running", "waiting_external", "needs_approval", "completed", "blocked"}
@@ -40,6 +43,7 @@ CONTROLLER_NEXT_ACTIONS = {
     "owner_approval_required",
     "scoped_close",
 }
+SHA256_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 
 
 class Report:
@@ -108,6 +112,74 @@ def load_jsonl(path: Path, report: Report) -> list[dict[str, Any]]:
             continue
         records.append(value)
     return records
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_declared_local_sha256(
+    root: Path,
+    path_value: Any,
+    digest_value: Any,
+    context: str,
+    report: Report,
+) -> None:
+    if not isinstance(path_value, str) or not path_value:
+        report.error(f"{context} requires a non-empty path")
+        return
+    if not isinstance(digest_value, str) or SHA256_PATTERN.fullmatch(digest_value) is None:
+        report.error(f"{context} requires a canonical 64-hex sha256")
+        return
+    try:
+        parsed = urlsplit(path_value)
+    except ValueError as exc:
+        report.error(f"{context} has an invalid path or URI: {exc}")
+        return
+    if parsed.scheme and parsed.scheme.lower() != "file":
+        report.warn(f"{context} is remote; sha256 was declared but not locally recomputed")
+        return
+    if parsed.scheme.lower() == "file":
+        if parsed.netloc not in {"", "localhost"}:
+            report.error(f"{context} file URI must not name a remote host")
+            return
+        if parsed.query or parsed.fragment:
+            report.error(f"{context} file URI must not contain a query or fragment")
+            return
+        try:
+            local_path = Path(unquote(parsed.path, errors="strict"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            report.error(f"{context} has an invalid file URI: {exc}")
+            return
+        if not local_path.is_absolute():
+            report.error(f"{context} file URI must resolve to an absolute local path")
+            return
+    else:
+        local_path = Path(path_value)
+        if not local_path.is_absolute():
+            local_path = root / local_path
+    try:
+        is_file = local_path.is_file()
+    except (OSError, ValueError) as exc:
+        report.error(f"{context} cannot inspect local file {path_value}: {exc}")
+        return
+    if not is_file:
+        report.error(f"{context} references missing local file: {path_value}")
+        return
+    try:
+        actual = sha256_file(local_path)
+    except OSError as exc:
+        report.error(f"{context} cannot hash local file {path_value}: {exc}")
+        return
+    if actual.lower() != digest_value.lower():
+        report.error(
+            f"{context} sha256 mismatch for {path_value}: "
+            f"declared={digest_value.lower()} actual={actual}"
+        )
 
 
 def require_keys(record: dict[str, Any], keys: tuple[str, ...], context: str, report: Report) -> None:
@@ -240,7 +312,74 @@ def validate_run(root: Path, path: Path, run: dict[str, Any], task_id: str, repo
         report.error(f"{context} has invalid status: {run.get('status')}")
     if not parse_time(run.get("started_at")):
         report.error(f"{context} requires valid started_at")
-    if run.get("status") != "completed":
+    completed = run.get("status") == "completed"
+
+    # Digest declarations bind bytes at every lifecycle state. A running run
+    # may omit these fields, but it cannot declare a digest and defer checking
+    # it until completion.
+    config = run.get("config")
+    if config is not None:
+        if not isinstance(config, dict):
+            report.error(f"{context} config must be an object")
+        elif config.get("path") or config.get("sha256") or completed:
+            if not config.get("path") or not config.get("sha256"):
+                report.error(f"{context} requires config.path and config.sha256")
+            else:
+                validate_declared_local_sha256(
+                    root,
+                    config.get("path"),
+                    config.get("sha256"),
+                    f"{context} config",
+                    report,
+                )
+    elif completed:
+        report.error(f"{context} requires config.path and config.sha256")
+
+    artifacts = run.get("artifacts")
+    if artifacts is not None and not isinstance(artifacts, list):
+        report.error(f"{context} artifacts must be a non-empty list")
+        artifacts = []
+    for artifact in artifacts or []:
+        if isinstance(artifact, dict):
+            validate_declared_local_sha256(
+                root,
+                artifact.get("path"),
+                artifact.get("sha256"),
+                f"{context} artifact",
+                report,
+            )
+            continue
+        if not isinstance(artifact, str) or not artifact:
+            report.error(
+                f"{context} artifact entries must be non-empty strings or path/sha256 objects"
+            )
+            continue
+        if not completed:
+            continue
+        try:
+            parsed = urlsplit(artifact)
+        except ValueError as exc:
+            report.error(f"{context} legacy artifact has an invalid path or URI: {exc}")
+            continue
+        if parsed.scheme and parsed.scheme.lower() != "file":
+            continue
+        if parsed.scheme.lower() == "file":
+            if parsed.netloc not in {"", "localhost"} or parsed.query or parsed.fragment:
+                report.error(f"{context} legacy artifact has an invalid local file URI")
+                continue
+            artifact_path = Path(unquote(parsed.path))
+        else:
+            artifact_path = Path(artifact)
+            if not artifact_path.is_absolute():
+                artifact_path = root / artifact_path
+        try:
+            exists = artifact_path.is_file()
+        except (OSError, ValueError):
+            exists = False
+        if not exists:
+            report.error(f"{context} references missing artifact: {artifact}")
+
+    if not completed:
         return
     required_completed = (
         "ended_at",
@@ -266,9 +405,6 @@ def validate_run(root: Path, path: Path, run: dict[str, Any], task_id: str, repo
     code_version = run.get("code_version", {})
     if not isinstance(code_version, dict) or not code_version.get("git_commit"):
         report.error(f"{context} requires code_version.git_commit")
-    config = run.get("config", {})
-    if not isinstance(config, dict) or not config.get("path") or not config.get("sha256"):
-        report.error(f"{context} requires config.path and config.sha256")
     dataset = run.get("dataset", {})
     if not isinstance(dataset, dict) or not dataset.get("name") or not dataset.get("version") or not dataset.get("split"):
         report.error(f"{context} requires dataset name, version, and split")
@@ -280,17 +416,6 @@ def validate_run(root: Path, path: Path, run: dict[str, Any], task_id: str, repo
         for item in validation:
             if not isinstance(item, dict) or not item.get("command") or item.get("status") not in {"pass", "fail"}:
                 report.error(f"{context} validation entries require command and pass/fail status")
-    for artifact in run.get("artifacts", []):
-        if not isinstance(artifact, str) or not artifact:
-            report.error(f"{context} artifact entries must be non-empty strings")
-            continue
-        if "://" in artifact:
-            continue
-        artifact_path = Path(artifact)
-        if not artifact_path.is_absolute():
-            artifact_path = root / artifact_path
-        if not artifact_path.is_file():
-            report.error(f"{context} references missing artifact: {artifact}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -586,6 +711,14 @@ def main() -> int:
         provenance = record.get("provenance", {})
         if not isinstance(provenance, dict) or not provenance.get("source") or not parse_time(provenance.get("captured_at")):
             report.error(f"evidence {evidence_id} requires provenance source and captured_at")
+        elif provenance.get("artifact_sha256") is not None:
+            validate_declared_local_sha256(
+                root,
+                provenance.get("source"),
+                provenance.get("artifact_sha256"),
+                f"evidence {evidence_id} provenance",
+                report,
+            )
         verification = record.get("verification", {})
         if not isinstance(verification, dict) or verification.get("status") not in VERIFICATION_STATUSES:
             report.error(f"evidence {evidence_id} has invalid verification status")

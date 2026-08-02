@@ -105,28 +105,39 @@ snapshot cannot lower the prior floor by rewriting its own fields. When the dead
 tuple; once redispatch occurs, revoke the old lease and install the activated
 higher epoch before calling the lane running. Ignore late stale-epoch events.
 
-For Codex work sessions, terminal delivery is **callback-first**. The worker
-must persist and validate its terminal packet, call `send_message_to_thread`
-to the registered controller, and receive a successful tool receipt before
-emitting its local final response. If the push call fails or is unavailable,
-the worker must report `callback_delivery=unconfirmed`; its local final is not
-a completed handoff. The controller records the post-dispatch `wait_threads`
-cursor and installs or retargets one low-frequency fallback that can recover a
-completed final exactly once using the terminal event or final-turn ID.
-Do not treat a visible `completed` thread state as proof that controller
-delivery occurred.
+Use callbacks only for persistent Managed work, never for a user-visible Lite
+task. Treat delivery as **at-least-once wake plus idempotent exactly-once
+effect**, not exactly-once transport through every layer.
 
-Treat `terminal_event_id` as an idempotency key. Each delivered record carries
-its source `task_id + owner_thread_id + dispatch_id + lease_epoch` and callback
-receipt. Append delivery and
-acknowledgement records rather than overwriting history. A repeated callback
-with the same terminal event may refresh operational metadata but must not
-create a second scientific decision. When acknowledgement is recorded, mark
-the fallback watchdog `paused` or `not_required`. Use only `active`, `paused`,
-or `not_required` as watchdog states; dispatch uses `active` when a fallback
-exists. Delivery and acknowledgement may be separate records, but an atomic
-controller read-and-ack may append `acknowledged` directly—do not manufacture a
-synthetic transition merely for completeness.
+Before dispatch, register one bounded fallback that can recover the frozen
+terminal from its event or final-turn ID without reading protected evidence.
+That fallback is the only retry authority; the worker never owns retry.
+Record it in existing durable Controller state that survives Controller
+restart; volatile memory alone is not fallback registration. Do not create a
+new registry, outbox, or receipt family solely for callback recovery.
+
+The worker freezes one terminal, then makes one ordinary top-level
+`send_message_to_thread` call with the runtime's bounded timeout. A successful
+tool receipt releases worker ownership and permits the local final immediately;
+the worker does not wait for `RECEIPT_ONLY`, `FINAL_ACK`, or a receiver ping.
+If the call is unavailable, times out, or returns an ambiguous result, record
+`callback_delivery=unconfirmed`, emit the local final, and do not resend. The
+controller's registered fallback may recover that terminal once from its
+`terminal_event_id` or final-turn ID.
+
+Treat `terminal_event_id` as the idempotency key for Controller effects. Bind a
+delivered event to its source `task_id + owner_thread_id + dispatch_id +
+lease_epoch` and terminal digest. The first valid delivery may create one
+scientific or shared-state effect; every duplicate creates zero additional
+effects. Do not append transport history merely to prove that a duplicate was
+seen. An ACK is asynchronous and optional except when the Controller must
+certify a true shared-state commit; even then it closes the Controller
+transaction and does not block the user-visible worker. Pause or remove a
+fallback after the event has been recovered or processed.
+
+Do not treat a visible `completed` thread state as proof that delivery occurred.
+Do not turn send timeout into an infinite wait, a retry loop, a fresh receiver,
+or a second worker.
 
 Treat terminal callback handling as one controller transaction. Before
 resuming unrelated owner conversation, the controller must read the evidence

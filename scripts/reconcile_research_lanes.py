@@ -49,6 +49,16 @@ QUEUE_AUTHORITY_KINDS = {
 }
 PRO_LIVE_STATES = {"submitted", "generating", "cooldown_held"}
 PRO_DUE_HANDLING = {"in_progress", "dispatcher_busy", "cooldown_held"}
+TERMINAL_CALLBACK_STATES = {
+    "none",
+    "pending",
+    "delivered",
+    "acknowledged",
+    "not_available",
+}
+PRO_CALLBACK_OBSERVATION_STATES = {"stale", "duplicate", "closed"}
+PRO_EFFECT_KEYS = {"adjudication", "dispatch", "ack"}
+PRO_CALLBACK_EVENT_STATES = {"registered", "consumed", "closed"}
 LEASE_TRANSITION_KINDS = {
     "completed_successor",
     "issued_after_completion",
@@ -65,6 +75,18 @@ def load_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("top-level value must be an object")
     return value
+
+
+def load_json_snapshot(path: Path) -> tuple[dict[str, Any], str]:
+    """Parse and hash one immutable in-memory read of a lane snapshot."""
+    try:
+        payload = path.read_bytes()
+        value = json.loads(payload)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot load JSON: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ValueError("top-level value must be an object")
+    return value, hashlib.sha256(payload).hexdigest()
 
 
 def require_list(record: dict[str, Any], key: str, errors: list[str]) -> list[Any]:
@@ -91,6 +113,24 @@ def positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def canonical_sha256_string(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    try:
+        int(value, 16)
+    except ValueError:
+        return False
+    return True
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def lease_tuple(value: Any) -> tuple[str, str, str, int] | None:
     if not isinstance(value, dict):
         return None
@@ -113,6 +153,74 @@ def lease_dict(binding: tuple[str, str, str, int]) -> dict[str, Any]:
         "dispatch_id": dispatch,
         "lease_epoch": epoch,
     }
+
+
+def pro_callback_binding(
+    value: Any,
+) -> tuple[str, str, int, int, str] | None:
+    if not isinstance(value, dict):
+        return None
+    job = value.get("job_id")
+    owner = value.get("owner_thread_id")
+    owner_generation = value.get("owner_generation")
+    job_generation = value.get("job_generation")
+    event_key = value.get("callback_event_key")
+    if not all(nonempty_string(item) for item in (job, owner, event_key)):
+        return None
+    if not positive_int(owner_generation) or not positive_int(job_generation):
+        return None
+    return job, owner, owner_generation, job_generation, event_key
+
+
+def pro_callback_binding_dict(
+    binding: tuple[str, str, int, int, str], state: str
+) -> dict[str, Any]:
+    job, owner, owner_generation, job_generation, event_key = binding
+    return {
+        "job_id": job,
+        "owner_thread_id": owner,
+        "owner_generation": owner_generation,
+        "job_generation": job_generation,
+        "callback_event_key": event_key,
+        "state": state,
+    }
+
+
+def pro_actionable_records(record: dict[str, Any]) -> list[dict[str, Any]]:
+    pro = record.get("pro_advisory_lane")
+    if not isinstance(pro, dict):
+        return []
+    records: list[dict[str, Any]] = []
+    # Observation-only stale/duplicate/closed callbacks must have no durable
+    # generation effect. Only live work and accepted current responses can
+    # advance owner/job floors.
+    for key in ("live_jobs", "response_ready"):
+        values = pro.get(key)
+        if isinstance(values, list):
+            records.extend(item for item in values if isinstance(item, dict))
+    return records
+
+
+def pro_generation_maps(
+    record: dict[str, Any],
+) -> tuple[dict[str, int], dict[str, int]]:
+    owners: dict[str, int] = {}
+    jobs: dict[str, int] = {}
+    for item in pro_actionable_records(record):
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        job, owner, owner_generation, job_generation, _ = binding
+        owners[owner] = max(owners.get(owner, 0), owner_generation)
+        jobs[job] = max(jobs.get(job, 0), job_generation)
+    return owners, jobs
+
+
+def response_ready_callbacks(record: dict[str, Any]) -> list[dict[str, Any]]:
+    pro = record.get("pro_advisory_lane")
+    if not isinstance(pro, dict) or not isinstance(pro.get("response_ready"), list):
+        return []
+    return [item for item in pro["response_ready"] if isinstance(item, dict)]
 
 
 def validate_worker_registry(
@@ -242,6 +350,9 @@ def empty_watermark(controller_thread_id: Any) -> dict[str, Any]:
         "owner_registry": {},
         "terminal_history": [],
         "acknowledged_terminal_events": {},
+        "pro_owner_generations": {},
+        "pro_job_generations": {},
+        "pro_callback_event_keys": {},
         "transition_fingerprints": [],
         "last_record_sha256": None,
     }
@@ -265,6 +376,42 @@ def load_watermark(path: Path, controller_thread_id: Any) -> dict[str, Any]:
         )
     if not isinstance(value.get("transition_fingerprints"), list):
         raise ValueError("durable lane watermark transition_fingerprints must be a list")
+    for key in (
+        "pro_owner_generations",
+        "pro_job_generations",
+        "pro_callback_event_keys",
+    ):
+        if key not in value:
+            value[key] = {}
+        elif not isinstance(value[key], dict):
+            raise ValueError(f"durable lane watermark {key} must be an object")
+    for key in ("pro_owner_generations", "pro_job_generations"):
+        for identifier, generation in value[key].items():
+            if not nonempty_string(identifier) or not positive_int(generation):
+                raise ValueError(
+                    f"durable lane watermark {key} requires non-empty IDs and positive generations"
+                )
+    stable_slots: dict[tuple[str, int], str] = {}
+    for event_key, binding_value in value["pro_callback_event_keys"].items():
+        if not nonempty_string(event_key) or not isinstance(binding_value, dict):
+            raise ValueError(
+                "durable lane watermark pro_callback_event_keys is malformed"
+            )
+        binding = pro_callback_binding(binding_value)
+        if binding is None or binding[4] != event_key:
+            raise ValueError(
+                "durable lane watermark pro_callback_event_keys has an incomplete binding"
+            )
+        if binding_value.get("state") not in PRO_CALLBACK_EVENT_STATES:
+            raise ValueError(
+                "durable lane watermark pro_callback_event_keys has an invalid state"
+            )
+        slot = (binding[0], binding[3])
+        if slot in stable_slots and stable_slots[slot] != event_key:
+            raise ValueError(
+                "durable lane watermark binds one Pro job generation to multiple callback event keys"
+            )
+        stable_slots[slot] = event_key
     return value
 
 
@@ -291,6 +438,13 @@ def validate_durable_chronology(
     transitions = record.get("lease_transitions")
     if not isinstance(transitions, list):
         transitions = []
+    transition_fingerprints = {
+        canonical_sha256(item) for item in transitions if isinstance(item, dict)
+    }
+    prior_transition_fingerprints = set(
+        watermark.get("transition_fingerprints", [])
+    )
+    matched_transition_fingerprints: set[str] = set()
 
     for owner, prior in prior_registry.items():
         current = current_registry.get(owner)
@@ -323,12 +477,13 @@ def validate_durable_chronology(
             errors.append(
                 f"worker_registry[{owner}] current lease change requires exactly one durable transition from the prior watermark"
             )
-        elif canonical_sha256(matching[0]) in set(
-            watermark.get("transition_fingerprints", [])
-        ):
-            errors.append(
-                f"worker_registry[{owner}] lease transition receipt was already consumed"
-            )
+        else:
+            fingerprint = canonical_sha256(matching[0])
+            matched_transition_fingerprints.add(fingerprint)
+            if fingerprint in prior_transition_fingerprints:
+                errors.append(
+                    f"worker_registry[{owner}] lease transition receipt was already consumed"
+                )
         if current_current is not None and prior_current is not None:
             if current_current[3] <= prior_current[3]:
                 errors.append(
@@ -338,6 +493,50 @@ def validate_durable_chronology(
             if current_current[3] <= prior_max:
                 errors.append(
                     f"worker_registry[{owner}] newly issued lease_epoch must exceed the durable watermark"
+                )
+
+    # Records may carry cumulative transition history. Previously consumed
+    # fingerprints are inert; every newly introduced receipt must be the
+    # unique receipt for an actual prior-current -> current-current change.
+    unmatched_transition_fingerprints = (
+        transition_fingerprints
+        - prior_transition_fingerprints
+        - matched_transition_fingerprints
+    )
+    if unmatched_transition_fingerprints:
+        errors.append(
+            "lease_transitions contains a receipt not matched to a durable current-lease change"
+        )
+    terminal = record.get("terminal_transaction")
+    if (
+        matched_transition_fingerprints
+        and isinstance(terminal, dict)
+        and terminal.get("callback_state") == "acknowledged"
+    ):
+        acknowledged_at = parse_utc(
+            terminal.get("acknowledged_at_utc"),
+            "terminal_transaction.acknowledged_at_utc",
+            errors,
+        )
+        for index, transition in enumerate(transitions):
+            if (
+                not isinstance(transition, dict)
+                or canonical_sha256(transition)
+                not in matched_transition_fingerprints
+            ):
+                continue
+            transitioned_at = parse_utc(
+                transition.get("transitioned_at_utc"),
+                f"lease_transitions[{index}].transitioned_at_utc",
+                errors,
+            )
+            if (
+                transitioned_at is not None
+                and acknowledged_at is not None
+                and transitioned_at > acknowledged_at
+            ):
+                errors.append(
+                    f"lease_transitions[{index}] durable transition must precede FINAL_ACK"
                 )
 
     current_history = record.get("terminal_idempotency_history")
@@ -361,7 +560,12 @@ def validate_durable_chronology(
                 errors.append(
                     f"terminal_event_id {event} was already acknowledged in the durable watermark"
                 )
-            if source is not None:
+            # An exact replay is checked against the post-transaction
+            # watermark, where a same-owner completed successor may already
+            # have advanced max_lease_epoch. The original record hash is the
+            # idempotency proof; different records must still match the
+            # pre-transaction owner floor.
+            if source is not None and not same_committed_record:
                 prior_owner = prior_registry.get(source[1])
                 if isinstance(prior_owner, dict):
                     prior_max = prior_owner.get("max_lease_epoch")
@@ -369,6 +573,159 @@ def validate_durable_chronology(
                         errors.append(
                             "acknowledged terminal callback lease_epoch must equal the owner's pre-transaction durable watermark"
                         )
+
+    prior_pro_owners = watermark.get("pro_owner_generations", {})
+    prior_pro_jobs = watermark.get("pro_job_generations", {})
+    prior_pro_events = watermark.get("pro_callback_event_keys", {})
+    current_pro_owners, current_pro_jobs = pro_generation_maps(record)
+    pro = record.get("pro_advisory_lane")
+    actionable: list[dict[str, Any]] = []
+    live_actionable_ids: set[int] = set()
+    observations: list[dict[str, Any]] = []
+    if isinstance(pro, dict):
+        for key in ("live_jobs", "response_ready"):
+            values = pro.get(key)
+            if isinstance(values, list):
+                candidates = [item for item in values if isinstance(item, dict)]
+                actionable.extend(candidates)
+                if key == "live_jobs":
+                    live_actionable_ids.update(id(item) for item in candidates)
+        values = pro.get("callback_observations")
+        if isinstance(values, list):
+            observations = [item for item in values if isinstance(item, dict)]
+
+    prior_slot_bindings = {
+        (binding[0], binding[3]): binding
+        for value in prior_pro_events.values()
+        if (binding := pro_callback_binding(value)) is not None
+    }
+    current_actionable_bindings = {
+        binding[4]: binding
+        for item in actionable
+        if (binding := pro_callback_binding(item)) is not None
+    }
+    current_slot_bindings = {
+        (binding[0], binding[3]): binding
+        for binding in current_actionable_bindings.values()
+    }
+
+    for item in actionable:
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        job, owner, owner_generation, job_generation, event_key = binding
+        if positive_int(prior_pro_owners.get(owner)) and owner_generation < prior_pro_owners[owner]:
+            errors.append(
+                f"Pro owner {owner} generation is below the durable watermark"
+            )
+        if positive_int(prior_pro_jobs.get(job)) and job_generation < prior_pro_jobs[job]:
+            errors.append(
+                f"Pro job {job} generation is below the durable watermark"
+            )
+        prior_event = prior_pro_events.get(event_key)
+        prior_binding = pro_callback_binding(prior_event)
+        if prior_binding is not None and prior_binding != binding:
+            errors.append(
+                f"Pro callback event key {event_key} is rebound to a different job/owner generation"
+            )
+        prior_slot = prior_slot_bindings.get((job, job_generation))
+        if prior_slot is not None and prior_slot != binding:
+            errors.append(
+                f"Pro job {job} generation {job_generation} changed its stable callback event key"
+            )
+        if id(item) in live_actionable_ids and isinstance(prior_event, dict):
+            if prior_event.get("state") == "consumed":
+                errors.append(
+                    f"live Pro job {job} reuses already consumed callback event {event_key}"
+                )
+            elif prior_event.get("state") == "closed":
+                errors.append(
+                    f"live Pro job {job} reopens closed callback event {event_key}"
+                )
+
+    accepted_current_bindings = {
+        binding[4]: binding
+        for item in response_ready_callbacks(record)
+        if (binding := pro_callback_binding(item)) is not None
+    }
+    for item in response_ready_callbacks(record):
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        job, owner, owner_generation, job_generation, event_key = binding
+        owner_floor = max(
+            int(prior_pro_owners.get(owner, 0)),
+            int(current_pro_owners.get(owner, 0)),
+        )
+        job_floor = max(
+            int(prior_pro_jobs.get(job, 0)),
+            int(current_pro_jobs.get(job, 0)),
+        )
+        if owner_generation < owner_floor or job_generation < job_floor:
+            errors.append(
+                f"Pro callback event {event_key} is stale and must be observation-only"
+            )
+        prior_event = prior_pro_events.get(event_key)
+        if (
+            isinstance(prior_event, dict)
+            and prior_event.get("state") == "consumed"
+            and not same_committed_record
+        ):
+            errors.append(
+                f"Pro callback event {event_key} was already consumed and must be observation-only"
+            )
+        if isinstance(prior_event, dict) and prior_event.get("state") == "closed":
+            errors.append(
+                f"Pro callback event {event_key} belongs to a closed job generation and must be observation-only"
+            )
+
+    for item in observations:
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        job, owner, owner_generation, job_generation, event_key = binding
+        disposition = item.get("disposition")
+        known_binding = pro_callback_binding(prior_pro_events.get(event_key))
+        if known_binding is None:
+            known_binding = accepted_current_bindings.get(event_key)
+        if known_binding is not None and known_binding != binding:
+            errors.append(
+                f"Pro callback observation {event_key} conflicts with its stable binding"
+            )
+        slot_binding = prior_slot_bindings.get((job, job_generation))
+        if slot_binding is None:
+            slot_binding = current_slot_bindings.get((job, job_generation))
+        if slot_binding is not None and slot_binding != binding:
+            errors.append(
+                f"Pro callback observation for {job} generation {job_generation} conflicts with its stable event key"
+            )
+        if disposition == "duplicate":
+            prior_event = prior_pro_events.get(event_key)
+            prior_consumed = (
+                isinstance(prior_event, dict)
+                and prior_event.get("state") == "consumed"
+            )
+            if not prior_consumed and event_key not in accepted_current_bindings:
+                errors.append(
+                    f"duplicate Pro callback observation {event_key} has no accepted original event"
+                )
+        elif disposition == "stale":
+            owner_floor = max(
+                int(prior_pro_owners.get(owner, 0)),
+                int(current_pro_owners.get(owner, 0)),
+            )
+            job_floor = max(
+                int(prior_pro_jobs.get(job, 0)),
+                int(current_pro_jobs.get(job, 0)),
+            )
+            if owner_generation >= owner_floor and job_generation >= job_floor:
+                errors.append(
+                    f"stale Pro callback observation {event_key} does not trail a generation floor"
+                )
+        elif disposition == "closed" and event_key in current_actionable_bindings:
+            errors.append(
+                f"closed Pro callback observation {event_key} cannot remain live or response_ready"
+            )
 
 
 def advance_watermark(
@@ -379,11 +736,20 @@ def advance_watermark(
     next_value = {
         "schema_version": 1,
         "controller_thread_id": record.get("controller_thread_id"),
-        "generation": int(watermark.get("generation", 0)) + 1,
+        "generation": int(watermark.get("generation", 0)),
         "owner_registry": registry_map(record),
         "terminal_history": record.get("terminal_idempotency_history", []),
         "acknowledged_terminal_events": dict(
             watermark.get("acknowledged_terminal_events", {})
+        ),
+        "pro_owner_generations": dict(
+            watermark.get("pro_owner_generations", {})
+        ),
+        "pro_job_generations": dict(
+            watermark.get("pro_job_generations", {})
+        ),
+        "pro_callback_event_keys": dict(
+            watermark.get("pro_callback_event_keys", {})
         ),
         "transition_fingerprints": sorted(
             set(watermark.get("transition_fingerprints", []))
@@ -404,6 +770,66 @@ def advance_watermark(
             next_value["acknowledged_terminal_events"][
                 callback["terminal_event_id"]
             ] = callback
+    owner_generations, job_generations = pro_generation_maps(record)
+    for owner, generation in owner_generations.items():
+        next_value["pro_owner_generations"][owner] = max(
+            int(next_value["pro_owner_generations"].get(owner, 0)), generation
+        )
+    for job, generation in job_generations.items():
+        next_value["pro_job_generations"][job] = max(
+            int(next_value["pro_job_generations"].get(job, 0)), generation
+        )
+    pro = record.get("pro_advisory_lane")
+    live_jobs = pro.get("live_jobs", []) if isinstance(pro, dict) else []
+    for item in live_jobs:
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        event_key = binding[4]
+        if event_key not in next_value["pro_callback_event_keys"]:
+            next_value["pro_callback_event_keys"][event_key] = (
+                pro_callback_binding_dict(binding, "registered")
+            )
+    for item in response_ready_callbacks(record):
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        event_key = binding[4]
+        next_value["pro_callback_event_keys"][event_key] = (
+            pro_callback_binding_dict(binding, "consumed")
+        )
+    observations = pro.get("callback_observations", []) if isinstance(pro, dict) else []
+    for item in observations:
+        if not isinstance(item, dict) or item.get("disposition") != "closed":
+            continue
+        binding = pro_callback_binding(item)
+        if binding is None:
+            continue
+        event_key = binding[4]
+        prior = next_value["pro_callback_event_keys"].get(event_key)
+        if (
+            isinstance(prior, dict)
+            and prior.get("state") == "registered"
+            and pro_callback_binding(prior) == binding
+        ):
+            # The callback stays non-actionable (zero adjudication/dispatch/ACK),
+            # but its first valid registered->closed lifecycle transition is
+            # durable so the same generation can never be reopened.
+            next_value["pro_callback_event_keys"][event_key] = (
+                pro_callback_binding_dict(binding, "closed")
+            )
+    effect_keys = (
+        "owner_registry",
+        "terminal_history",
+        "acknowledged_terminal_events",
+        "pro_owner_generations",
+        "pro_job_generations",
+        "pro_callback_event_keys",
+        "transition_fingerprints",
+    )
+    if all(next_value[key] == watermark.get(key) for key in effect_keys):
+        return watermark
+    next_value["generation"] += 1
     return next_value
 
 
@@ -415,6 +841,85 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     )
     os.chmod(temporary, 0o600)
     os.replace(temporary, path)
+
+
+def validate_final_ack_terminal_artifact(
+    record: dict[str, Any], errors: list[str]
+) -> None:
+    terminal = record.get("terminal_transaction")
+    if not isinstance(terminal, dict) or terminal.get("callback_state") != "acknowledged":
+        return
+    artifact = terminal.get("terminal_artifact")
+    if not isinstance(artifact, dict):
+        errors.append(
+            "FINAL_ACK requires terminal_artifact path and callback_bound_sha256"
+        )
+        return
+    path_value = artifact.get("path")
+    digest_value = artifact.get("callback_bound_sha256")
+    callback = terminal.get("delivered_callback")
+    history = record.get("terminal_idempotency_history")
+    bound_history: list[dict[str, Any]] = []
+    if isinstance(callback, dict) and isinstance(history, list):
+        bound_history = [
+            item
+            for item in history
+            if isinstance(item, dict)
+            and item.get("callback_delivery_state") == "delivered"
+            and all(
+                item.get(key) == callback.get(key)
+                for key in (
+                    "task_id",
+                    "owner_thread_id",
+                    "dispatch_id",
+                    "lease_epoch",
+                    "terminal_event_id",
+                    "callback_receipt",
+                )
+            )
+        ]
+    if len(bound_history) != 1:
+        errors.append(
+            "FINAL_ACK terminal artifact must bind exactly one delivered callback history record"
+        )
+    else:
+        if bound_history[0].get("terminal_path") != path_value:
+            errors.append(
+                "FINAL_ACK terminal_artifact path must match callback-bound terminal_path"
+            )
+        if bound_history[0].get("callback_bound_sha256") != digest_value:
+            errors.append(
+                "FINAL_ACK terminal_artifact digest must match callback-bound history digest"
+            )
+    if not nonempty_string(path_value):
+        errors.append("FINAL_ACK terminal_artifact requires a non-empty path")
+        return
+    terminal_path = Path(path_value)
+    if not terminal_path.is_absolute():
+        errors.append("FINAL_ACK terminal_artifact path must be absolute")
+        return
+    if not canonical_sha256_string(digest_value):
+        errors.append(
+            "FINAL_ACK terminal_artifact callback_bound_sha256 must be canonical 64-hex"
+        )
+        return
+    if artifact.get("callback_delivered") is not True:
+        errors.append("FINAL_ACK terminal_artifact requires callback_delivered=true")
+    if not terminal_path.is_file():
+        errors.append(
+            f"FINAL_ACK terminal_artifact path is not a local file: {terminal_path}"
+        )
+        return
+    try:
+        actual = sha256_file(terminal_path)
+    except OSError as exc:
+        errors.append(f"FINAL_ACK cannot hash terminal artifact {terminal_path}: {exc}")
+        return
+    if actual.lower() != digest_value.lower():
+        errors.append(
+            "FINAL_ACK terminal artifact digest mismatch: "
+            f"callback_bound={digest_value.lower()} current={actual}"
+        )
 
 
 def validate_current_lease_against_registry(
@@ -955,8 +1460,21 @@ def validate(record: dict[str, Any]) -> list[str]:
         errors.append("terminal_transaction must be an object")
         terminal = {}
     callback_state = terminal.get("callback_state")
+    if callback_state not in TERMINAL_CALLBACK_STATES:
+        errors.append(
+            "terminal_transaction.callback_state must be one of "
+            f"{sorted(TERMINAL_CALLBACK_STATES)}"
+        )
     if callback_state == "acknowledged":
+        if terminal.get("ack_kind") != "FINAL_ACK":
+            errors.append("acknowledged terminal requires ack_kind=FINAL_ACK")
+        final_ack_receipt = terminal.get("final_ack_receipt")
+        if not nonempty_string(final_ack_receipt):
+            errors.append(
+                "acknowledged terminal requires a non-empty final_ack_receipt tool receipt"
+            )
         delivered_callback = terminal.get("delivered_callback")
+        history_matches: list[dict[str, Any]] = []
         if not isinstance(delivered_callback, dict):
             errors.append(
                 "acknowledged terminal requires delivered_callback lease provenance"
@@ -974,6 +1492,13 @@ def validate(record: dict[str, Any]) -> list[str]:
             if not nonempty_string(delivered_callback.get("callback_receipt")):
                 errors.append(
                     "terminal_transaction.delivered_callback requires callback_receipt"
+                )
+            elif (
+                nonempty_string(final_ack_receipt)
+                and final_ack_receipt == delivered_callback.get("callback_receipt")
+            ):
+                errors.append(
+                    "final_ack_receipt must be distinct from the delivery callback_receipt"
                 )
             history_matches = [
                 entry
@@ -1123,6 +1648,31 @@ def validate(record: dict[str, Any]) -> list[str]:
             "terminal_transaction.acknowledged_at_utc",
             errors,
         )
+        if isinstance(next_action, dict) and next_action.get("kind") == "dispatch_next":
+            activation = next_action.get("activation_evidence")
+            activation_at = parse_utc(
+                activation.get("observed_at_utc")
+                if isinstance(activation, dict)
+                else None,
+                "terminal_transaction.next_action.activation_evidence.observed_at_utc",
+                errors,
+            )
+            if (
+                activation_at is not None
+                and reconciled_at is not None
+                and activation_at < reconciled_at
+            ):
+                errors.append(
+                    "dispatch_next activation evidence must follow durable portfolio reconciliation"
+                )
+            if (
+                activation_at is not None
+                and acknowledged_at is not None
+                and activation_at > acknowledged_at
+            ):
+                errors.append(
+                    "dispatch_next activation evidence must precede FINAL_ACK"
+                )
         if (
             reconciled_at is not None
             and acknowledged_at is not None
@@ -1130,6 +1680,40 @@ def validate(record: dict[str, Any]) -> list[str]:
         ):
             errors.append(
                 "final terminal ACK must follow durable portfolio reconciliation"
+            )
+        if history_matches and reconciled_at is not None:
+            delivered_at = parse_utc(
+                history_matches[0].get("delivered_at_utc"),
+                "terminal_idempotency_history delivered_at_utc",
+                errors,
+            )
+            if delivered_at is not None and reconciled_at < delivered_at:
+                errors.append(
+                    "durable portfolio reconciliation must follow callback delivery"
+                )
+            if (
+                delivered_at is not None
+                and observed_at is not None
+                and delivered_at > observed_at
+            ):
+                errors.append(
+                    "callback delivery time cannot be later than the snapshot observation"
+                )
+        if (
+            reconciled_at is not None
+            and observed_at is not None
+            and reconciled_at > observed_at
+        ):
+            errors.append(
+                "portfolio reconciliation time cannot be later than the snapshot observation"
+            )
+        if (
+            acknowledged_at is not None
+            and observed_at is not None
+            and acknowledged_at > observed_at
+        ):
+            errors.append(
+                "FINAL_ACK time cannot be later than the snapshot observation"
             )
         if terminal.get("delivery_intent_durable") is not True:
             errors.append(
@@ -1143,6 +1727,7 @@ def validate(record: dict[str, Any]) -> list[str]:
     live_jobs = pro.get("live_jobs")
     queued_reviews = pro.get("queue")
     response_ready = pro.get("response_ready")
+    callback_observations = pro.get("callback_observations", [])
     if not isinstance(live_jobs, list):
         errors.append("pro_advisory_lane.live_jobs must be a list")
         live_jobs = []
@@ -1152,6 +1737,11 @@ def validate(record: dict[str, Any]) -> list[str]:
     if not isinstance(response_ready, list):
         errors.append("pro_advisory_lane.response_ready must be a list")
         response_ready = []
+    if not isinstance(callback_observations, list):
+        errors.append("pro_advisory_lane.callback_observations must be a list")
+        callback_observations = []
+    live_job_ids: set[str] = set()
+    actionable_event_keys: set[str] = set()
     for index, item in enumerate(live_jobs):
         prefix = f"pro_advisory_lane.live_jobs[{index}]"
         if not isinstance(item, dict):
@@ -1165,6 +1755,23 @@ def validate(record: dict[str, Any]) -> list[str]:
         ):
             if not isinstance(item.get(key), str) or not item[key].strip():
                 errors.append(f"{prefix} requires non-empty {key}")
+        binding = pro_callback_binding(item)
+        if binding is None:
+            errors.append(
+                f"{prefix} requires owner_thread_id, callback_event_key, and positive owner_generation/job_generation"
+            )
+        else:
+            job, owner, _, _, event_key = binding
+            if job in live_job_ids:
+                errors.append(f"pro_advisory_lane has duplicate live job_id {job}")
+            live_job_ids.add(job)
+            if event_key in actionable_event_keys:
+                errors.append(
+                    f"pro_advisory_lane has duplicate actionable callback_event_key {event_key}"
+                )
+            actionable_event_keys.add(event_key)
+            if item.get("polling_owner") != owner:
+                errors.append(f"{prefix}.polling_owner must match owner_thread_id")
         if item.get("completion_callback_configured") is not True:
             errors.append(
                 f"{prefix} requires completion_callback_configured=true"
@@ -1174,7 +1781,15 @@ def validate(record: dict[str, Any]) -> list[str]:
             errors.append(
                 f"{prefix}.status must be one of {sorted(PRO_LIVE_STATES)}"
             )
-        parse_utc(item.get("submitted_at_utc"), f"{prefix}.submitted_at_utc", errors)
+        submitted_at = parse_utc(
+            item.get("submitted_at_utc"), f"{prefix}.submitted_at_utc", errors
+        )
+        if (
+            submitted_at is not None
+            and observed_at is not None
+            and submitted_at > observed_at
+        ):
+            errors.append(f"{prefix}.submitted_at_utc cannot be later than observed_at_utc")
         due_at = parse_utc(
             item.get("next_check_due_at_utc"),
             f"{prefix}.next_check_due_at_utc",
@@ -1201,6 +1816,8 @@ def validate(record: dict[str, Any]) -> list[str]:
             errors.append(
                 "oldest response_ready Pro job must be claimed for adjudication"
             )
+        ready_job_ids: set[str] = set()
+        owner_generations, job_generations = pro_generation_maps(record)
         for index, item in enumerate(response_ready):
             prefix = f"pro_advisory_lane.response_ready[{index}]"
             if not isinstance(item, dict):
@@ -1209,10 +1826,151 @@ def validate(record: dict[str, Any]) -> list[str]:
             for key in ("job_id", "decision", "owner_thread_id", "response_artifact"):
                 if not isinstance(item.get(key), str) or not item[key].strip():
                     errors.append(f"{prefix} requires non-empty {key}")
-            parse_utc(
+            binding = pro_callback_binding(item)
+            if binding is None:
+                errors.append(
+                    f"{prefix} requires callback_event_key and positive owner_generation/job_generation"
+                )
+            else:
+                job, owner, owner_generation, job_generation, event_key = binding
+                if job in ready_job_ids or job in live_job_ids:
+                    errors.append(
+                        f"Pro job_id {job} cannot be duplicated or both live and response_ready"
+                    )
+                ready_job_ids.add(job)
+                if event_key in actionable_event_keys:
+                    errors.append(
+                        f"pro_advisory_lane has duplicate actionable callback_event_key {event_key}"
+                    )
+                actionable_event_keys.add(event_key)
+                if item.get("callback_disposition") != "current":
+                    errors.append(
+                        f"{prefix}.callback_disposition must be current; stale/duplicate/closed callbacks are observation-only"
+                    )
+                if owner_generation < owner_generations.get(owner, owner_generation):
+                    errors.append(
+                        f"{prefix} has stale owner_generation and must be observation-only"
+                    )
+                if job_generation < job_generations.get(job, job_generation):
+                    errors.append(
+                        f"{prefix} has stale job_generation and must be observation-only"
+                    )
+            completed_at = parse_utc(
                 item.get("completed_at_utc"),
                 f"{prefix}.completed_at_utc",
                 errors,
+            )
+            if (
+                completed_at is not None
+                and observed_at is not None
+                and completed_at > observed_at
+            ):
+                errors.append(
+                    f"{prefix}.completed_at_utc cannot be later than observed_at_utc"
+                )
+    else:
+        ready_job_ids = set()
+
+    actionable_records = [
+        item
+        for item in [*live_jobs, *response_ready]
+        if isinstance(item, dict) and pro_callback_binding(item) is not None
+    ]
+    actionable_owner_floors: dict[str, int] = {}
+    actionable_job_floors: dict[str, int] = {}
+    for item in actionable_records:
+        binding = pro_callback_binding(item)
+        assert binding is not None
+        job, owner, owner_generation, job_generation, _ = binding
+        actionable_owner_floors[owner] = max(
+            actionable_owner_floors.get(owner, 0), owner_generation
+        )
+        actionable_job_floors[job] = max(
+            actionable_job_floors.get(job, 0), job_generation
+        )
+    for item in actionable_records:
+        binding = pro_callback_binding(item)
+        assert binding is not None
+        job, owner, owner_generation, job_generation, event_key = binding
+        if owner_generation < actionable_owner_floors[owner]:
+            errors.append(
+                f"actionable Pro callback {event_key} is below the current owner generation"
+            )
+        if job_generation < actionable_job_floors[job]:
+            errors.append(
+                f"actionable Pro callback {event_key} is below the current job generation"
+            )
+
+    observation_ids: set[str] = set()
+    for index, item in enumerate(callback_observations):
+        prefix = f"pro_advisory_lane.callback_observations[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        observation_id = item.get("observation_id")
+        if not nonempty_string(observation_id):
+            errors.append(f"{prefix} requires observation_id")
+        elif observation_id in observation_ids:
+            errors.append(f"duplicate Pro callback observation_id {observation_id}")
+        else:
+            observation_ids.add(observation_id)
+        binding = pro_callback_binding(item)
+        if binding is None:
+            errors.append(
+                f"{prefix} requires a complete job/owner/generation/event-key binding"
+            )
+            continue
+        job, _, _, _, _ = binding
+        disposition = item.get("disposition")
+        if disposition not in PRO_CALLBACK_OBSERVATION_STATES:
+            errors.append(
+                f"{prefix}.disposition must be one of {sorted(PRO_CALLBACK_OBSERVATION_STATES)}"
+            )
+        effects = item.get("effect_counts")
+        if not isinstance(effects, dict) or set(effects) != PRO_EFFECT_KEYS:
+            errors.append(
+                f"{prefix}.effect_counts must exactly contain {sorted(PRO_EFFECT_KEYS)}"
+            )
+        elif any(effects[key] != 0 for key in PRO_EFFECT_KEYS):
+            errors.append(
+                f"{prefix} stale/duplicate/closed callback must have zero local effects"
+            )
+        observed_callback_at = parse_utc(
+            item.get("observed_at_utc"),
+            f"{prefix}.observed_at_utc",
+            errors,
+        )
+        if (
+            observed_callback_at is not None
+            and observed_at is not None
+            and observed_callback_at > observed_at
+        ):
+            errors.append(
+                f"{prefix}.observed_at_utc cannot be later than snapshot observed_at_utc"
+            )
+        if disposition == "closed":
+            closed_at = parse_utc(
+                item.get("closed_at_utc"),
+                f"{prefix}.closed_at_utc",
+                errors,
+            )
+            if (
+                observed_callback_at is not None
+                and closed_at is not None
+                and observed_callback_at < closed_at
+            ):
+                errors.append(f"{prefix} closed observation predates slot closure")
+            if (
+                closed_at is not None
+                and observed_at is not None
+                and closed_at > observed_at
+            ):
+                errors.append(
+                    f"{prefix}.closed_at_utc cannot be later than snapshot observed_at_utc"
+                )
+        if pro.get("adjudicating_job_id") == job and job not in ready_job_ids:
+            errors.append(
+                f"{prefix} observation-only callback cannot own local adjudication"
             )
     ready_reviews = [
         item
@@ -1256,12 +2014,11 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        record = load_json(args.record)
+        record, record_sha256 = load_json_snapshot(args.record)
     except ValueError as exc:
         print(f"FAIL_RESEARCH_LANES: {exc}")
         return 2
 
-    record_sha256 = hashlib.sha256(args.record.read_bytes()).hexdigest()
     lock_path = args.state.with_name(f".{args.state.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+", encoding="utf-8") as lock_file:
@@ -1276,6 +2033,9 @@ def main() -> int:
 
         errors = validate(record)
         validate_durable_chronology(record, watermark, record_sha256, errors)
+        # This is the final local authority read before a FINAL_ACK can advance
+        # the durable watermark. A mismatch therefore has no ACK/watermark effect.
+        validate_final_ack_terminal_artifact(record, errors)
         if errors:
             print("FAIL_RESEARCH_LANES")
             for error in errors:
@@ -1283,10 +2043,12 @@ def main() -> int:
             return 1
 
         if not args.check_only:
-            atomic_write_json(
-                args.state,
-                advance_watermark(record, watermark, record_sha256),
-            )
+            next_watermark = advance_watermark(record, watermark, record_sha256)
+            # A duplicate/stale observation or exact replay has no durable
+            # effect. Avoid even a serialization-only rewrite so legacy
+            # schema-1 bytes and file metadata remain untouched.
+            if next_watermark is not watermark:
+                atomic_write_json(args.state, next_watermark)
 
     print("PASS_RESEARCH_LANES")
     return 0
