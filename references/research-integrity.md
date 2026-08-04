@@ -537,6 +537,12 @@ a fresh falsifiable synthesis estimand; then open a new charter for that pivot.
 ## Review and adjudication
 
 - Use reviewers to generate falsification attempts, missing controls, alternative explanations, citation challenges, and reproducibility checks.
+- For Confirmatory or publication-claim review, dispatch a fresh path-only
+  Audit with the frozen claim boundary, exact paper/claim text path, raw
+  result/config paths, hashes, and checklist. Exclude Executor summaries,
+  persuasive review narratives, prior Pro verdicts, prior claim
+  interpretations, raw conversations, and contribution forecasts. The Audit
+  rebinds every input hash before semantic review.
 - Before evidence, ask each external reviewer to resolve one named uncertainty
   rather than generate an unrestricted candidate tree. Reviewer-proposed
   pivots return to the active Program budget and do not authorize execution.

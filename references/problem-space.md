@@ -44,6 +44,11 @@ session, repository, carrier, or method name does not reset this inventory.
 Use the inventory to avoid rediscovering a closed prediction; do not turn it
 into a second literature review or state tree.
 
+Derive one ephemeral anti-repeat view for the current search: at most five
+exact closed fingerprints, five active or `HOLD` uncertainties, three strongest
+generic reductions, and the current scope. Do not persist it, build a graph,
+create a capsule, or treat it as evidence.
+
 Separate:
 
 - **observed**: directly measured under the target or a justified preserving

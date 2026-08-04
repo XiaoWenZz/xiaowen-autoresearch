@@ -134,6 +134,41 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, router)
 
+    def test_post_freeze_fast_path_is_bounded_and_claim_safe(self) -> None:
+        router = flat(SKILL)
+        integrity = flat(INTEGRITY)
+
+        for phrase in (
+            "one post-freeze fast path",
+            "read-only code/evaluation preflight",
+            "no-utility minimal sanity",
+            "one root-caused targeted patch",
+            "at most one clean reimplementation",
+            "write structured raw outputs",
+            "hand exact paths/hashes to the validator",
+            "downstream must not rederive defaults",
+            "completed -> contract-consistent -> evidence-eligible -> independently verified -> claim-accepted",
+            "deterministic prechecks may reject but cannot accept scientific claims",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, router)
+
+        for phrase in (
+            "fresh path-only Audit",
+            "exact paper/claim text path",
+            "Exclude Executor summaries",
+            "rebinds every input hash",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, integrity)
+
+        problem = flat(PROBLEM_SPACE)
+        self.assertIn("one ephemeral anti-repeat view", problem)
+        self.assertIn(
+            "Do not persist it, build a graph, create a capsule, or treat it as evidence",
+            problem,
+        )
+
     def test_managed_lane_reference_is_conditional(self) -> None:
         required, conditional = route_rows()["Managed controller / recovery"]
         self.assertEqual(required, "[orchestration.md](references/orchestration.md)")
@@ -440,8 +475,8 @@ class SkillRouterTest(unittest.TestCase):
         workspace = flat(Path(os.environ["XAR_WORKSPACE_AGENTS"]))
         for phrase in (
             "one uninterrupted Executor loop",
-            "root cause -> exact patch -> exact-path smoke -> validation -> authorized run",
-            "Do not terminate, mint a contract/task/lease/version",
+            "one post-freeze fast path",
+            "No intermediate Controller callback or task/version",
             "A new run/output identity preserves provenance",
         ):
             with self.subTest(router_phrase=phrase):

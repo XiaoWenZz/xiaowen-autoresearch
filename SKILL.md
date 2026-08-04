@@ -120,34 +120,34 @@ Name each persistent research-role session
 reuse, material phase/state change, and terminal absorption with the runtime
 title API; never rely on conversation memory alone.
 
-Maintain one persistent Controller-global continuity
-heartbeat. It remains active through idle periods and worker/job completions.
-Adjust cadence in place; add an exact remote-job block only while live, then
-clear only the exact job block and never delete the global automation. It may
-reconcile liveness, pins/titles, lost completion and missing owners, but cannot
-act as a research role, read protected results, launch jobs or certify science.
+Maintain one persistent Controller-global continuity heartbeat; it remains
+active through idle periods and worker/job completions. Adjust cadence in place;
+add a remote-job block only while live, clear only the exact job block, and
+never delete the global automation. It may reconcile liveness, pins/titles,
+completions, and owners, but cannot research, read protected results, launch, or
+certify science.
 
 They are not a new data protocol, capsule, schema, lifecycle, context-bootstrap
 layer, automation, or evidence substitute. They cannot change the research
 contract, metric, seed, budget, stop rule, or protected/outcome boundary.
 
-Once one complete implementation contract freezes the question, edit surface,
-commands, evidence boundary, budget, terminal, and callback destination,
-dispatch a fresh pure executor and do not invoke or load this skill there. The
-contract itself is the only task capsule; give it only applicable `AGENTS.md`,
-the contract, target source/evaluator, necessary tests, and allowed commands.
-Create no second capsule, lifecycle, receipt, telemetry, or context-bootstrap
-layer. Fuse deterministic checks; do not wake a model for each check. A local
-executor returns its final directly; Managed uses section 8.
+After a complete contract freezes question, edits, commands, evidence, budget,
+terminal, and callback, dispatch a fresh pure executor and do not invoke or load
+this skill there. The contract itself is the only task capsule: applicable
+`AGENTS.md`, contract, evaluator, tests, commands. Add no lifecycle, receipt,
+telemetry, or context. Freeze weight/track, candidate/version, exposure,
+model/effort, GPU cap, and claim tier; downstream must not rederive defaults.
+Fuse deterministic checks; do not wake a
+model for each check. A local executor returns its final directly.
 
-Treat an outcome-blind setup defect inside frozen identity, exposure, and
-budget as one uninterrupted Executor loop: `root cause -> exact patch ->
-exact-path smoke -> validation -> authorized run`. Do not terminate, mint a
-contract/task/lease/version, or require an intermediate Controller callback
-between those steps. Stop only for an unresolved root cause after one bounded
-inventory, an external fact, a scientific/authority/exposure/budget change, or
-protected-outcome access. A new run/output identity preserves provenance; it
-is not a new governance object.
+Use one post-freeze fast path in one uninterrupted Executor loop: identity/cap;
+repo/carrier; read-only code/evaluation preflight; no-utility minimal sanity;
+one root-caused targeted patch; at most one clean reimplementation if identity
+is unchanged; fused validation/exact cells; write structured raw outputs; hand
+exact paths/hashes to the validator. No intermediate Controller callback or
+task/version. Stop on an unresolved root, external fact, or
+scientific/authority/exposure/budget/protected change. A new run/output identity
+preserves provenance.
 
 ## 5. Route model and reasoning effort
 
@@ -202,8 +202,10 @@ integrity to `sol max`; never substitute `luna max` for `sol xhigh/max`.
 - Bind evidence-bearing runs to code, config, data, environment, seed, and run
   identity. Preserve raw outputs, failures, anomalies, and deviations before
   interpretation.
-- Separate liveness, engineering validity, scientific disposition, and claim
-  status. Files, tests, callbacks, and compute are not scientific progress.
+- Derive `completed -> contract-consistent -> evidence-eligible ->
+  independently verified -> claim-accepted`; deterministic prechecks may
+  reject but cannot accept scientific claims. Files/tests/callbacks/compute are
+  not science.
 - Report negative/null results narrowly. A failed carrier, contract, Scout, or
   method claim is not a field-wide NO-GO.
 - Before a durable scientific `DROP` or `CLOSE`, freeze one closure packet in the
