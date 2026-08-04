@@ -135,6 +135,15 @@ Create no second capsule, lifecycle, receipt, telemetry, or context-bootstrap
 layer. Fuse deterministic checks; do not wake a model for each check. A local
 executor returns its final directly; Managed uses section 8.
 
+Treat an outcome-blind setup defect inside frozen identity, exposure, and
+budget as one uninterrupted Executor loop: `root cause -> exact patch ->
+exact-path smoke -> validation -> authorized run`. Do not terminate, mint a
+contract/task/lease/version, or require an intermediate Controller callback
+between those steps. Stop only for an unresolved root cause after one bounded
+inventory, an external fact, a scientific/authority/exposure/budget change, or
+protected-outcome access. A new run/output identity preserves provenance; it
+is not a new governance object.
+
 ## 5. Route model and reasoning effort
 
 - `gpt-5.6-sol max`: formulation, sources/neighbors, contracts, Audit,
@@ -238,8 +247,17 @@ R0-to-R1 pass rate, access-hold rate, and governance-attention share without
 creating a new measurement family; activity and GPU use are not science.
 
 Use `R0`--`R3` as shorthand, never a lifecycle; follow
-[problem-space.md](references/problem-space.md). Keep one active `R1`; an
-unchanged-protocol repair may rerun within cap.
+[problem-space.md](references/problem-space.md). Keep at most one active `R1`
+per candidate/version; it is not a portfolio-wide mutex. An unchanged-protocol
+repair may rerun within cap. Continue bounded Explorer work while any currently
+usable, authorized GPU card can absorb another smallest valid complete tranche.
+Independent launch-ready Scouts may run in parallel across cards or hosts with
+isolated owners/repositories and frozen per-job caps. Pause Explorer for
+compute saturation only when every currently usable, authorized card is
+occupied by valid live work and at least one additional independently frozen,
+launch-ready item waits solely for capacity. Blocked or profile-waiting items,
+unavailable cards, and empty cards do not count. This never authorizes filler;
+after three consecutive no-`PROBE` searches, run the recall audit.
 
 ## 8. Complete without callback ceremony
 

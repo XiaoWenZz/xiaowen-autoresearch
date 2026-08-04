@@ -86,6 +86,23 @@ simple fair baseline, and cheapest witness defined by the problem-space route.
 That prevents obvious duplication but does not establish novelty. After a
 material signal, apply the Contribution Gate before paper-scale expansion.
 
+### True card saturation and continued search
+
+Do not serialize the authorized fleet into one global GPU slot. One active
+`R1` is a per candidate/version constraint, not a portfolio-wide mutex. Continue
+bounded Explorer work while any currently usable, authorized GPU card can
+absorb another smallest valid complete tranche. Independently frozen,
+launch-ready Scouts may run concurrently across cards or hosts when owners,
+repositories, exposure boundaries, and per-job caps do not overlap.
+
+Pause Explorer for compute saturation only when every currently usable,
+authorized card is occupied by valid live work and at least one additional
+independently frozen, launch-ready item waits solely for capacity. Blocked,
+profile-waiting, unavailable, or empty cards do not count toward saturation.
+Idle capacity never authorizes filler or weak ideas; after three consecutive
+no-`PROBE` searches, use the funnel recall audit. This routing rule does not
+create a `zero_gpu` lane, slot registry, or new shared-state lifecycle.
+
 ## 4. Terminal idempotency
 
 A Managed worker freezes one terminal and sends once. Successful tool receipt

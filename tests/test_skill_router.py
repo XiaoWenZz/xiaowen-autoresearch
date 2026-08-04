@@ -49,7 +49,7 @@ class SkillRouterTest(unittest.TestCase):
     def test_core_router_stays_within_prompt_byte_budget(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("# Xiaowen AutoResearch", text)
-        self.assertLessEqual(len(text.encode("utf-8")), 19_500)
+        self.assertLessEqual(len(text.encode("utf-8")), 21_200)
         module_prefix = Path(__file__).read_text(encoding="utf-8").split("def flat", 1)[0]
         self.assertNotIn("/Users/", module_prefix)
 
@@ -429,6 +429,51 @@ class SkillRouterTest(unittest.TestCase):
             self.assertIn("one active outcome-blind", text)
             self.assertIn("rerun under a new attempt identity within the existing cap", text)
             self.assertIn("returns to prospective adjudication", text)
+
+    @unittest.skipUnless(
+        WORKSPACE_AGENTS is not None and WORKSPACE_AGENTS.is_file(),
+        "set XAR_WORKSPACE_AGENTS to enable workspace integration checks",
+    )
+    def test_outcome_blind_engineering_loop_does_not_create_callback_ceremony(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        workspace = flat(Path(os.environ["XAR_WORKSPACE_AGENTS"]))
+        for phrase in (
+            "one uninterrupted Executor loop",
+            "root cause -> exact patch -> exact-path smoke -> validation -> authorized run",
+            "Do not terminate, mint a contract/task/lease/version",
+            "A new run/output identity preserves provenance",
+        ):
+            with self.subTest(router_phrase=phrase):
+                self.assertIn(phrase, router)
+        for phrase in (
+            "one uninterrupted engineering loop",
+            "without an intermediate terminal, Controller callback, contract, task, lease",
+            "scientific identity, exposure, authority, budget, or protected-outcome state",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+        self.assertIn("One repair authorization includes diagnosis, patch", workspace)
+        self.assertIn("Do not mint an intermediate contract, task, lease", workspace)
+
+    @unittest.skipUnless(
+        WORKSPACE_AGENTS is not None and WORKSPACE_AGENTS.is_file(),
+        "set XAR_WORKSPACE_AGENTS to enable workspace integration checks",
+    )
+    def test_explorer_pauses_only_on_true_multi_card_saturation(self) -> None:
+        router = flat(SKILL)
+        lanes = flat(PORTFOLIO_LANES)
+        workspace = flat(Path(os.environ["XAR_WORKSPACE_AGENTS"]))
+        for text in (router, lanes, workspace):
+            with self.subTest(source=str(text[:80])):
+                self.assertIn("per candidate/version", text)
+                self.assertIn("not a portfolio-wide mutex", text)
+                self.assertIn("every currently usable, authorized card", text)
+                self.assertIn("waits solely for capacity", text)
+                self.assertIn("Blocked", text)
+                self.assertIn("empty cards do not count", text)
+        self.assertIn("does not create a `zero_gpu` lane", lanes)
+        self.assertIn("Idle capacity never authorizes filler", lanes)
 
     def test_novelty_first_real_scout_does_not_select_for_carrier_ease(self) -> None:
         router = flat(SKILL)

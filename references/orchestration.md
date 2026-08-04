@@ -315,7 +315,13 @@ For Scout:
    change model, data, split, metric, threshold, seed policy, baseline, or
    stopping policy;
 3. prefer cached/cheap witnesses and one real end-to-end smoke before the evidentiary run;
-4. treat unchanged-protocol code bugs as one engineering loop, not new contracts, schemas, activation states, or approval rounds;
+4. treat unchanged-protocol code bugs as one uninterrupted engineering loop:
+   diagnose, patch, exact-path smoke, validate, and execute the already
+   authorized run in the same owner without an intermediate terminal,
+   Controller callback, contract, task, lease, schema, activation state, or
+   approval round. Terminal only when the bounded inventory cannot identify a
+   local fix, an external fact is required, or scientific identity, exposure,
+   authority, budget, or protected-outcome state would change;
 5. implement only controls that can change the witness decision;
 6. if governance-only effort exceeds scientific implementation, remove
    nonessential controls and execute the direct bounded witness under the same
