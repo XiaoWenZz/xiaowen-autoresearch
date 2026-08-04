@@ -91,9 +91,8 @@ contract is frozen. Packet, locator, sidecar, and file checks stay inside the
 current owner as mechanical preflight.
 
 At an idea boundary, reuse the existing task capsule, decision record, and
-terminal/closure record. Select only current IDs/states, referenced
-contract/evidence hashes, closure/reopening reason, and next action. Do not
-include the prior idea's raw transcript. For the same idea, use `/compact` only
+terminal/closure record. Do not include the prior idea's raw transcript. For
+the same idea, use `/compact` only
 when decision-relevant history has become materially redundant. On an idea
 switch, reuse the canonical role session only after a runtime-supported
 compact/reset succeeds and isolation is verifiable. Record selection is not
@@ -128,10 +127,9 @@ clear only the exact job block and never delete the global automation. It may
 reconcile liveness, pins/titles, lost completion and missing owners, but cannot
 act as a research role, read protected results, launch jobs or certify science.
 
-These are operational selection rules over existing records, not a new data
-protocol, capsule, schema, lifecycle, context-bootstrap layer, automation, or
-evidence substitute. They cannot change the research contract, metric, seed,
-budget, stop rule, or protected/outcome boundary.
+They are not a new data protocol, capsule, schema, lifecycle, context-bootstrap
+layer, automation, or evidence substitute. They cannot change the research
+contract, metric, seed, budget, stop rule, or protected/outcome boundary.
 
 Once one complete implementation contract freezes the question, edit surface,
 commands, evidence boundary, budget, terminal, and callback destination,
@@ -293,10 +291,12 @@ bounded top-level send, release the worker on a successful receipt, and never
 resend an ambiguous delivery. One pre-registered Controller fallback recovers
 by event/final-turn ID with idempotent effects. An ACK never blocks the worker.
 
-Use `PROBE`/`QUEUE_*` for admitted prospective work, `HOLD` for one unresolved
-fact plus reopening trigger, `DROP` for a scoped reduction/failed exact claim,
-and `ENGINEERING_INVALID` outside scientific evidence. A valid negative/null
-retires only the uncertainty its contract measured.
+After `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, or `CARRIER_STOP`, an
+open/`UNTESTED` candidate may end Controller absorption only as `DELEGATED`
+with a successful same-idea successor receipt, `BLOCKED` with one reopening
+fact/observer/trigger, or `DONE` as a non-active evidence-gap archive with a
+reopening fact. `OPEN_WITHOUT_OWNER`, “keep open,” “do not launch,” or a worker
+`NEXT_ACTION` alone is invalid; the Controller owns the route.
 
 ## 9. Use external advisory as a one-shot
 

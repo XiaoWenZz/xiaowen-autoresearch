@@ -684,6 +684,45 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, router)
 
+    def test_open_candidate_cannot_end_without_owner_or_explicit_archive(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        workspace = flat(WORKSPACE_AGENTS) if WORKSPACE_AGENTS is not None else ""
+
+        for phrase in (
+            "After `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, or `CARRIER_STOP`",
+            "`OPEN_WITHOUT_OWNER`",
+            "a successful same-idea successor receipt",
+            "`BLOCKED` with one reopening fact/observer/trigger",
+            "non-active evidence-gap archive with a reopening fact",
+            "the Controller owns the route",
+        ):
+            with self.subTest(router_phrase=phrase):
+                self.assertIn(phrase, router)
+
+        for phrase in (
+            "worker-local terminals, never Controller route decisions",
+            "terminal absorption is incomplete",
+            "A worker recommendation",
+            "cannot discharge this Controller duty",
+            "`OPEN_WITHOUT_OWNER` is an invalid lifecycle state",
+            "wake the Controller for lifecycle repair",
+            "it cannot choose the scientific successor",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+        if workspace:
+            for phrase in (
+                "`ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and `CARRIER_STOP` are local execution terminals",
+                "Controller absorption is incomplete",
+                "`OPEN_WITHOUT_OWNER`",
+                "The Controller—not the Executor—owns",
+                "global continuity heartbeat must flag an ownerless open candidate",
+            ):
+                with self.subTest(workspace_phrase=phrase):
+                    self.assertIn(phrase, workspace)
+
     def test_managed_runtime_binding_and_model_routing_are_explicit(self) -> None:
         router = flat(SKILL)
         orchestration = flat(ORCHESTRATION)

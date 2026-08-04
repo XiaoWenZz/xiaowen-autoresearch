@@ -194,6 +194,17 @@ one blocker, its observer, event/absolute-check trigger, and next evidence
 action in existing task state; it does not create a backlog or lane merely to
 certify the hold.
 
+Treat `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and `CARRIER_STOP` as
+worker-local terminals, never Controller route decisions. When the candidate
+remains open or `UNTESTED`, terminal absorption is incomplete until the
+Controller records exactly one of: a successfully activated same-idea
+successor (`DELEGATED`/`dispatch_next`), one explicit blocker with reopening
+fact, observer, and trigger (`BLOCKED`/`explicit_hold`), or a non-active
+evidence-gap archive with a reopening fact (`DONE`). A worker recommendation
+such as “keep open,” “do not launch,” “no automatic successor,” or its
+`NEXT_ACTION` cannot discharge this Controller duty. `OPEN_WITHOUT_OWNER` is an
+invalid lifecycle state, not an idle candidate.
+
 Reconcile only the shared resources actually touched by the Managed event. A
 GPU/remote completion may require its run, ownership and result-analysis queue;
 a local source or R0 completion requires none of the GPU, zero-GPU, Pro, lane,
@@ -212,9 +223,11 @@ remains active through idle periods and worker/job completions. Adjust its
 cadence in place according to active-work latency; do not create a faster or
 slower duplicate. Its baseline scope is only current Managed-role liveness,
 ordinary-completion loss, canonical pin/title drift and an admitted objective
-with no owner. Add an exact process/job/output/ETA check block only for a live
-remote job without native wake. At terminal, clear only the exact job block
-and never delete the global automation. The global singleton may
+with no owner. It must treat `OPEN_WITHOUT_OWNER` after a non-scientific
+terminal as an anomaly and wake the Controller for lifecycle repair; it cannot
+choose the scientific successor. Add an exact process/job/output/ETA check
+block only for a live remote job without native wake. At terminal, clear only
+the exact job block and never delete the global automation. The global singleton may
 wake the Controller for idempotent lifecycle absorption, but it cannot perform
 Explorer/Audit/Executor semantics, inspect protected outcomes, launch work,
 invent successors or certify science.
