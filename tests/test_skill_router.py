@@ -862,14 +862,18 @@ class SkillRouterTest(unittest.TestCase):
         for phrase in (
             "one persistent Controller-global continuity heartbeat",
             "remains active through idle periods and worker/job completions",
-            "clear only the exact job block",
-            "never delete the global automation",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
                 self.assertIn(phrase, orchestration)
                 if workspace:
                     self.assertIn(phrase, workspace)
+
+        self.assertIn("keep remote jobs in the snapshot", router)
+        self.assertIn("never mutate its prompt or delete it", router)
+        self.assertIn("never delete the global automation", orchestration)
+        if workspace:
+            self.assertIn("never delete the global automation", workspace)
 
         self.assertIn("Adjust its cadence in place", orchestration)
         self.assertIn("do not create a faster or slower duplicate", orchestration)

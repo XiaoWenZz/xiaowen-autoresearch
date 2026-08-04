@@ -122,8 +122,8 @@ title API; never rely on conversation memory alone.
 
 Maintain one persistent Controller-global continuity heartbeat; it remains
 active through idle periods and worker/job completions. Adjust cadence in place;
-add a remote-job block only while live, clear only the exact job block, and
-never delete the global automation. It may reconcile liveness, pins/titles,
+keep remote jobs in the snapshot; never mutate its prompt or delete it. It may
+reconcile liveness, pins/titles,
 completions, and owners, but cannot research, read protected results, launch, or
 certify science.
 
