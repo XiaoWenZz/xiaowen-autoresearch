@@ -73,11 +73,22 @@ class StateHelpersTest(unittest.TestCase):
                 "frozen": True,
                 "frozen_at": "2026-07-22T00:00:00Z",
                 "code_version": "abc123",
+                "dataset_name": "synthetic",
                 "data_version": "data-v1",
                 "data_split": "frozen-split",
                 "data_boundary": "no public test",
                 "seed_policy": "fixed seeds",
                 "analysis_plan": "predeclared gate",
+                "scout_design": {
+                    "arms": ["strongest fair baseline", "candidate"],
+                    "paired_bundles": 6,
+                    "mpe": 0.01,
+                    "guard_comparator": "strongest fair baseline",
+                    "mechanism_deletion": "delete candidate action",
+                    "outcome_action_table": {"signal": "contribution gate", "no_signal": "stop"},
+                    "compute_cap": {"paired_bundles": 6},
+                },
+                "run_bindings": {},
             }
         )
         write_json(charter_path, charter)
@@ -89,6 +100,29 @@ class StateHelpersTest(unittest.TestCase):
     def append(self, stream: str, record: dict[str, object]) -> subprocess.CompletedProcess[str]:
         return run(UPDATE, "append", self.root, stream, "--record-json", json.dumps(record))
 
+    def append_worker(self, worker_id: str, thread_id: str, role: str) -> None:
+        result = self.append(
+            "workers",
+            {
+                "worker_record_id": f"WR-{worker_id}",
+                "worker_id": worker_id,
+                "thread_id": thread_id,
+                "program_id": "P1",
+                "epoch_id": "P1-E1",
+                "contract_revision": "v0",
+                "role": role,
+                "status": "running",
+                "callback_state": "pending",
+                "terminal_event_id": None,
+                "reclaim_deadline": None,
+                "watchdog_id": f"WD-{worker_id}",
+                "watchdog_state": "active",
+                "artifact_paths": [],
+                "recorded_at": "2026-07-22T00:00:00Z",
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def write_completed_run(
         self,
         *,
@@ -99,41 +133,99 @@ class StateHelpersTest(unittest.TestCase):
             (self.root / "state" / "charter.json").read_text(encoding="utf-8")
         )["task_id"]
         run_path = self.root / "runs" / "RUN-D05.json"
+        run = {
+            "schema_version": "1.0",
+            "run_id": "RUN-D05",
+            "task_id": task_id,
+            "status": "completed",
+            "question": "Does local integrity remain bound?",
+            "started_at": "2026-07-22T00:00:00Z",
+            "ended_at": "2026-07-22T00:01:00Z",
+            "code_version": {"git_commit": "abc123"},
+            "config": config,
+            "dataset": {"name": "synthetic", "version": "v1", "split": "test"},
+            "environment": {"host": "local"},
+            "seeds": [1],
+            "primary_metrics": ["integrity"],
+            "artifacts": artifacts,
+            "validation": [{"command": "local-check", "status": "pass"}],
+            "result_summary": "outcome unobserved",
+            "anomalies": [],
+            "protocol_deviations": [],
+        }
         write_json(
             run_path,
+            run,
+        )
+        charter_path = self.root / "state" / "charter.json"
+        charter = json.loads(charter_path.read_text(encoding="utf-8"))
+        charter["protocol"]["run_bindings"]["RUN-D05"] = {
+            "question": run["question"],
+            "code_version": run["code_version"],
+            "config_sha256": config.get("sha256"),
+            "dataset": run["dataset"],
+            "seeds": run["seeds"],
+            "primary_metrics": run["primary_metrics"],
+        }
+        write_json(charter_path, charter)
+        return run_path
+
+    def write_eligible_run(self) -> Path:
+        self.make_ready()
+        config_path = self.root / "configs" / "eligible.json"
+        config_path.parent.mkdir(exist_ok=True)
+        config_path.write_bytes(b'{"frozen":true}\n')
+        artifact_path = self.root / "artifacts" / "eligible.txt"
+        artifact_path.write_text("eligible\n", encoding="utf-8")
+        return self.write_completed_run(
+            config={
+                "path": "configs/eligible.json",
+                "sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+            },
+            artifacts=[
+                {
+                    "path": "artifacts/eligible.txt",
+                    "sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
+                }
+            ],
+        )
+
+    def append_verified_run_evidence(self, *, supports_claims: list[str] | None = None) -> None:
+        self.append_worker("PRODUCER", "THREAD-PRODUCER", "Executor")
+        self.append_worker("VERIFIER", "THREAD-VERIFIER", "Audit")
+        result = self.append(
+            "evidence",
             {
-                "schema_version": "1.0",
+                "evidence_id": "E-RUN",
+                "kind": "experiment",
+                "summary": "prospectively bound run",
                 "run_id": "RUN-D05",
-                "task_id": task_id,
-                "status": "completed",
-                "question": "Does local integrity remain bound?",
-                "started_at": "2026-07-22T00:00:00Z",
-                "ended_at": "2026-07-22T00:01:00Z",
-                "code_version": {"git_commit": "abc123"},
-                "config": config,
-                "dataset": {"name": "synthetic", "version": "v1", "split": "test"},
-                "environment": {"host": "local"},
-                "seeds": [1],
-                "primary_metrics": ["integrity"],
-                "artifacts": artifacts,
-                "validation": [{"command": "local-check", "status": "pass"}],
-                "result_summary": "outcome unobserved",
-                "anomalies": [],
-                "protocol_deviations": [],
+                "producer_worker_id": "PRODUCER",
+                "provenance": {
+                    "source": "artifacts/eligible.txt",
+                    "captured_at": "2026-07-22T00:01:00Z",
+                },
+                "verification": {
+                    "status": "verified",
+                    "verifier_worker_id": "VERIFIER",
+                    "verified_at": "2026-07-22T00:02:00Z",
+                },
+                "supports_claims": supports_claims or [],
+                "limitations": ["one bounded run"],
             },
         )
-        return run_path
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_init_uses_explicit_track_and_weight(self) -> None:
         charter = json.loads((self.root / "state" / "charter.json").read_text(encoding="utf-8"))
-        self.assertEqual(charter["schema_version"], "1.2")
+        self.assertEqual(charter["schema_version"], "1.3")
         self.assertEqual(charter["governance_track"], "scout")
         self.assertEqual(charter["operating_weight"], "managed")
         self.assertEqual(charter["program_id"], "P1")
         self.assertEqual(charter["epoch_id"], "P1-E1")
         self.assertTrue((self.root / "state" / "workers.jsonl").is_file())
 
-    def test_confirmatory_init_uses_full_weight(self) -> None:
+    def test_confirmatory_init_uses_managed_weight_without_automatic_program(self) -> None:
         confirmatory_root = Path(self.temp.name) / "confirmatory"
         result = run(
             INIT,
@@ -150,13 +242,160 @@ class StateHelpersTest(unittest.TestCase):
             (confirmatory_root / "state" / "charter.json").read_text(encoding="utf-8")
         )
         self.assertEqual(charter["governance_track"], "confirmatory")
-        self.assertEqual(charter["operating_weight"], "full")
+        self.assertEqual(charter["operating_weight"], "managed")
+        self.assertIsNone(charter["program_id"])
+        self.assertIsNone(charter["epoch_id"])
+        agents = (confirmatory_root / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertNotIn("Program ID", agents)
+        self.assertNotIn("Epoch ID", agents)
 
     def test_ready_managed_scout_passes(self) -> None:
         self.make_ready()
         result = run(VALIDATE, self.root, "--ready")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("operating_weight=managed", result.stdout)
+
+    def test_ready_literature_task_does_not_require_seed_or_utility_metric(self) -> None:
+        literature_root = Path(self.temp.name) / "literature"
+        created = run(
+            INIT,
+            literature_root,
+            "--title",
+            "Source audit",
+            "--objective",
+            "Resolve one source claim",
+            "--task-type",
+            "literature",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        charter_path = literature_root / "state" / "charter.json"
+        charter = json.loads(charter_path.read_text(encoding="utf-8"))
+        charter.update(
+            {
+                "governance_admission_proof": "independent durable closure review",
+                "research_question": "Does the primary source support the scoped claim?",
+                "success_criteria": ["source mapping resolves the claim"],
+                "failure_criteria": ["source mapping refutes or leaves the claim unknown"],
+                "strongest_baseline": "strongest preserving source-based reduction",
+                "claim_boundary": "one source-grounded scoped disposition",
+                "stop_conditions": ["one decision-complete source map"],
+            }
+        )
+        charter["governance"]["promotion_trigger"] = "decision-changing source evidence"
+        charter["protocol"].update(
+            {
+                "frozen": True,
+                "frozen_at": "2026-07-22T00:00:00Z",
+                "data_boundary": "public primary sources only",
+            }
+        )
+        write_json(charter_path, charter)
+        progress_path = literature_root / "state" / "progress.json"
+        progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        progress["status"] = "ready"
+        write_json(progress_path, progress)
+
+        validated = run(VALIDATE, literature_root, "--ready")
+        self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+
+    def test_ready_engineering_profile_is_utility_blind_without_power_fields(self) -> None:
+        engineering_root = Path(self.temp.name) / "engineering"
+        created = run(
+            INIT,
+            engineering_root,
+            "--title",
+            "Carrier profile",
+            "--objective",
+            "Measure runtime and VRAM",
+            "--task-type",
+            "engineering",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+        charter_path = engineering_root / "state" / "charter.json"
+        charter = json.loads(charter_path.read_text(encoding="utf-8"))
+        charter.update(
+            {
+                "governance_admission_proof": "unattended remote profile",
+                "research_question": "Can the real carrier run inside the profile cap?",
+                "success_criteria": ["profile completes inside cap"],
+                "failure_criteria": ["profile exposes a bounded engineering blocker"],
+                "strongest_baseline": "same carrier without the candidate mechanism",
+                "claim_boundary": "runtime, VRAM, stability and throughput only",
+                "stop_conditions": ["one no-utility real-path profile"],
+            }
+        )
+        charter["governance"]["promotion_trigger"] = "valid real-path profile"
+        charter["protocol"].update(
+            {
+                "frozen": True,
+                "frozen_at": "2026-07-22T00:00:00Z",
+                "data_boundary": "no utility or held-out outcomes",
+                "code_version": "abc123",
+                "real_carrier_path": "src/profile.py",
+                "profile_metrics": ["runtime", "peak_vram", "throughput"],
+                "analysis_plan": "report profile facts only",
+                "utility_blind": True,
+            }
+        )
+        write_json(charter_path, charter)
+        progress_path = engineering_root / "state" / "progress.json"
+        progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        progress["status"] = "ready"
+        write_json(progress_path, progress)
+
+        validated = run(VALIDATE, engineering_root, "--ready")
+        self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+
+    def test_confirmatory_experiment_requires_power_and_multiplicity(self) -> None:
+        self.make_ready()
+        charter_path = self.root / "state" / "charter.json"
+        charter = json.loads(charter_path.read_text(encoding="utf-8"))
+        charter["governance_track"] = "confirmatory"
+        write_json(charter_path, charter)
+        progress_path = self.root / "state" / "progress.json"
+        progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        progress["governance_track"] = "confirmatory"
+        write_json(progress_path, progress)
+
+        validated = run(VALIDATE, self.root, "--ready")
+        self.assertEqual(validated.returncode, 1)
+        self.assertIn("protocol.power_plan", validated.stdout)
+        self.assertIn("protocol.multiplicity_plan", validated.stdout)
+
+    def test_program_and_epoch_are_both_optional_but_not_individually_optional(self) -> None:
+        invalid_root = Path(self.temp.name) / "half-program"
+        result = run(
+            INIT,
+            invalid_root,
+            "--title",
+            "Invalid program binding",
+            "--objective",
+            "Reject a partial binding",
+            "--program-id",
+            "P-ONLY",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must be supplied together", result.stderr)
+        self.assertFalse(invalid_root.exists())
+
+    def test_legacy_schema_is_readable_but_never_authoritative(self) -> None:
+        charter_path = self.root / "state" / "charter.json"
+        charter = json.loads(charter_path.read_text(encoding="utf-8"))
+        charter["schema_version"] = "1.2"
+        write_json(charter_path, charter)
+
+        normal = run(VALIDATE, self.root)
+        self.assertEqual(normal.returncode, 1)
+        self.assertIn("older than 1.3", normal.stdout)
+
+        legacy = run(VALIDATE, self.root, "--legacy-read")
+        self.assertEqual(legacy.returncode, 2, legacy.stdout + legacy.stderr)
+        self.assertIn("LEGACY_READ_ONLY", legacy.stdout)
+        self.assertNotIn("PASS:", legacy.stdout)
+
+        incompatible = run(VALIDATE, self.root, "--legacy-read", "--ready")
+        self.assertEqual(incompatible.returncode, 2)
+        self.assertIn("cannot be combined", incompatible.stdout)
 
     def test_d05_declared_config_digest_is_recomputed(self) -> None:
         config_path = self.root / "configs" / "frozen.json"
@@ -267,14 +506,147 @@ class StateHelpersTest(unittest.TestCase):
         self.assertNotEqual(malformed_container.returncode, 0)
         self.assertIn("artifacts must be a non-empty list", malformed_container.stdout)
 
-    def test_invalid_track_weight_pair_fails(self) -> None:
+    def test_failed_or_deviated_run_cannot_back_verified_evidence(self) -> None:
+        run_path = self.write_eligible_run()
+        manifest = json.loads(run_path.read_text(encoding="utf-8"))
+        manifest["validation"] = [{"command": "identity-check", "status": "fail"}]
+        write_json(run_path, manifest)
+        self.append_verified_run_evidence()
+
+        failed = run(VALIDATE, self.root)
+        self.assertEqual(failed.returncode, 1)
+        self.assertIn("references evidence-ineligible run", failed.stdout)
+        self.assertIn("validation command failed", failed.stdout)
+
+        manifest["validation"] = [{"command": "identity-check", "status": "pass"}]
+        manifest["protocol_deviations"] = ["changed seed after outcome access"]
+        write_json(run_path, manifest)
+        deviated = run(VALIDATE, self.root)
+        self.assertEqual(deviated.returncode, 1)
+        self.assertIn("protocol_deviations is non-empty", deviated.stdout)
+
+    def test_ineligible_run_remains_readable_as_unverified_diagnostic_history(self) -> None:
+        run_path = self.write_eligible_run()
+        manifest = json.loads(run_path.read_text(encoding="utf-8"))
+        manifest["validation"] = [{"command": "carrier-check", "status": "fail"}]
+        write_json(run_path, manifest)
+        result = self.append(
+            "evidence",
+            {
+                "evidence_id": "E-DIAG",
+                "kind": "diagnostic",
+                "summary": "engineering failure retained without scientific authority",
+                "run_id": "RUN-D05",
+                "provenance": {
+                    "source": "artifacts/eligible.txt",
+                    "captured_at": "2026-07-22T00:01:00Z",
+                },
+                "verification": {"status": "unverified"},
+                "supports_claims": [],
+                "limitations": ["not scientific evidence"],
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        validated = run(VALIDATE, self.root)
+        self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
+        self.assertIn("evidence-ineligible", validated.stdout)
+
+    def test_charter_to_run_drift_blocks_verified_evidence(self) -> None:
+        run_path = self.write_eligible_run()
+        manifest = json.loads(run_path.read_text(encoding="utf-8"))
+        manifest["question"] = "A post-freeze replacement question"
+        write_json(run_path, manifest)
+        self.append_verified_run_evidence()
+        result = run(VALIDATE, self.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("question differs from the frozen run binding", result.stdout)
+
+    def test_verified_evidence_rejects_self_verification(self) -> None:
+        self.write_eligible_run()
+        self.append_worker("SAME", "THREAD-SAME", "Audit")
+        result = self.append(
+            "evidence",
+            {
+                "evidence_id": "E-SELF",
+                "kind": "experiment",
+                "summary": "invalid self-verification",
+                "run_id": "RUN-D05",
+                "producer_worker_id": "SAME",
+                "provenance": {
+                    "source": "artifacts/eligible.txt",
+                    "captured_at": "2026-07-22T00:01:00Z",
+                },
+                "verification": {
+                    "status": "verified",
+                    "verifier_worker_id": "SAME",
+                    "verified_at": "2026-07-22T00:02:00Z",
+                },
+                "supports_claims": [],
+                "limitations": [],
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        validated = run(VALIDATE, self.root)
+        self.assertEqual(validated.returncode, 1)
+        self.assertIn("distinct registered workers and threads", validated.stdout)
+
+    def test_accepted_claim_requires_three_distinct_registered_owners(self) -> None:
+        self.write_eligible_run()
         charter_path = self.root / "state" / "charter.json"
         charter = json.loads(charter_path.read_text(encoding="utf-8"))
-        charter["operating_weight"] = "full"
+        charter["governance_track"] = "confirmatory"
+        charter["protocol"].update(
+            {
+                "power_plan": {"target_power": 0.8, "seeds": 12},
+                "multiplicity_plan": {"family": "primary", "method": "Holm"},
+                "full_baseline_scope": ["strongest fair baseline"],
+                "external_validity_scope": ["frozen carrier"],
+            }
+        )
         write_json(charter_path, charter)
         progress_path = self.root / "state" / "progress.json"
         progress = json.loads(progress_path.read_text(encoding="utf-8"))
-        progress["operating_weight"] = "full"
+        progress["governance_track"] = "confirmatory"
+        write_json(progress_path, progress)
+
+        self.append_verified_run_evidence(supports_claims=["C-ACCEPT"])
+        self.append_worker("REVIEWER", "THREAD-REVIEWER", "Audit")
+        claim = {
+            "claim_id": "C-ACCEPT",
+            "claim_type": "inference",
+            "text": "bounded confirmatory claim",
+            "status": "accepted",
+            "evidence_ids": ["E-RUN"],
+            "scope": "frozen carrier only",
+            "limitations": ["no broader external validity"],
+            "adjudication": {
+                "decision": "accepted",
+                "reviewer_role": "Audit",
+                "reviewer_worker_id": "REVIEWER",
+                "independent": True,
+                "rationale": "registered independent review",
+                "decided_at": "2026-07-22T00:03:00Z",
+            },
+        }
+        self.assertEqual(self.append("claims", claim).returncode, 0)
+        accepted = run(VALIDATE, self.root, "--ready")
+        self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
+
+        claims_path = self.root / "state" / "claims.jsonl"
+        claim["adjudication"]["reviewer_worker_id"] = "VERIFIER"
+        claims_path.write_text(json.dumps(claim) + "\n", encoding="utf-8")
+        rejected = run(VALIDATE, self.root)
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("reviewer must be distinct", rejected.stdout)
+
+    def test_invalid_track_weight_pair_fails(self) -> None:
+        charter_path = self.root / "state" / "charter.json"
+        charter = json.loads(charter_path.read_text(encoding="utf-8"))
+        charter["operating_weight"] = "lite"
+        write_json(charter_path, charter)
+        progress_path = self.root / "state" / "progress.json"
+        progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        progress["operating_weight"] = "lite"
         write_json(progress_path, progress)
         result = run(VALIDATE, self.root)
         self.assertNotEqual(result.returncode, 0)
@@ -344,7 +716,7 @@ class StateHelpersTest(unittest.TestCase):
             "terminal_event_id": "TERM1",
             "reclaim_deadline": None,
             "watchdog_id": "WD1",
-            "watchdog_state": "active",
+            "watchdog_state": "paused",
             "artifact_paths": ["artifacts/result.json"],
             "recorded_at": "2026-07-22T00:00:00Z",
         }
@@ -357,7 +729,6 @@ class StateHelpersTest(unittest.TestCase):
                 "transaction_id": "CTX1",
                 "disposition": "hold after bounded result",
                 "next_action": "explicit_hold",
-                "worker_notified": True,
                 "decided_at": "2026-07-22T00:01:00Z",
             },
             "recorded_at": "2026-07-22T00:01:00Z",
@@ -399,7 +770,6 @@ class StateHelpersTest(unittest.TestCase):
                 "transaction_id": "CTX-ATOMIC",
                 "disposition": "scoped close",
                 "next_action": "scoped_close",
-                "worker_notified": True,
                 "decided_at": "2026-07-22T00:00:00Z",
             },
             "artifact_paths": ["artifacts/result.json"],
@@ -409,7 +779,7 @@ class StateHelpersTest(unittest.TestCase):
         result = run(VALIDATE, self.root)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_latest_delivered_terminal_requires_acknowledgement(self) -> None:
+    def test_latest_delivered_terminal_releases_without_acknowledgement(self) -> None:
         delivered = {
             "worker_record_id": "WR-DELIVERED",
             "worker_id": "B1",
@@ -423,14 +793,13 @@ class StateHelpersTest(unittest.TestCase):
             "terminal_event_id": "TERM-DELIVERED",
             "reclaim_deadline": None,
             "watchdog_id": "WD1",
-            "watchdog_state": "active",
+            "watchdog_state": "paused",
             "artifact_paths": ["artifacts/result.json"],
             "recorded_at": "2026-07-22T00:00:00Z",
         }
         self.assertEqual(self.append("workers", delivered).returncode, 0)
         result = run(VALIDATE, self.root)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("unacknowledged terminal callback", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_dispatch_next_requires_registered_active_transition(self) -> None:
         acknowledgement = {
@@ -453,7 +822,6 @@ class StateHelpersTest(unittest.TestCase):
                 "transaction_id": "CTX-NEXT",
                 "disposition": "continue bounded preflight",
                 "next_action": "dispatch_next",
-                "worker_notified": True,
                 "decided_at": "2026-07-22T00:00:00Z",
                 "next_worker_record_id": "WR-NEXT",
                 "next_contract_revision": "cycle0b-v0",

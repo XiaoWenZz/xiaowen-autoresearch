@@ -31,8 +31,8 @@ VERIFICATION_STATUSES = {"unverified", "partial", "verified"}
 ITERATION_OUTCOMES = {"progress", "negative_result", "replication", "diagnostic", "stale", "blocked"}
 RUN_STATUSES = {"planned", "submitted", "running", "completed", "failed", "cancelled"}
 GOVERNANCE_TRACKS = {"scout", "confirmatory"}
-OPERATING_WEIGHTS = {"lite", "managed", "full"}
-VALID_DURABLE_GOVERNANCE_PAIRS = {("scout", "managed"), ("confirmatory", "full")}
+OPERATING_WEIGHTS = {"lite", "managed"}
+VALID_DURABLE_GOVERNANCE_PAIRS = {("scout", "managed"), ("confirmatory", "managed")}
 WORKER_STATUSES = {"dispatched", "running", "needs_attention", "completed", "failed", "cancelled", "reclaimed"}
 TERMINAL_WORKER_STATUSES = {"completed", "failed", "cancelled", "reclaimed"}
 CALLBACK_STATES = {"pending", "delivered", "acknowledged", "not_available"}
@@ -217,13 +217,13 @@ def resolve_operating_weight(
     charter: dict[str, Any], track: str, report: Report
 ) -> tuple[str, bool]:
     if "operating_weight" not in charter:
-        inferred = "managed" if track == "scout" else "full"
+        inferred = "managed"
         report.warn(f"legacy charter has no operating_weight; inferring {inferred}")
         return inferred, False
     weight = charter.get("operating_weight")
     if weight not in OPERATING_WEIGHTS:
         report.error(f"charter has invalid operating_weight: {weight}")
-        return "full", True
+        return "managed", True
     if (track, str(weight)) not in VALID_DURABLE_GOVERNANCE_PAIRS:
         report.error(f"invalid durable governance_track/operating_weight pair: {track}/{weight}")
     return str(weight), True
@@ -256,6 +256,7 @@ def validate_charter(
     )
     track, explicit_track = resolve_governance_track(charter, report)
     weight, explicit_weight = resolve_operating_weight(charter, track, report)
+    schema_13 = schema_at_least(charter.get("schema_version"), 1, 3)
     if schema_at_least(charter.get("schema_version"), 1, 1):
         require_keys(
             charter,
@@ -263,9 +264,18 @@ def validate_charter(
             "charter schema 1.1",
             report,
         )
-        for key in ("program_id", "epoch_id"):
-            if not isinstance(charter.get(key), str) or not charter.get(key):
-                report.error(f"charter schema 1.1 requires non-empty {key}")
+        program_id = charter.get("program_id")
+        epoch_id = charter.get("epoch_id")
+        if schema_13:
+            if (program_id is None) != (epoch_id is None):
+                report.error("charter schema 1.3 requires program_id and epoch_id together or both null")
+            for key, value in (("program_id", program_id), ("epoch_id", epoch_id)):
+                if value is not None and (not isinstance(value, str) or not value):
+                    report.error(f"charter schema 1.3 {key} must be null or a non-empty string")
+        else:
+            for key in ("program_id", "epoch_id"):
+                if not isinstance(charter.get(key), str) or not charter.get(key):
+                    report.error(f"charter schema 1.1 requires non-empty {key}")
     budget = charter.get("budget", {})
     if not isinstance(budget, dict) or not isinstance(budget.get("max_iterations"), int) or budget.get("max_iterations", 0) < 1:
         report.error("charter budget.max_iterations must be a positive integer")
@@ -273,7 +283,7 @@ def validate_charter(
     if not isinstance(authorization, dict) or not authorization.get("approval_required"):
         report.error("charter authorization.approval_required must be non-empty")
     if ready:
-        for key in ("research_question", "success_criteria", "failure_criteria", "primary_metrics", "stop_conditions"):
+        for key in ("research_question", "success_criteria", "failure_criteria", "stop_conditions"):
             if not charter.get(key):
                 report.error(f"ready charter requires non-empty {key}")
         if explicit_track:
@@ -294,24 +304,89 @@ def validate_charter(
         protocol = charter.get("protocol", {})
         if not isinstance(protocol, dict) or protocol.get("frozen") is not True or not parse_time(protocol.get("frozen_at")):
             report.error("ready charter requires protocol.frozen=true and a valid frozen_at")
-        if charter.get("task_type") in {"experiment", "mixed"}:
-            for key in ("code_version", "data_version", "data_split", "seed_policy", "analysis_plan"):
-                if not protocol.get(key):
-                    report.error(f"ready experimental charter requires protocol.{key}")
         if explicit_track and not protocol.get("data_boundary"):
             report.error("ready charter requires protocol.data_boundary")
+        task_type = charter.get("task_type")
+        if schema_13 and task_type == "engineering":
+            for key in ("code_version", "real_carrier_path", "profile_metrics", "analysis_plan"):
+                if not protocol.get(key):
+                    report.error(f"ready engineering profile requires protocol.{key}")
+            if protocol.get("utility_blind") is not True:
+                report.error("ready engineering profile requires protocol.utility_blind=true")
+        elif task_type in {"experiment", "mixed"}:
+            if not charter.get("primary_metrics"):
+                report.error("ready experimental charter requires non-empty primary_metrics")
+            required = [
+                "code_version",
+                "data_version",
+                "data_split",
+                "seed_policy",
+                "analysis_plan",
+            ]
+            if schema_13:
+                required.extend(("dataset_name", "run_bindings"))
+            for key in required:
+                value = protocol.get(key)
+                if key == "run_bindings":
+                    if not isinstance(value, dict):
+                        report.error("ready experimental charter requires protocol.run_bindings object")
+                elif not value:
+                    report.error(f"ready experimental charter requires protocol.{key}")
+            if schema_13 and track == "scout":
+                design = protocol.get("scout_design")
+                if not isinstance(design, dict):
+                    report.error("ready Scout experiment requires protocol.scout_design")
+                else:
+                    arms = design.get("arms")
+                    if not isinstance(arms, list) or not 2 <= len(arms) <= 3:
+                        report.error("ready first Scout requires 2 or 3 protocol.scout_design.arms")
+                    if design.get("paired_bundles") != 6:
+                        report.error("ready first Scout requires protocol.scout_design.paired_bundles=6")
+                    for key in (
+                        "mpe",
+                        "guard_comparator",
+                        "outcome_action_table",
+                        "compute_cap",
+                    ):
+                        if not design.get(key):
+                            report.error(f"ready first Scout requires protocol.scout_design.{key}")
+            if schema_13 and track == "confirmatory":
+                for key in (
+                    "power_plan",
+                    "multiplicity_plan",
+                    "full_baseline_scope",
+                    "external_validity_scope",
+                ):
+                    if not protocol.get(key):
+                        report.error(f"ready Confirmatory charter requires protocol.{key}")
     return track, explicit_track, weight, explicit_weight
 
 
-def validate_run(root: Path, path: Path, run: dict[str, Any], task_id: str, report: Report) -> None:
+def validate_run(
+    root: Path,
+    path: Path,
+    run: dict[str, Any],
+    charter: dict[str, Any],
+    task_id: str,
+    report: Report,
+) -> tuple[bool, list[str]]:
     context = f"run {path.name}"
+    ineligible: list[str] = []
+
+    def mark_ineligible(reason: str) -> None:
+        if reason not in ineligible:
+            ineligible.append(reason)
+
     require_keys(run, ("schema_version", "run_id", "task_id", "status", "question", "started_at"), context, report)
     if run.get("task_id") != task_id:
         report.error(f"{context} task_id does not match charter")
+        mark_ineligible("task_id differs from the frozen charter")
     if run.get("status") not in RUN_STATUSES:
         report.error(f"{context} has invalid status: {run.get('status')}")
+        mark_ineligible("run status is invalid")
     if not parse_time(run.get("started_at")):
         report.error(f"{context} requires valid started_at")
+        mark_ineligible("started_at is invalid")
     completed = run.get("status") == "completed"
 
     # Digest declarations bind bytes at every lifecycle state. A running run
@@ -380,7 +455,9 @@ def validate_run(root: Path, path: Path, run: dict[str, Any], task_id: str, repo
             report.error(f"{context} references missing artifact: {artifact}")
 
     if not completed:
-        return
+        mark_ineligible(f"run status is {run.get('status')}, not completed")
+        report.warn(f"{context} is evidence-ineligible: {'; '.join(ineligible)}")
+        return False, ineligible
     required_completed = (
         "ended_at",
         "code_version",
@@ -416,18 +493,95 @@ def validate_run(root: Path, path: Path, run: dict[str, Any], task_id: str, repo
         for item in validation:
             if not isinstance(item, dict) or not item.get("command") or item.get("status") not in {"pass", "fail"}:
                 report.error(f"{context} validation entries require command and pass/fail status")
+                mark_ineligible("validation record is malformed")
+            elif item.get("status") == "fail":
+                mark_ineligible("at least one recorded validation command failed")
+    else:
+        mark_ineligible("validation is not a list")
+
+    deviations = run.get("protocol_deviations")
+    if not isinstance(deviations, list):
+        report.error(f"{context} protocol_deviations must be a list")
+        mark_ineligible("protocol_deviations is malformed")
+    elif deviations:
+        mark_ineligible("protocol_deviations is non-empty")
+
+    if schema_at_least(charter.get("schema_version"), 1, 3):
+        protocol = charter.get("protocol")
+        bindings = protocol.get("run_bindings") if isinstance(protocol, dict) else None
+        run_id = run.get("run_id")
+        binding = bindings.get(run_id) if isinstance(bindings, dict) and isinstance(run_id, str) else None
+        if not isinstance(binding, dict):
+            mark_ineligible("run_id has no prospectively frozen protocol.run_bindings entry")
+        else:
+            required_binding_keys = (
+                "question",
+                "code_version",
+                "config_sha256",
+                "dataset",
+                "seeds",
+                "primary_metrics",
+            )
+            missing = [key for key in required_binding_keys if key not in binding]
+            if missing:
+                mark_ineligible(
+                    "frozen run binding is incomplete: " + ", ".join(sorted(missing))
+                )
+            if binding.get("question") != run.get("question"):
+                mark_ineligible("question differs from the frozen run binding")
+            expected_code = binding.get("code_version")
+            actual_code = run.get("code_version")
+            if expected_code != actual_code:
+                mark_ineligible("code_version differs from the frozen run binding")
+            expected_config_sha = binding.get("config_sha256")
+            actual_config_sha = (
+                run.get("config", {}).get("sha256")
+                if isinstance(run.get("config"), dict)
+                else None
+            )
+            if not isinstance(expected_config_sha, str) or not SHA256_PATTERN.fullmatch(
+                expected_config_sha
+            ):
+                mark_ineligible("frozen config_sha256 is not canonical 64-hex")
+            elif not isinstance(actual_config_sha, str) or (
+                expected_config_sha.lower() != actual_config_sha.lower()
+            ):
+                mark_ineligible("config sha256 differs from the frozen run binding")
+            for key in ("dataset", "seeds", "primary_metrics"):
+                if binding.get(key) != run.get(key):
+                    mark_ineligible(f"{key} differs from the frozen run binding")
+
+        frozen_at = (
+            parse_time(protocol.get("frozen_at")) if isinstance(protocol, dict) else None
+        )
+        started_at = parse_time(run.get("started_at"))
+        if frozen_at is None or started_at is None or frozen_at > started_at:
+            mark_ineligible("protocol was not frozen before the run started")
+
+    if ineligible:
+        report.warn(f"{context} is evidence-ineligible: {'; '.join(ineligible)}")
+    return not ineligible, ineligible
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task_dir", type=Path)
     parser.add_argument("--ready", action="store_true", help="enforce ready-to-run charter gates")
+    parser.add_argument(
+        "--legacy-read",
+        action="store_true",
+        help="inspect a pre-1.3 task without granting readiness, evidence, or claim authority",
+    )
     parser.add_argument("--max-heartbeat-age-minutes", type=int, default=180)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.ready and args.legacy_read:
+        print("ERROR: --legacy-read cannot be combined with --ready")
+        print("FAIL: legacy state cannot grant readiness or evidence authority")
+        return 2
     root = args.task_dir.expanduser().resolve()
     report = Report()
     required_files = (
@@ -457,6 +611,18 @@ def main() -> int:
     charter = load_json(root / "state/charter.json", report)
     progress = load_json(root / "state/progress.json", report)
     heartbeat = load_json(root / "state/heartbeat.json", report)
+    legacy_schema = not schema_at_least(charter.get("schema_version"), 1, 3)
+    if legacy_schema:
+        if args.legacy_read:
+            report.warn(
+                "legacy task is being inspected read-only; this result grants no readiness, "
+                "evidence-eligibility, or claim authority"
+            )
+        else:
+            report.error(
+                "task schema is older than 1.3; use --legacy-read for non-authoritative "
+                "inspection or migrate prospectively before new evidence"
+            )
     governance_track, explicit_track, operating_weight, explicit_weight = validate_charter(
         charter, args.ready, report
     )
@@ -561,10 +727,12 @@ def main() -> int:
             report.error(f"terminal worker record {worker_record_id} cannot leave callback_state pending")
         if (
             record.get("status") in TERMINAL_WORKER_STATUSES
-            and callback_state == "acknowledged"
+            and callback_state in {"delivered", "acknowledged"}
             and watchdog_state not in {"paused", "not_required"}
         ):
-            report.error(f"acknowledged terminal worker record {worker_record_id} must pause or omit its watchdog")
+            report.error(
+                f"delivered terminal worker record {worker_record_id} must pause or omit its watchdog"
+            )
         if (
             schema_at_least(charter.get("schema_version"), 1, 2)
             and record.get("status") in TERMINAL_WORKER_STATUSES
@@ -582,7 +750,6 @@ def main() -> int:
                         "transaction_id",
                         "disposition",
                         "next_action",
-                        "worker_notified",
                         "decided_at",
                     ),
                     f"worker record {worker_record_id} controller_action",
@@ -608,10 +775,6 @@ def main() -> int:
                 if next_action not in CONTROLLER_NEXT_ACTIONS:
                     report.error(
                         f"worker record {worker_record_id} has invalid controller next_action: {next_action}"
-                    )
-                if action.get("worker_notified") is not True:
-                    report.error(
-                        f"worker record {worker_record_id} must notify the worker before acknowledgement closes"
                     )
                 if not parse_time(action.get("decided_at")):
                     report.error(
@@ -653,14 +816,6 @@ def main() -> int:
         latest_worker_records[worker_id] = (worker_record_id, record)
 
     if schema_at_least(charter.get("schema_version"), 1, 2):
-        for worker_id, (worker_record_id, record) in latest_worker_records.items():
-            if (
-                record.get("status") in TERMINAL_WORKER_STATUSES
-                and record.get("callback_state") == "delivered"
-            ):
-                report.error(
-                    f"worker {worker_id} has an unacknowledged terminal callback at {worker_record_id}"
-                )
         for source_id, target_id, next_revision, decided_at in pending_dispatch_links:
             target = worker_record_index.get(target_id)
             if target is None:
@@ -695,21 +850,39 @@ def main() -> int:
             report.error(f"direction {direction_id} replication requires replicates_direction_id")
 
     run_index: dict[str, dict[str, Any]] = {}
+    run_eligibility: dict[str, tuple[bool, list[str]]] = {}
     for path in sorted((root / "runs").glob("*.json")):
         run = load_json(path, report)
-        validate_run(root, path, run, task_id, report)
+        eligible, reasons = validate_run(root, path, run, charter, task_id, report)
         run_id = run.get("run_id")
         if isinstance(run_id, str) and run_id:
             if run_id in run_index:
                 report.error(f"duplicate run_id: {run_id}")
             run_index[run_id] = run
+            run_eligibility[run_id] = (eligible, reasons)
+
+    schema_13 = schema_at_least(charter.get("schema_version"), 1, 3)
+    evidence_identities: dict[str, dict[str, Any]] = {}
+
+    def resolve_worker(worker_id: Any, context: str) -> dict[str, Any] | None:
+        if not isinstance(worker_id, str) or not worker_id:
+            report.error(f"{context} requires a non-empty registered worker_id")
+            return None
+        latest = latest_worker_records.get(worker_id)
+        if latest is None:
+            report.error(f"{context} references unknown worker_id {worker_id}")
+            return None
+        return latest[1]
 
     for evidence_id, record in evidence_index.items():
         require_keys(record, ("kind", "summary", "provenance", "verification", "supports_claims", "limitations"), f"evidence {evidence_id}", report)
         if record.get("kind") not in EVIDENCE_KINDS:
             report.error(f"evidence {evidence_id} has invalid kind: {record.get('kind')}")
         provenance = record.get("provenance", {})
-        if not isinstance(provenance, dict) or not provenance.get("source") or not parse_time(provenance.get("captured_at")):
+        captured_at = (
+            parse_time(provenance.get("captured_at")) if isinstance(provenance, dict) else None
+        )
+        if not isinstance(provenance, dict) or not provenance.get("source") or captured_at is None:
             report.error(f"evidence {evidence_id} requires provenance source and captured_at")
         elif provenance.get("artifact_sha256") is not None:
             validate_declared_local_sha256(
@@ -720,14 +893,71 @@ def main() -> int:
                 report,
             )
         verification = record.get("verification", {})
-        if not isinstance(verification, dict) or verification.get("status") not in VERIFICATION_STATUSES:
+        verification_status = (
+            verification.get("status") if isinstance(verification, dict) else None
+        )
+        if verification_status not in VERIFICATION_STATUSES:
             report.error(f"evidence {evidence_id} has invalid verification status")
+
+        run_id = record.get("run_id")
         if record.get("kind") in {"experiment", "negative_result"}:
-            run_id = record.get("run_id")
             if not run_id:
                 report.error(f"evidence {evidence_id} requires run_id")
             elif run_id not in run_index:
                 report.error(f"evidence {evidence_id} references missing run {run_id}")
+            elif verification_status == "verified":
+                eligible, reasons = run_eligibility.get(str(run_id), (False, ["eligibility unknown"]))
+                if not eligible:
+                    report.error(
+                        f"verified evidence {evidence_id} references evidence-ineligible run "
+                        f"{run_id}: {'; '.join(reasons)}"
+                    )
+
+        if schema_13 and verification_status == "verified":
+            producer_worker_id = record.get("producer_worker_id")
+            verifier_worker_id = (
+                verification.get("verifier_worker_id")
+                if isinstance(verification, dict)
+                else None
+            )
+            producer = resolve_worker(
+                producer_worker_id, f"verified evidence {evidence_id} producer"
+            )
+            verifier = resolve_worker(
+                verifier_worker_id, f"verified evidence {evidence_id} verifier"
+            )
+            verified_at = (
+                parse_time(verification.get("verified_at"))
+                if isinstance(verification, dict)
+                else None
+            )
+            if verified_at is None:
+                report.error(f"verified evidence {evidence_id} requires verification.verified_at")
+            elif captured_at is not None and verified_at < captured_at:
+                report.error(f"verified evidence {evidence_id} was verified before capture")
+            if verifier is not None and str(verifier.get("role", "")).casefold() != "audit":
+                report.error(
+                    f"verified evidence {evidence_id} verifier must have canonical Audit role"
+                )
+            if (
+                producer is not None
+                and verifier is not None
+                and (
+                    producer_worker_id == verifier_worker_id
+                    or producer.get("thread_id") == verifier.get("thread_id")
+                )
+            ):
+                report.error(
+                    f"verified evidence {evidence_id} producer and Audit verifier must use "
+                    "distinct registered workers and threads"
+                )
+            evidence_identities[evidence_id] = {
+                "producer_worker_id": producer_worker_id,
+                "producer_thread_id": producer.get("thread_id") if producer else None,
+                "verifier_worker_id": verifier_worker_id,
+                "verifier_thread_id": verifier.get("thread_id") if verifier else None,
+                "verified_at": verified_at,
+            }
 
     for claim in streams["claims"]:
         claim_id = claim.get("claim_id", "<unknown>")
@@ -747,6 +977,16 @@ def main() -> int:
         for evidence_id in evidence_ids:
             if evidence_id not in evidence_index:
                 report.error(f"claim {claim_id} references missing evidence {evidence_id}")
+            elif claim_id not in evidence_index[evidence_id].get("supports_claims", []):
+                report.error(f"claim {claim_id} and evidence {evidence_id} are not linked bidirectionally")
+        if claim.get("status") in {"supported", "accepted"}:
+            for evidence_id in evidence_ids:
+                status = evidence_index.get(evidence_id, {}).get("verification", {}).get("status")
+                if status != "verified":
+                    report.error(
+                        f"claim {claim_id} status {claim.get('status')} uses non-verified evidence "
+                        f"{evidence_id}"
+                    )
         if claim.get("status") == "accepted":
             adjudication = claim.get("adjudication")
             if not isinstance(adjudication, dict):
@@ -757,10 +997,47 @@ def main() -> int:
                     report.error(f"accepted claim {claim_id} has invalid adjudication decision/time")
                 if adjudication.get("independent") is not True:
                     report.error(f"accepted claim {claim_id} requires independent adjudication")
-            for evidence_id in evidence_ids:
-                status = evidence_index.get(evidence_id, {}).get("verification", {}).get("status")
-                if status != "verified":
-                    report.error(f"accepted claim {claim_id} uses non-verified evidence {evidence_id}")
+                if schema_13:
+                    reviewer_worker_id = adjudication.get("reviewer_worker_id")
+                    reviewer = resolve_worker(
+                        reviewer_worker_id, f"accepted claim {claim_id} reviewer"
+                    )
+                    decided_at = parse_time(adjudication.get("decided_at"))
+                    if str(adjudication.get("reviewer_role", "")).casefold() != "audit":
+                        report.error(
+                            f"accepted claim {claim_id} reviewer_role must be canonical Audit"
+                        )
+                    if reviewer is not None and str(reviewer.get("role", "")).casefold() != "audit":
+                        report.error(
+                            f"accepted claim {claim_id} reviewer must have canonical Audit role"
+                        )
+                    for evidence_id in evidence_ids:
+                        identities = evidence_identities.get(evidence_id, {})
+                        other_workers = {
+                            identities.get("producer_worker_id"),
+                            identities.get("verifier_worker_id"),
+                        }
+                        other_threads = {
+                            identities.get("producer_thread_id"),
+                            identities.get("verifier_thread_id"),
+                        }
+                        if reviewer_worker_id in other_workers or (
+                            reviewer is not None and reviewer.get("thread_id") in other_threads
+                        ):
+                            report.error(
+                                f"accepted claim {claim_id} reviewer must be distinct from "
+                                f"evidence {evidence_id} producer and verifier workers/threads"
+                            )
+                        verified_at = identities.get("verified_at")
+                        if (
+                            isinstance(verified_at, datetime)
+                            and decided_at is not None
+                            and decided_at < verified_at
+                        ):
+                            report.error(
+                                f"accepted claim {claim_id} was adjudicated before evidence "
+                                f"{evidence_id} verification"
+                            )
 
     for evidence_id, record in evidence_index.items():
         supports_claims = record.get("supports_claims", [])
@@ -827,6 +1104,12 @@ def main() -> int:
     if report.errors:
         print(f"FAIL: {len(report.errors)} error(s), {len(report.warnings)} warning(s)")
         return 1
+    if args.legacy_read:
+        print(
+            "LEGACY_READ_ONLY: structural inspection completed; no readiness, "
+            "evidence-eligibility, or claim authority was granted"
+        )
+        return 2
     print(
         f"PASS: governance_track={governance_track}, operating_weight={operating_weight}, "
         f"0 errors, {len(report.warnings)} warning(s)"

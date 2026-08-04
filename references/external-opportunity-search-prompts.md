@@ -64,8 +64,8 @@ Before assembly, resolve:
 - the authoritative domain profile or explicitly state that none exists;
 - the evidence-freeze date and primary-source boundary;
 - the user scope and hard exclusions;
-- the previous Program state, consumed budget, and whether this request opens a
-  substantively new Program or remains inside an active Epoch;
+- the existing Program state and consumed budget, or `NONE`; the external
+  review never opens a Program/Epoch;
 - the exact prior fingerprints that must not be revived;
 - the intended artifact family and venue target, if any.
 
@@ -101,9 +101,10 @@ placement and the publication-grade novelty/irreducibility gate after a
 material signal. A review may expose missing neighbors or reductions, but it
 cannot certify novelty or acceptance probability.
 
-Count the review against the active Program's external-review and attention
-budget. A reviewer may recommend `probe`, `hold`, or `drop`; it cannot replenish
-budgets or authorize code, data access, compute, or public-test use.
+Count the review against an existing Program's budget or the current Lite
+task's one-shot advisory cap. A reviewer may recommend `probe`, `hold`, or
+`drop`; it cannot create a Program, replenish budgets, or authorize code, data,
+compute, or public-test access.
 
 ## Calibrate admission before search
 

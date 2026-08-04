@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 
 
 def utc_now() -> str:
@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
         "--governance-track",
         choices=("scout", "confirmatory"),
         default="scout",
-        help="initialize durable Managed Scout state or full Confirmatory state",
+        help="initialize durable Managed Scout or Managed Confirmatory state",
     )
     parser.add_argument("--program-id")
     parser.add_argument("--epoch-id")
@@ -72,6 +72,9 @@ def main() -> int:
     if args.max_runtime_hours is not None and args.max_runtime_hours <= 0:
         print("error: --max-runtime-hours must be positive", file=sys.stderr)
         return 2
+    if (args.program_id is None) != (args.epoch_id is None):
+        print("error: --program-id and --epoch-id must be supplied together", file=sys.stderr)
+        return 2
 
     root = args.task_dir.expanduser().resolve()
     root_is_nonempty = root.exists() and root.is_dir() and any(root.iterdir())
@@ -99,18 +102,20 @@ def main() -> int:
 
     created_at = utc_now()
     task_id = f"{slugify(args.title)}-{uuid.uuid4().hex[:8]}"
-    program_id = args.program_id or task_id
-    epoch_id = args.epoch_id or f"{program_id}-E1"
-    operating_weight = "managed" if args.governance_track == "scout" else "full"
+    program_id = args.program_id
+    epoch_id = args.epoch_id
+    operating_weight = "managed"
+
+    program_lines = ""
+    if program_id is not None and epoch_id is not None:
+        program_lines = f"- Program ID: `{program_id}`\n- Epoch ID: `{epoch_id}`\n"
 
     agents_text = f"""# Research Task Rules
 
 ## Identity
 
 - Task ID: `{task_id}`
-- Program ID: `{program_id}`
-- Epoch ID: `{epoch_id}`
-- Task type: `{args.task_type}`
+{program_lines}- Task type: `{args.task_type}`
 - Governance track: `{args.governance_track}`
 - Operating weight: `{operating_weight}`
 - Owner: `{args.owner}`
@@ -163,11 +168,29 @@ def main() -> int:
             "frozen": False,
             "frozen_at": None,
             "code_version": "",
+            "dataset_name": "",
             "data_version": "",
             "data_split": "",
             "data_boundary": "",
             "seed_policy": "",
             "analysis_plan": "",
+            "real_carrier_path": "",
+            "profile_metrics": [],
+            "utility_blind": None,
+            "scout_design": {
+                "arms": [],
+                "paired_bundles": None,
+                "mpe": None,
+                "guard_comparator": "",
+                "mechanism_deletion": "",
+                "outcome_action_table": {},
+                "compute_cap": {},
+            },
+            "run_bindings": {},
+            "power_plan": None,
+            "multiplicity_plan": None,
+            "full_baseline_scope": [],
+            "external_validity_scope": [],
         },
         "budget": {
             "max_iterations": args.max_iterations,

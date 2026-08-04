@@ -1,33 +1,28 @@
 ---
 name: xiaowen-autoresearch
-description: "Control bounded research from opportunity discovery through problem Scouts, contribution selection, confirmation, adjudication, recovery, and handoff. Use for research questions, literature or claim audits, scientific contract design, multi-stage experiment programs, protected evidence, remote/GPU work, external advisory, stalled routes, and decision-critical interpretation. Do not invoke this skill in a pure implementation or execution worker after one frozen contract has already fixed the question, edit surface, commands, evidence boundary, budget, terminal, and callback; that worker reads only applicable AGENTS.md files, the frozen contract, target source, and necessary tests."
+description: "Control bounded research discovery, Scouts, confirmation, adjudication, recovery, and handoff. Use for decision-critical sources, contracts, protected evidence, remote/GPU work, advisory, or interpretation. Do not invoke for a simple concept explanation or in a pure implementation/execution worker after the frozen contract fixes the question, edit surface, commands, evidence boundary, budget, terminal, and callback."
 ---
 
 # Xiaowen AutoResearch
 
-Optimize decision-relevant evidence per unit cost. Use this skill as the
-research control plane, not as default runtime machinery for every task that
-contains the word “research.”
+Optimize decision-relevant evidence per unit cost. This is a control plane, not
+default machinery for every research-labelled task.
 
 ## 1. Resolve authority and side effects
 
-Before acting:
-
-1. Read the complete applicable `AGENTS.md` chain, starting from its router and
-   following only the domain and child rules that apply to the target. Read a
-   bound contract or manifest only when the action uses it. This skill cannot
-   override platform, system, developer, or `AGENTS.md` authority.
+1. Read the complete applicable `AGENTS.md` chain and any contract/manifest the
+   action uses. This skill cannot override platform, system, developer, or
+   `AGENTS.md` authority.
 2. State repository, branch, remote, environment, scope, and owner before a
    write, launch, remote diagnosis, or protected-evidence action. Preserve
    unrelated dirty work.
-3. Discover matching sessions only before creating or continuing a persistent
-   worker, dispatching remote/unattended work, or mutating shared research
-   state. A user-visible local single-owner task is already its owner; do not
-   create a registry, chronology, lease, or duplicate task for non-duplication.
+3. Discover matching sessions only for a persistent worker, remote/unattended
+   dispatch, or shared-state mutation. A local single-owner task is already its
+   owner; create no registry, chronology, lease, or duplicate task.
 4. Classify the action as routine/reversible, prospectively authorized bounded
-   execution, or approval-required. Paid, public, production, destructive,
-   protected-evidence, budget-changing, and claim-changing actions require
-   explicit authority.
+   execution, or approval-required. Paid-service use, publication/public-facing
+   communication, production, destructive, protected-evidence, budget-changing,
+   and claim-changing actions require explicit authority.
 
 Stop on a decision-critical authority conflict.
 
@@ -35,23 +30,22 @@ Stop on a decision-critical authority conflict.
 
 Default to `operating_weight=lite`. Classify by side effects and coordination,
 not by the labels “research,” “audit,” “Scout,” or “multi-step.”
-`Lite` removes coordination machinery only; it does not waive the scientific
-hard controls in section 6. Lite covers one local owner and one bounded route
-using existing records. A user-visible task is the task capsule and delivery
-surface. Lite creates:
+`Lite` removes coordination machinery, not section 6 hard controls. It covers
+one local owner and bounded route. A user-visible task is the task capsule and
+delivery surface. Lite creates:
 
-- zero Program/Epoch, dispatch, lease, activation, lane, ledger, registry, or
-  chronology records;
+- no new Program/Epoch record for one-off Lite work; reuse the existing compact
+  planning record when a repeated Program already exists, and create no
+  dispatch, lease, activation, lane, ledger, registry, or chronology record;
 - zero watchdog, heartbeat, continuity automation, callback sink, or blocking
   callback ACK roundtrip;
 - no duplicate task capsule; and
 - at most one terminal only when durable evidence is genuinely needed,
   otherwise only the user-visible final response.
 
-A local source/literature/code/workflow audit, a local single-session Scout,
-and one one-shot Pro advisory remain Lite. Do not generate per-file sidecars or
-apply `0444` merely because a task is research-related; use immutable evidence
-handling only when the artifact enters a real scientific evidence chain.
+Local source/literature/code/workflow audits, one local Scout, and one-shot Pro
+advisory remain Lite. Sidecars or `0444` apply only to real evidence-chain
+artifacts, never merely to research-labelled work.
 
 Escalate to Managed only when at least one trigger is real:
 
@@ -59,16 +53,16 @@ Escalate to Managed only when at least one trigger is real:
 - protected outcomes will be accessed;
 - multiple write-capable owners must coordinate;
 - a shared global research state, queue, or write lease must change;
-- a paid, public, production, irreversible, or third-party action is required;
+- a paid-service, publication/public-facing, production, irreversible, or
+  third-party mutation is required;
   or
 - a Confirmatory scientific decision requires independent ownership.
 
-Record the trigger once, then load Managed references. Remove Managed runtime
-state when the trigger closes. Do not retrofit Managed ceremony onto completed Lite work.
+Record the trigger once, load Managed references, and remove its runtime state
+when the trigger closes. Never retrofit Managed ceremony onto Lite work.
 
-Use `governance_track=scout` for reversible problem-existence evidence and
-`governance_track=confirmatory` for public-test access, publication-facing
-claims, or expensive/irreversible evidence.
+Use track `scout` for reversible problem evidence; use `confirmatory` for
+public-test, publication-facing, expensive, or irreversible evidence.
 
 ## 3. Select one route and load one layer
 
@@ -78,10 +72,10 @@ when its named trigger exists.
 | Route | Required references | Conditional trigger |
 | --- | --- | --- |
 | Local Lite workflow/code audit | none | [research-integrity.md](references/research-integrity.md) only when the task interprets literature, evidence, or scientific claims |
-| Opportunity Search | [problem-space.md](references/problem-space.md), [portfolio-search.md](references/portfolio-search.md), [research-integrity.md](references/research-integrity.md) | [research-programs.md](references/research-programs.md) only for a repeated/multi-candidate Program; [external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) only to construct that prompt |
+| Opportunity Search | [problem-space.md](references/problem-space.md), [research-integrity.md](references/research-integrity.md) | [portfolio-search.md](references/portfolio-search.md) only for repeated, multi-candidate, or cross-candidate selection; [research-programs.md](references/research-programs.md) only when a Program already exists; [external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) only to construct that prompt |
 | Problem Scout / scientific contract | [problem-space.md](references/problem-space.md), [research-integrity.md](references/research-integrity.md) | [research-programs.md](references/research-programs.md) only when the Scout belongs to a Program/Epoch |
 | Contribution / verification / adjudication | [portfolio-search.md](references/portfolio-search.md), [research-integrity.md](references/research-integrity.md) | [research-programs.md](references/research-programs.md) for Program decisions; [gate-backtesting.md](references/gate-backtesting.md) only for retrospective calibration |
-| Managed controller / recovery | [orchestration.md](references/orchestration.md), [portfolio-lanes.md](references/portfolio-lanes.md) | [state-schema.md](references/state-schema.md) only when durable Managed state is actually required |
+| Managed controller / recovery | [orchestration.md](references/orchestration.md) | [portfolio-lanes.md](references/portfolio-lanes.md) only when a real shared lane changes; [state-schema.md](references/state-schema.md) only when durable Managed state is actually required |
 | External advisory | the selected scientific route's references | [orchestration.md](references/orchestration.md) only for persistent asynchronous delivery or recovery |
 | Knowledge-map handoff | [research-map-maintenance.md](references/research-map-maintenance.md) | [research-integrity.md](references/research-integrity.md) when adding or changing a claim |
 
@@ -90,50 +84,97 @@ preload all references.
 
 ## 4. Exclude the frozen execution plane
 
-After one complete implementation contract freezes the question, edit surface,
+Keep these boundaries: the Controller routes and accepts; the Explorer owns one
+complete source-to-`PROBE` loop; the Audit owns the whole `R0` decision in one
+owner/terminal; the Executor enters only after a complete implementation
+contract is frozen. Packet, locator, sidecar, and file checks stay inside the
+current owner as mechanical preflight.
+
+At an idea boundary, reuse the existing task capsule, decision record, and
+terminal/closure record. Select only current IDs/states, referenced
+contract/evidence hashes, closure/reopening reason, and next action. Do not
+include the prior idea's raw transcript. For the same idea, use `/compact` only
+when decision-relevant history has become materially redundant. On an idea
+switch, reuse the canonical role session only after a runtime-supported
+compact/reset succeeds and isolation is verifiable. Record selection is not
+context isolation; otherwise open one fresh session, transfer the canonical
+role binding, and close/archive the prior session so no duplicate owner remains.
+A strict-blind owner exposed to forbidden bytes stays ineligible even after
+compaction; use a fresh unexposed owner.
+
+For a missing field/hash, load only the authoritative section and directly
+referenced evidence needed to resolve it; load the complete record only for an
+unresolved decision-critical contradiction, and never load a prior raw
+transcript. Never collapse `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`,
+`CARRIER_STOP`, or `UNOBSERVED` into a scientific negative. A contract change
+creates a new candidate/version and preserves the old records.
+
+Before a persistent Managed worker is created or reused, verify its saved
+Project ID, cwd/repository, candidate/version, and canonical role. A projectless
+or unverified worker has no scientific/shared-state authority. Pin only active
+Managed canonical roles that need Controller follow-up; Lite and Pro advisory
+tasks are never auto-pinned.
+
+Name each persistent research-role session
+`<Role> · <candidate-or-bounded-scope> · <STATE>` and update it at activation,
+reuse, material phase/state change, and terminal absorption.
+
+These are operational selection rules over existing records, not a new data
+protocol, capsule, schema, lifecycle, context-bootstrap layer, automation, or
+evidence substitute. They cannot change the research contract, metric, seed,
+budget, stop rule, or protected/outcome boundary.
+
+Once one complete implementation contract freezes the question, edit surface,
 commands, evidence boundary, budget, terminal, and callback destination,
 dispatch a fresh pure executor and do not invoke or load this skill there. The
-contract itself is the only task capsule. Give the executor only applicable
-`AGENTS.md`, the contract, target source/evaluator, necessary tests, and exact
-allowed commands.
+contract itself is the only task capsule; give it only applicable `AGENTS.md`,
+the contract, target source/evaluator, necessary tests, and allowed commands.
+Create no second capsule, lifecycle, receipt, telemetry, or context-bootstrap
+layer. Fuse deterministic checks; do not wake a model for each check. A local
+executor returns its final directly; Managed uses section 8.
 
-Do not create a second capsule, lifecycle protocol, receipt schema, telemetry
-gate, or context-bootstrap layer. Use one fused command or long-lived local
-process for deterministic tests, canaries, stabilization, finalization, and
-terminal validation; do not wake a model for each check. A user-visible local
-executor returns its final directly. A persistent Managed executor uses the
-callback rule in section 8.
+## 5. Route model and reasoning effort
 
-## 5. Route reasoning effort
+- `gpt-5.6-sol max`: formulation, sources/neighbors, contracts, Audit,
+  scientific analysis/interpretation, routes, closure, and adjudication.
+- `gpt-5.6-sol xhigh`: first real-carrier Scout Executor, complex implementation,
+  remote integration/debugging, and evidence-bearing execution.
+- `gpt-5.6-sol high`: bounded frozen-contract implementation, testing,
+  deterministic integration, and routine execution.
+- `gpt-5.6-luna max`: high-volume deterministic rehash/sync/package/rerun or
+  simple outcome-invariant repair only; never scientific adjudication.
 
-- Use `max` for formulation, sources/neighbors, scientific contracts, audits,
-  causal/statistical/algebraic analysis, interpretation, route decisions,
-  independent review, and adjudication.
-- Use `high` for outcome-blind implementation, refactoring, testing,
-  deterministic integration, environment setup, and execution under a frozen
-  contract.
-- Raise implementation to `max` when conflicting authority, evidence validity,
-  concurrency, or data integrity appears. Lower effort only after the remaining work is demonstrably mechanical.
+Raise ambiguity about authority, evidence, exposure, concurrency, or data
+integrity to `sol max`; never substitute `luna max` for `sol xhigh/max`.
 
 ## 6. Preserve scientific hard controls
 
-- Freeze the question, hypothesis, actor, estimand, primary metric, strongest
-  baseline, identity, power, thresholds, exposure boundary, schedule/seeds,
-  budgets, stop rule, analysis, and exact claim boundary before evidentiary
-  execution.
+- Apply controls proportionally. `R0` freezes actor/action/lawful inputs, next
+  cell, matched-cost invariants, fatal invalidators, cap, cheapest witness, and
+  baseline identity/fairness/constructability. `R1` makes the real carrier and
+  baseline runnable without utility. A first descriptive `R2` freezes exact
+  identity/exposure, `2`--`3` necessary arms, `6` paired bundles, metric, MPE,
+  guard, baseline/deletion, actions, and finite cap. Confirmatory, superiority,
+  powered-negative, or closure claims additionally require complete power,
+  multiplicity, baselines, and external-validity scope. Before scientific `R3`,
+  `R2` freezes the applicable contract above.
 - Use primary sources for definitions, settings, and decision-critical claims.
   Incomplete neighbor work is challenged or held, never novelty.
-- Run source/code/algebra and the strongest preserving-reduction checks before
-  expensive empirical work. Establish problem existence before method
-  performance.
+- Establish problem existence before method performance with source/code/algebra,
+  strongest reductions, and one verified complete witness for any generic close.
 - Keep baselines fair and execution prospective. Never change metrics, subsets,
   seeds, stopping, carriers, or claims in response to a protected outcome.
 - Enforce protected/public-test exposure isolation. Outcome-blind repair stays
   inside the unchanged contract and budget; after protected outcome access,
   apply the frozen stop and no-rescue rules.
-- For result-blind work, establish a safe source tree and result stripping
-  before any fetch. If the access channel can auto-load results, hold the
-  channel before exposure; see [research-integrity.md](references/research-integrity.md).
+- Distinguish public-source review from strict result blindness. Opportunity
+  Search and ordinary public-source `R0` may read public primary methods,
+  results, appendices, and official-code documentation; those public results
+  are not the candidate's protected outcomes. Enable strict blindness only for
+  one prospectively named independence or anti-anchoring decision. Its safe
+  tree/result-stripped packet must pass deterministic pre-dispatch validation;
+  otherwise block dispatch before an Audit sees source bytes. See
+  [research-integrity.md](references/research-integrity.md).
 - Bind evidence-bearing runs to code, config, data, environment, seed, and run
   identity. Preserve raw outputs, failures, anomalies, and deviations before
   interpretation.
@@ -141,6 +182,12 @@ callback rule in section 8.
   status. Files, tests, callbacks, and compute are not scientific progress.
 - Report negative/null results narrowly. A failed carrier, contract, Scout, or
   method claim is not a field-wide NO-GO.
+- Before a durable scientific `DROP` or `CLOSE`, freeze one closure packet in the
+  existing decision record: exact fingerprint/scope, admissible closure basis,
+  strongest counterargument, reopening fact, impact, and `closure_risk=LOW|HIGH`.
+  Do not create a new artifact family.
+- `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, carrier/access failure, search exhaustion,
+  missing sources, and incomplete neighbor work are not scientific closures and cannot retire the hypothesis.
 - A worker may recommend but cannot self-accept a Confirmatory or
   publication-facing claim. Pro and same-model review are advisory.
 - Store no secret in prompts, contracts, manifests, logs, or reports.
@@ -149,94 +196,92 @@ No token target, artifact count, retry count, reviewer verdict, or governance
 ratio can convert an unresolved scientific, exposure, fairness, provenance,
 budget, or reproducibility defect into `PASS`.
 
-## 7. Run the minimal scientific loop
+## 7. Run novelty-first to a real Scout
 
-1. **Source-ground:** start from primary observations, ablations, limitations,
-   sensitivity, and code; name the actor, loss, constraints, carrier, simple
-   practice, and falsifiable decision.
-2. **Kill cheaply:** test definitions/implementations, the strongest reduction,
-   joint feasibility, and null/nuisance controls. A generic operation closes
-   only when one verified complete witness solves the same actor decision under
-   every matched contract field.
-3. **Select:** compare at most three active briefs; admit at most one `PROBE`.
-4. **Freeze:** write the smallest sufficient scientific contract and decision
-   terminal. Do not prebuild downstream methods.
-5. **Execute:** use the cheapest real witness and baseline-first canary.
-6. **Seal:** freeze and validate raw evidence before interpretation; recompute
-   the estimand independently when required.
-7. **Decide:** emit one scoped disposition with evidence and uncertainty.
-8. **Promote only after signal:** refresh primary neighbors and apply novelty,
-   irreducibility, specificity, mechanism, evidence-scale, and paper-path gates.
+1. **Ground and reduce:** name actor/decision, causal gap, strongest reduction,
+   null, and falsifier from primary sources/code.
+2. **Select for contribution:** rank value, residual novelty, causal depth, and
+   domain relevance before carrier ease; admit at most one `PROBE`.
+3. **Bind early:** hard-block mismatched actor/time/information, parent/work,
+   action set/state transition, lawful use, metric, or a baseline whose identity,
+   fairness, or constructability fails. Do not require baseline execution at
+   `R0`; make it runnable at `R1` and execute it at `R2/R3`. Missing official
+   code is not a block; build a faithful carrier within cap.
+4. **Freeze the first Scout:** use two or three necessary arms and all six
+   paired bundles. `n0=3` is validity/guard-only; no positive stop precedes `nmax=6`.
+5. **Execute the shortest real path:** `R1` prefers the carrier's minimal code
+   path; pure synthetic smoke converts only when it is the preregistered witness.
+   System profiles see no utility; calibration is disjoint or counts in the Scout.
+6. **Seal and decide:** preserve raw evidence; promote only material signal.
 
-During idea search, spend at least 75% on sources/code/falsification and at most
-15% on governance. Reuse one source/anomaly table, neighbor table, and decision record.
+Use the integrity reference for the Scout contract, dual-5090 envelope, SLA,
+and same-root breaker. A constructable Scout outranks more dossiers; idle GPU
+never authorizes filler.
+
+End a same-root engineering stall with one root-cause inventory and a minimal
+real carrier, simplified new version, or evidence-gap archive—not a rename.
+
+Use 75% source/code/falsification and 15% governance shares only as retrospective
+diagnostics from existing records, never as per-task telemetry, a sidecar, or an
+acceptance gate. Compare time-to-first-scientific-outcome, time-to-valid-R1,
+R0-to-R1 pass rate, access-hold rate, and governance-attention share without
+creating a new measurement family; activity and GPU use are not science.
+
+Use `R0`--`R3` as shorthand, never a lifecycle; follow
+[problem-space.md](references/problem-space.md). Keep one active `R1`; an
+unchanged-protocol repair may rerun within cap.
 
 ## 8. Complete without callback ceremony
 
-For user-visible Lite, final is delivery only after one open-loop audit: every
-named action is `DONE`, `BLOCKED` by an external fact or need for new authority,
-or `DELEGATED` with a successful receipt. A concept explanation, status reply,
-or side question does not clear an unfinished active research objective unless
-the user explicitly replaces/cancels it or its authority boundary changes.
-Execute any safe current next decision instead of leaving it only as final
-prose. End only when the bounded decision is complete, genuinely blocked, or
-its next action needs new authority.
+For user-visible Lite, end only after one open-loop audit maps every named
+action to `DONE`, externally/authority `BLOCKED`, or `DELEGATED` with a
+successful receipt. A concept explanation, status reply, or side question does
+not clear an active objective unless the user replaces/cancels it or its
+authority changes. Execute any safe current next decision instead of leaving it
+as prose.
 Do not persist this audit or create Program, lease, callback, sidecar, heartbeat,
 `RECEIPT_ONLY`, `FINAL_ACK`, or receiver machinery.
 
-When durable Lite evidence is needed, keep one terminal with only:
+When durable Lite evidence is needed, keep one terminal with identity/scope,
+evidence/validation, `FACT / INFERENCE / HYPOTHESIS`, one disposition, and one
+next action/reopening fact. Add knowledge provenance only for a
+decision-changing synthesis handoff, never a routine local workflow/code audit.
 
-- identity and exact scope;
-- evidence paths/digests and validation;
-- `FACT / INFERENCE / HYPOTHESIS` plus one scoped disposition; and
-- one next action or reopening fact.
+A bounded delegated worker sends at most one ordinary completion message. A
+successful tool receipt releases it immediately; Lite creates no receiver,
+fallback, acknowledgement, or callback transaction and never waits for
+`FINAL_ACK`.
 
-Add `knowledge_reads` and `knowledge_writeback` only when a decision-changing
-research terminal actually hands reusable evidence to the configured synthesis
-authority. A local workflow/code audit does not need those fields. Do not edit
-a frozen scientific terminal; attach a correction only when the real evidence
-chain requires append-only provenance.
-
-For a persistent Managed worker, freeze one unique terminal and make one
-ordinary top-level send with a bounded tool timeout. Apply this decision table:
-
-Before dispatch, the Controller must register one bounded fallback capable of
-recovering that terminal by event or final-turn ID. That fallback is the only
-retry authority; the worker never owns retry.
-
-| Send result | Worker action | Controller action |
-| --- | --- | --- |
-| successful tool receipt | release ownership and emit the local final immediately; do not wait for ACK | process asynchronously |
-| unavailable, timeout, or ambiguous | record `callback_delivery=unconfirmed`, emit the local final, and do not resend | recover once from terminal event or final-turn ID |
-| duplicate terminal event | no worker retry | deduplicate and apply zero additional scientific/shared-state effects |
-
-Use at-least-once wake with idempotent exactly-once effect; do not pursue
-exactly-once transport at every layer. An ACK is asynchronous and optional
-except when the Controller must certify a true shared-state commit. It never
-blocks a user-visible worker. Detailed Managed reconciliation belongs only in
-[orchestration.md](references/orchestration.md).
+Persistent Managed completion follows
+[orchestration.md](references/orchestration.md): freeze one terminal, make one
+bounded top-level send, release the worker on a successful receipt, and never
+resend an ambiguous delivery. One pre-registered Controller fallback recovers
+by event/final-turn ID with idempotent effects. An ACK never blocks the worker.
 
 Use `PROBE`/`QUEUE_*` for admitted prospective work, `HOLD` for one unresolved
 fact plus reopening trigger, `DROP` for a scoped reduction/failed exact claim,
 and `ENGINEERING_INVALID` outside scientific evidence. A valid negative/null
 retires only the uncertainty its contract measured.
 
-## 9. Use Managed behavior only after a trigger
+## 9. Use external advisory as a one-shot
 
-Only after a Managed trigger exists, load
-[orchestration.md](references/orchestration.md) and
-[portfolio-lanes.md](references/portfolio-lanes.md). Load
-[state-schema.md](references/state-schema.md) and state/lane helpers only when
-durable shared state is required. Callback/event delivery is primary; model
-polling is not progress work.
+Every durable scientific `DROP` or `CLOSE` follows the Closure Confidence Gate
+in [research-integrity.md](references/research-integrity.md). A complete-witness
+`LOW` closure may finish locally after independent Audit; a composed,
+interpretive, disputed, or last-route `HIGH` closure remains provisional until
+one adversarial rebuttal. Engineering/access/carrier failure and search
+exhaustion are not closures and never invoke this gate.
 
-## 10. Use external advisory as a one-shot
+For a `HIGH` closure, freeze local facts, submit one Pro rebuttal, read once,
+verify decision-critical claims locally, and stop—no sink, polling, duplicate,
+or follow-up. Record only its trigger, disposition, decision effect, and final
+confidence in the existing decision record. If Pro is unavailable, use one
+fresh independent local closure Audit; never hard-close from unavailability.
 
-Use Pro only when an independent reasoning path can change a named decision.
-Freeze local facts or the local diff first. For Lite, submit once, read once,
-and stop: no sink task, job lifecycle, polling loop, heartbeat, duplicate, or
-follow-up. If real Pro is unavailable, preserve concise `PRO_UNAVAILABLE`
-evidence and continue independently.
+Keep Pro off the critical path: submit once, continue local work, then let the
+current owner make at most one state-only check after local work completes.
+Add no monitor, poll loop, sink, automation, lifecycle, duplicate, or follow-up.
+On `READY`, read once and verify.
 
 Use persistent asynchronous delivery only when a Managed trigger independently
 exists. Preserve the exact response and verify decision-critical claims

@@ -15,7 +15,7 @@ Do not import the second decision's proof burden into the first.
 
 ## Contents
 
-1. Program and Epoch boundary
+1. Optional repeated-Program boundary
 2. Divergent and convergent passes
 3. Opportunity brief and admission
 4. Joint-feasibility certificate
@@ -25,16 +25,18 @@ Do not import the second decision's proof burden into the first.
 8. Negative synthesis gate
 9. Minimal selection record
 
-## Program and Epoch boundary
+## Optional repeated-Program boundary
 
 Opportunity Search is pre-charter planning that selects which bounded Problem
 Scout is worth opening. Contribution Selection happens only after a material
 signal, except when the artifact is itself a source/algebraic audit or theorem.
 Neither stage is an acceptance forecast.
 
-- Apply the cumulative hierarchy and circuit breakers in
-  [research-programs.md](research-programs.md). Freeze `program_id`, `epoch_id`,
-  consumed and remaining budgets before ranking candidates.
+- When an existing repeated Program already governs the search, apply its
+  hierarchy/circuit breakers and freeze its IDs and remaining budget. Otherwise
+  keep `program_id=null` and `epoch_id=null` in one Lite task-bound decision
+  record; Opportunity Search never creates a Program/Epoch merely to rank
+  candidates.
 - Freeze one umbrella objective and the scientific or operational constraints.
 - Freeze a search boundary: candidate cap, primary-source scope, decision
   deadline, and maximum planning effort.
@@ -43,9 +45,9 @@ Neither stage is an acceptance forecast.
 - Keep at most six opportunity briefs cumulatively across the initial map and
   sole refresh by default. A brief counts when it has an actor-level thesis and
   distinct prediction, even if immediately dropped or renamed.
-- Maintain one living portfolio ledger with timestamped amendments. A new
-  filename, version, session, repository, carrier, or method label does not
-  reset Program/Epoch budgets.
+- Maintain one living decision record with timestamped amendments. When an
+  existing Program applies, a new filename, version, session, repository,
+  carrier, or method label does not reset its budgets.
 - Interpret “continue until good” as successive bounded decisions. A favorable
   sign is never a stopping rule. Budget exhaustion is operational state, not
   proof that a broad field has no viable opportunity.

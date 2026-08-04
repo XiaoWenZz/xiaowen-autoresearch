@@ -148,8 +148,11 @@ def validate(payload: dict[str, Any]) -> tuple[list[str], dict[str, int]]:
         errors.append("at least three negative controls are required")
     if not is_v2 and false_rejects:
         errors.append(f"gate has {false_rejects} retrospective false rejects")
-    if is_v2 and hard_false_rejects:
-        errors.append(f"gate has {hard_false_rejects} hard retrospective false rejects")
+    if is_v2 and probe_misses:
+        errors.append(
+            f"gate has {probe_misses} retrospective positive PROBE misses; "
+            "retention cannot compensate for a false admission reject"
+        )
     if false_admits:
         errors.append(f"gate has {false_admits} negative false admits")
 

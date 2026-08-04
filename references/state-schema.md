@@ -1,22 +1,10 @@
-# State schema
+# Managed state schema
 
-Use this reference when initializing, resuming, repairing, or validating a research task.
+Load this reference only when a real Managed trigger requires durable state.
+Lite work uses its existing repository records and the user-visible task; it
+does not initialize this tree.
 
-## Contents
-
-1. Directory contract
-2. Governance tracks
-3. State ownership
-4. Record schemas
-5. Run manifest
-6. Status transitions
-
-## 1. Directory contract
-
-This full directory is for **Managed Scout** and **Confirmatory** work. Do not
-create it for a Scout Lite already governed by a repository `AGENTS.md` unless
-unattended recovery, multiple writers, leases, paid execution, or promotion
-compatibility creates a concrete need.
+## 1. Directory and version contract
 
 ```text
 <task>/
@@ -31,140 +19,95 @@ compatibility creates a concrete need.
 │   ├── iterations.jsonl
 │   ├── approvals.jsonl
 │   └── workers.jsonl
-├── runs/                 # one immutable manifest per run ID
-├── artifacts/            # raw outputs and derived artifacts
-├── logs/
-│   └── events.jsonl
-└── reports/              # handoff, audit, or final reports
+├── runs/                 # one manifest per run ID
+├── artifacts/            # raw and derived artifacts
+├── logs/events.jsonl
+└── reports/
 ```
 
-Keep JSONL append-only. Correct a record by appending a superseding record that names `supersedes_id`; do not rewrite history.
+Use schema `1.3` for new durable tasks. Keep JSONL append-only: a correction
+appends a record naming `supersedes_id`. Do not rewrite evidence history.
+`scripts/validate_task.py --legacy-read` may inspect an older tree but returns a
+non-authoritative result; legacy state cannot grant readiness or evidence
+authority.
 
-The helpers create this durable skeleton only for Managed Scout and full
-Confirmatory work. In Scout, `directions.jsonl`, `evidence.jsonl`, and
-`claims.jsonl` may remain empty; this preserves promotion compatibility without
-forcing premature claim bureaucracy.
-
-### Scout Lite minimum
+Both governance tracks use `operating_weight=managed`:
 
 ```text
-<existing-repo>/
-├── AGENTS.md
-├── <protocol-or-config>       # frozen question, metric, baseline, data/seed/budget/claim boundary
-├── <run>/manifest.json        # unique code/config/data/environment identity
-├── <run>/raw-result.*
-└── <outcome-record>           # recomputed gate, limitations, next decision
+scout / managed
+confirmatory / managed
 ```
 
-One file may cover protocol and config. One terminal result may cover manifest
-completion and outcome. Do not duplicate identical identities across files
-solely to satisfy a template.
+`program_id` and `epoch_id` are both null for a standalone Managed task, or
+both non-empty when an already-established Program binds the task. Never invent
+a Program/Epoch merely because durable recovery is needed.
 
-## 2. Governance tracks
+## 2. Proportionate readiness
 
-`charter.json` must set `governance_track` to `scout` or `confirmatory` and
-`operating_weight` to `managed` or `full` for newly initialized durable tasks.
-The valid pairs are `scout/managed` and `confirmatory/full`. Scout Lite uses the
-minimum repository contract above and does not initialize this state tree.
-Legacy tasks without these fields validate with an inference warning.
+All ready tasks freeze `research_question`, success/failure criteria, stop
+conditions, strongest baseline identity, claim boundary,
+`protocol.data_boundary`, and a valid `protocol.frozen_at`. The
+`governance_admission_proof` names the actual Managed trigger.
 
-### Scout
+Task-specific requirements are deliberately different:
 
-Required before execution:
+- `literature`: no seed policy or utility metric is required. Bind the public or
+  protected source boundary and the decision-complete source/claim question.
+- `engineering`: bind `code_version`, `real_carrier_path`, `profile_metrics`,
+  `analysis_plan`, and `utility_blind=true`. This R1 profile measures runtime,
+  VRAM, stability, throughput, or cost—not scientific utility—and requires no
+  power plan.
+- Scout `experiment|mixed`: bind code, dataset/version/split, seed policy,
+  analysis plan, exact run bindings, and primary metrics. Freeze `2` or `3`
+  necessary arms, `6` paired bundles, MPE, guard comparator, strongest fair
+  baseline, mechanism deletion when distinct, outcome/action table, and compute
+  cap. Final power and multiplicity are not first-Scout readiness gates.
+- Confirmatory `experiment|mixed`: additionally bind the complete power plan,
+  multiplicity plan, full claim-proportionate baseline scope, and external-
+  validity scope required by the final claim.
 
-- a grounded problem thesis or, when the problem is still hypothesized, an
-  explicit problem-existence objective;
-- frozen question, hypothesis, scope, primary metric, strongest baseline, and claim boundary;
-- explicit `protocol.data_boundary`, data/code identity where applicable, seed or schedule policy, analysis plan, fixed budget, and stop conditions;
-- for method-search Scouts, applicable federation/PEFT/dynamic/operation
-  deletion results and a positive/negative/ambiguous outcome decision table;
-- `governance.pre_evidence_iteration_budget` (default 2) and a `promotion_trigger`;
-- pre-run manifest and raw artifacts for every evidentiary execution.
+A Scout may yield a `SCOUT_SIGNAL`, scoped negative/null result, diagnostic, or
+carrier stop. It cannot contain an accepted claim. Promotion creates a
+prospective Confirmatory protocol and fresh confirmation evidence; it never
+relabels observed Scout outcomes as independent confirmation.
 
-A Scout may produce only a `SCOUT_SIGNAL`, scoped negative result, diagnostic, or carrier-level stop. It may not contain an `accepted` claim.
+## 3. Ownership
 
-For Scout Lite, these fields live in the protocol/config and manifest rather
-than `charter.json`. The semantic requirements remain; the directory skeleton
-does not.
-
-### Confirmatory
-
-Use the full direction, evidence, claim, verification, and adjudication graph. Confirmatory is required before public-test access, publication-facing method comparison, expensive or irreversible evidence collection, or accepting a scientific claim.
-
-Promotion requires a timestamped charter amendment, a frozen confirmation protocol, a fresh confirmation set, and updated `progress.governance_track`. Do not relabel already observed Scout outcomes as independent confirmation.
-
-Suggested charter fields:
-
-```json
-{
-  "program_id": "<stable Program id>",
-  "epoch_id": "<stable Epoch id>",
-  "governance_track": "scout",
-  "operating_weight": "managed",
-  "governance_admission_proof": "<exact Scout Lite limitation requiring durable state>",
-  "problem_thesis": "<affected population, failure, decision unit, deployment constraint, evidence status>",
-  "specificity": {
-    "federation_deletion": "<survives|broadens|fails|not_applicable>",
-    "peft_deletion": "<survives|broadens|fails|not_applicable>",
-    "dynamic_deletion": "<survives|broadens|fails|not_applicable>",
-    "operation_deletion": "<survives|broadens|fails|not_applicable>"
-  },
-  "strongest_baseline": "<matched strongest reduction or baseline>",
-  "claim_boundary": "<exact statement this task may support or falsify>",
-  "governance": {
-    "pre_evidence_iteration_budget": 2,
-    "promotion_trigger": "<predeclared gate for confirmatory promotion>",
-    "outcome_actions": {
-      "positive": "<exact promotion action>",
-      "negative": "<exact closure or narrowing action>",
-      "ambiguous": "<one predeclared diagnostic or hold>"
-    }
-  },
-  "protocol": {
-    "data_boundary": "<allowed splits and forbidden evaluation access>"
-  }
-}
-```
-
-## 3. State ownership
-
-| File | Writer | Meaning |
+| File | Sole writer/authority | Meaning |
 |---|---|---|
-| `charter.json` | owner/orchestrator | Frozen objective, protocol, budget, and permissions |
-| `progress.json` | orchestrator | Current phase, iteration, next action, blockers, stale count |
-| `heartbeat.json` | current worker | Liveness lease only; never scientific progress |
-| `directions.jsonl` | orchestrator | Structural directions and explicit replications |
-| `evidence.jsonl` | worker/verifier | Observations with provenance and verification state |
-| `claims.jsonl` | author/verifier/adjudicator | Claim lifecycle and evidence links |
-| `iterations.jsonl` | orchestrator | One outcome record per completed iteration |
-| `approvals.jsonl` | owner/orchestrator | Requested and decided authorization changes |
-| `workers.jsonl` | controller/orchestrator | Append-only worker dispatch, callback delivery, acknowledgement, reclamation, and watchdog state |
-| `runs/*.json` | worker | Reproducibility manifest for one execution |
-| `logs/events.jsonl` | all roles | Operational events and decisions |
+| `charter.json` | owner/Controller | Frozen question, protocol, budget, permissions |
+| `progress.json` | Controller | Current status, next action, exact blocker |
+| `heartbeat.json` | active worker | Optional liveness lease; never scientific progress |
+| `directions.jsonl` | Controller | Structural directions and named replications |
+| `evidence.jsonl` | producer/verifier | Observations, provenance, verification, limitations |
+| `claims.jsonl` | author/independent Audit | Scoped claim and adjudication lifecycle |
+| `iterations.jsonl` | Controller | One outcome record per completed iteration |
+| `approvals.jsonl` | owner/Controller | Requested and decided authority changes |
+| `workers.jsonl` | Controller | Dispatch, delivery, recovery, optional shared commit |
+| `runs/*.json` | Executor | Bound run identity and reproducibility record |
+| `logs/events.jsonl` | active roles | Operational events; not scientific authority |
 
-Allow only one active orchestrator lease. Guardians may refresh/check liveness, restart a worker, or request attention; they must not edit evidence or adjudicate claims.
+Exactly one owner writes a live run or shared record. An evidence producer, its
+verifier, and the adjudicator of an accepted claim are registered, distinct
+workers on distinct task sessions. The verifier and adjudicator are canonical
+Audit roles. Same-model agreement is not independence.
 
-## 4. Record schemas
+## 4. Worker terminal and callback
 
-All timestamps use RFC 3339 UTC, such as `2026-07-14T08:30:00Z`. IDs are stable strings unique within the task.
-
-### Worker and callback
-
-Use one immutable record per worker state transition. Keep `worker_id` stable
-and give every appended transition a unique `worker_record_id`. The latest
-valid record is current state.
+Append one immutable record per worker transition. Keep `worker_id` stable and
+give each transition a unique `worker_record_id`.
 
 ```json
 {
   "worker_record_id": "WR-B1-003",
-  "worker_id": "B1-evidence-worker",
+  "worker_id": "B1-executor",
   "thread_id": "019f...",
-  "program_id": "P1",
-  "epoch_id": "P1-E1",
+  "program_id": null,
+  "epoch_id": null,
   "contract_revision": "v0",
-  "role": "evidence-worker",
+  "role": "Executor",
   "status": "completed",
-  "callback_state": "acknowledged",
+  "callback_state": "delivered",
   "terminal_event_id": "TERM-B1-001",
   "reclaim_deadline": null,
   "watchdog_id": "monitor-b1",
@@ -175,69 +118,50 @@ valid record is current state.
 }
 ```
 
-Allowed worker statuses are `dispatched`, `running`, `needs_attention`,
-`completed`, `failed`, `cancelled`, and `reclaimed`. Allowed callback states are
-`pending`, `delivered`, `acknowledged`, and `not_available`. A delivered or
-acknowledged callback requires a stable `terminal_event_id`; duplicate terminal
-events must not create a second adjudication. `not_available` requires an
-explicit reclaim deadline. An acknowledged terminal requires its watchdog to
-be `paused` or `not_required`. Allowed watchdog states are `active`, `paused`,
-and `not_required`; use `active` at dispatch when a fallback watchdog exists.
-Delivery and acknowledgement may be separate records, but an atomic controller
-read-and-ack may append `acknowledged` directly without a synthetic delivered
-record.
+Statuses are `dispatched`, `running`, `needs_attention`, `completed`, `failed`,
+`cancelled`, and `reclaimed`. Callback states are `pending`, `delivered`,
+`acknowledged`, and `not_available`.
 
-For schema `1.2+`, a terminal `acknowledged` record must also contain:
+- `delivered` means one bounded send produced a successful tool receipt. It
+  releases the worker immediately and is a valid terminal state; no ACK or
+  receiver ping is required.
+- `acknowledged` is optional and records a Controller-side shared-state commit.
+  It still never blocks or wakes the released worker.
+- `not_available` records ambiguous/unavailable delivery with one reclaim
+  deadline. The worker does not resend.
+- A delivered or acknowledged terminal has one stable `terminal_event_id` and
+  a paused/not-required watchdog. Controller effects are idempotent by that ID.
 
-```json
-{
-  "controller_action": {
-    "transaction_id": "CTX-B1-001",
-    "disposition": "accept Stage A only",
-    "next_action": "dispatch_next",
-    "worker_notified": true,
-    "decided_at": "2026-07-22T09:00:00Z",
-    "next_worker_record_id": "WR-B1-004",
-    "next_contract_revision": "cycle0b-v0"
-  }
-}
-```
+When a true shared-state commit needs certification, `controller_action` may
+record one transaction and one of `dispatch_next`, `explicit_hold`,
+`owner_approval_required`, or `scoped_close`. `dispatch_next` binds an actually
+registered successor record and contract revision. No field such as
+`worker_notified`, `RECEIPT_ONLY`, or `FINAL_ACK` is required.
 
-Allowed `next_action` values are `dispatch_next`, `explicit_hold`,
-`owner_approval_required`, and `scoped_close`. `dispatch_next` requires a later
-active worker record with the named record ID and contract revision. The same
-terminal event must retain one stable transaction ID. A latest terminal
-`delivered` record is an incomplete controller transaction and fails
-validation until it is acknowledged; message delivery or scientific
-adjudication alone is not closure.
+## 5. Evidence and claim eligibility
 
-### Direction
+Preserve every run and engineering failure, but only eligible runs may back
+verified scientific evidence. A completed run is evidence-eligible only when:
 
-```json
-{
-  "direction_id": "D003",
-  "iteration": 3,
-  "hypothesis": "The effect is caused by initialization rather than aggregation.",
-  "mechanism": "Controlled initialization ablation",
-  "changed_variables": ["initialization_policy"],
-  "expected_observation": "The gap disappears under matched initialization.",
-  "structural_delta": "Replace deployment tuning with a causal control.",
-  "fingerprint": "init-ablation-matched-seeds-v1",
-  "is_replication": false,
-  "status": "planned"
-}
-```
+- every declared validation command passed and `protocol_deviations` is empty;
+- the protocol was frozen no later than run start;
+- its question, exact code identity, config digest, dataset, seeds, and primary
+  metrics match its prospective `protocol.run_bindings[run_id]`; and
+- all referenced local artifacts exist and match canonical SHA-256 digests.
 
-For a replication, set `is_replication: true` and add `replicates_direction_id`.
+An ineligible run remains readable as unverified diagnostic history. It cannot
+back `verified` experiment/negative evidence, a supported claim, or an accepted
+claim. Test exit zero and artifact presence never establish scientific value.
 
-### Evidence
+Schema 1.3 verified evidence includes:
 
 ```json
 {
   "evidence_id": "E014",
   "kind": "negative_result",
-  "summary": "Matched initialization did not close the gap on QNLI seed 43.",
+  "summary": "No material effect under the frozen Scout contract.",
   "run_id": "R20260714-003",
+  "producer_worker_id": "B1-executor",
   "provenance": {
     "source": "artifacts/R20260714-003/metrics.json",
     "captured_at": "2026-07-14T08:30:00Z",
@@ -245,70 +169,27 @@ For a replication, set `is_replication: true` and add `replicates_direction_id`.
   },
   "verification": {
     "status": "verified",
-    "method": "Recomputed with scripts/validate_metrics.py",
+    "verifier_worker_id": "B1-audit",
     "verified_at": "2026-07-14T08:35:00Z"
   },
   "supports_claims": ["C006"],
-  "limitations": ["One task and one seed"]
+  "limitations": ["Frozen carrier only"]
 }
 ```
 
-Allowed evidence kinds: `source`, `experiment`, `observation`, `negative_result`, and `diagnostic`. Allowed verification states: `unverified`, `partial`, and `verified`.
+Evidence kinds are `source`, `experiment`, `observation`, `negative_result`, and
+`diagnostic`; verification states are `unverified`, `partial`, and `verified`.
+Evidence-to-claim links are bidirectional: every `supports_claims` target names
+that evidence ID, and every claim evidence ID points back to that claim.
 
-### Claim
+An accepted claim requires verified eligible evidence and an adjudication with
+`decision`, `reviewer_role`, registered `reviewer_worker_id`,
+`independent=true`, rationale, and `decided_at` after evidence verification.
+The adjudicator is distinct from both producer and verifier.
 
-```json
-{
-  "claim_id": "C006",
-  "claim_type": "inference",
-  "text": "Initialization alone is unlikely to explain the observed gap.",
-  "status": "challenged",
-  "evidence_ids": ["E014"],
-  "scope": "QNLI, seed 43, matched-budget protocol",
-  "limitations": ["Not yet replicated across seeds"],
-  "adjudication": null
-}
-```
+## 6. Run manifest
 
-Allowed claim types: `fact`, `inference`, and `hypothesis`. Allowed statuses: `proposed`, `supported`, `challenged`, `rebuttal-ready`, `pending-rebuttal`, `accepted`, `rejected`, and `withdrawn`.
-
-An accepted claim requires verified evidence and an adjudication object containing `decision`, `reviewer_role`, `independent: true`, `rationale`, and `decided_at`. The worker that generated the evidence cannot be the sole adjudicator.
-
-### Iteration
-
-```json
-{
-  "iteration_id": "I003",
-  "iteration": 3,
-  "direction_id": "D003",
-  "started_at": "2026-07-14T07:00:00Z",
-  "ended_at": "2026-07-14T08:40:00Z",
-  "outcome": "negative_result",
-  "evidence_ids": ["E014"],
-  "validation": [{"command": "python3 -m pytest tests/test_metrics.py", "status": "pass"}],
-  "next_action": "Replicate on seeds 42 and 44 before changing the claim."
-}
-```
-
-Allowed outcomes: `progress`, `negative_result`, `replication`, `diagnostic`, `stale`, and `blocked`. Only `stale` increments consecutive `stale_count`; all evidence-bearing outcomes reset it.
-
-### Approval
-
-```json
-{
-  "approval_id": "A002",
-  "action": "increase_compute_budget",
-  "scope": "Add two A100 seed replications, maximum 8 GPU-hours",
-  "status": "approved",
-  "requested_at": "2026-07-14T08:45:00Z",
-  "decided_at": "2026-07-14T09:00:00Z",
-  "expires_at": "2026-07-15T09:00:00Z"
-}
-```
-
-## 5. Run manifest
-
-Create `runs/<run-id>.json` before execution. For a completed experimental run, include:
+Create `runs/<run-id>.json` before execution. The manifest binds at least:
 
 ```json
 {
@@ -316,38 +197,41 @@ Create `runs/<run-id>.json` before execution. For a completed experimental run, 
   "run_id": "R20260714-003",
   "task_id": "example-1234abcd",
   "status": "completed",
-  "question": "Does matched initialization close the gap?",
-  "hypothesis_ids": ["H001"],
+  "question": "Does the frozen problem effect exceed MPE?",
   "code_version": {"git_commit": "<sha>", "dirty": false},
-  "config": {"path": "configs/init_ablation.yaml", "sha256": "<sha256>"},
-  "dataset": {"name": "QNLI", "version": "<version>", "split": "validation"},
-  "environment": {"host": "cluster-a", "accelerator": "A100", "software": "environment.lock"},
-  "seeds": [43],
-  "primary_metrics": ["accuracy"],
+  "config": {"path": "configs/scout.yaml", "sha256": "<sha256>"},
+  "dataset": {"name": "<name>", "version": "<version>", "split": "<split>"},
+  "environment": {"host": "<host>", "accelerator": "<accelerator>"},
+  "seeds": [1, 2, 3, 4, 5, 6],
+  "primary_metrics": ["<metric>"],
   "started_at": "2026-07-14T07:00:00Z",
   "ended_at": "2026-07-14T08:30:00Z",
-  "artifacts": ["artifacts/R20260714-003/metrics.json"],
-  "validation": [{"command": "python3 scripts/check_run.py R20260714-003", "status": "pass"}],
-  "result_summary": "No material gap reduction.",
+  "artifacts": [{"path": "artifacts/R20260714-003/metrics.json", "sha256": "<sha256>"}],
+  "validation": [{"command": "<exact command>", "status": "pass"}],
+  "result_summary": "<bounded summary>",
   "anomalies": [],
   "protocol_deviations": []
 }
 ```
 
-Never use labels such as `latest`, `new`, or `final2` as run IDs. Use stable IDs and immutable manifests.
+Use stable IDs, never `latest`, `new`, or `final2`. Preserve malformed, failed,
+and deviated runs; classify them as engineering/diagnostic rather than deleting
+or expanding them into scientific negatives.
 
-## 6. Status transitions
+## 7. Status transitions
 
-Use task statuses `draft`, `ready`, `running`, `waiting_external`, `needs_approval`, `completed`, and `blocked`.
+Task statuses are `draft`, `ready`, `running`, `waiting_external`,
+`needs_approval`, `completed`, and `blocked`.
 
 ```text
 draft -> ready -> running -> completed
                    |  |-> waiting_external -> running
                    |  |-> needs_approval -> running
                    |  `-> blocked
-                   `----> ready (only after a recorded protocol amendment)
+                   `----> ready (only after a prospective amendment)
 ```
 
-Do not mark `completed` because a budget ended. Report incomplete work explicitly. Use `blocked` only when a concrete blocker prevents meaningful in-scope progress and the recovery attempts are recorded.
-
-For `progress.blockers`, prefer objects with `severity` (`HARD_BLOCK`, `CHALLENGE`, or `POLISH`), `description`, `decision_impact`, and `next_check`. Only a `HARD_BLOCK` justifies blocking evidentiary execution.
+Budget exhaustion is not completion. `blocked` names one concrete blocker and
+reopening check; it is not a scientific `DROP`. Only an actual `HARD_BLOCK`
+stops evidentiary execution. A `CHALLENGE` or `POLISH` item cannot silently
+become a readiness gate.

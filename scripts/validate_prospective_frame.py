@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,29 @@ EXPOSURE_SEVERITY = {
     "protected": 2,
 }
 ACCESS_EXPOSURE_TYPES = {"result", "data", "model", "design", "execution", "protected"}
+ACCESS_MODES = {"public_source", "protected", "confirmatory", "strict_result_blind"}
+RISK_ACCESS_MODES = {"protected", "confirmatory", "strict_result_blind"}
+SAFE_TEXT_EXTENSIONS = {
+    ".bib",
+    ".cfg",
+    ".csv",
+    ".ini",
+    ".ipynb",
+    ".js",
+    ".json",
+    ".jsonl",
+    ".md",
+    ".mjs",
+    ".py",
+    ".rst",
+    ".sh",
+    ".tex",
+    ".toml",
+    ".tsv",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
 
 
 class ValidationError(ValueError):
@@ -131,6 +155,108 @@ def derive_tier(
     return tier, sorted(effective, key=lambda item: (item["observed_at"], item["event_id"]))
 
 
+def validate_safe_source_tree(
+    root: Path,
+    entries: list[dict[str, Any]],
+    forbidden_text: list[str],
+) -> dict[str, Any]:
+    """Validate an exact, text-only safe tree without returning file contents."""
+    try:
+        unresolved_mode = root.lstat().st_mode
+    except OSError as exc:
+        raise ValidationError(f"cannot inspect safe source root {root}: {exc}") from exc
+    if stat.S_ISLNK(unresolved_mode) or not stat.S_ISDIR(unresolved_mode):
+        raise ValidationError("safe source root must be a real directory, not a symlink")
+    try:
+        root = root.resolve(strict=True)
+    except OSError as exc:
+        raise ValidationError(f"cannot resolve safe source root {root}: {exc}") from exc
+
+    declared: dict[str, str] = {}
+    for position, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            raise ValidationError(f"manifest entry {position} must be an object")
+        raw_path = entry.get("path")
+        digest = entry.get("sha256")
+        if not isinstance(raw_path, str) or not raw_path:
+            raise ValidationError(
+                f"strict-result-blind manifest entry {position} requires non-empty path"
+            )
+        relative = Path(raw_path)
+        if relative.is_absolute() or ".." in relative.parts or relative.as_posix() in {"", "."}:
+            raise ValidationError(
+                f"strict-result-blind manifest path must be canonical and relative: {raw_path}"
+            )
+        canonical = relative.as_posix()
+        if canonical in declared:
+            raise ValidationError(f"duplicate strict-result-blind manifest path: {canonical}")
+        if not isinstance(digest, str) or not re_full_sha256(digest):
+            raise ValidationError(
+                f"strict-result-blind manifest path {canonical} requires canonical sha256"
+            )
+        declared[canonical] = digest.lower()
+
+    actual: dict[str, Path] = {}
+    try:
+        descendants = sorted(root.rglob("*"), key=lambda path: path.as_posix())
+    except OSError as exc:
+        raise ValidationError(f"cannot enumerate safe source root {root}: {exc}") from exc
+    for path in descendants:
+        relative = path.relative_to(root).as_posix()
+        try:
+            mode = path.lstat().st_mode
+        except OSError as exc:
+            raise ValidationError(f"cannot inspect safe source path {relative}: {exc}") from exc
+        if stat.S_ISLNK(mode):
+            raise ValidationError(f"safe source tree contains symlink: {relative}")
+        if stat.S_ISDIR(mode):
+            continue
+        if not stat.S_ISREG(mode):
+            raise ValidationError(f"safe source tree contains special file: {relative}")
+        if path.suffix.casefold() not in SAFE_TEXT_EXTENSIONS:
+            raise ValidationError(f"safe source tree contains opaque file type: {relative}")
+        actual[relative] = path
+
+    if set(actual) != set(declared):
+        missing = sorted(set(declared) - set(actual))
+        undeclared = sorted(set(actual) - set(declared))
+        raise ValidationError(
+            "safe source manifest/file set mismatch "
+            f"(missing={missing}, undeclared={undeclared})"
+        )
+
+    forbidden_bytes: list[bytes] = []
+    for position, value in enumerate(forbidden_text, start=1):
+        if not isinstance(value, str) or not value:
+            raise ValidationError(f"forbidden byte sequence {position} must be non-empty")
+        forbidden_bytes.append(value.encode("utf-8"))
+
+    for relative, path in actual.items():
+        try:
+            payload = path.read_bytes()
+            payload.decode("utf-8", errors="strict")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValidationError(f"safe source file is not readable UTF-8 text: {relative}: {exc}") from exc
+        digest = hashlib.sha256(payload).hexdigest()
+        if digest != declared[relative]:
+            raise ValidationError(f"safe source sha256 mismatch: {relative}")
+        if any(marker in payload for marker in forbidden_bytes):
+            raise ValidationError(
+                f"safe source file contains a forbidden byte sequence: {relative}"
+            )
+
+    return {
+        "status": "PASS_SAFE_SOURCE_TREE",
+        "root": str(root),
+        "file_count": len(actual),
+        "forbidden_sequence_count": len(forbidden_bytes),
+    }
+
+
+def re_full_sha256(value: str) -> bool:
+    return len(value) == 64 and all(character in "0123456789abcdefABCDEF" for character in value)
+
+
 def validate(
     manifest_path: Path,
     ledger_path: Path,
@@ -142,6 +268,9 @@ def validate(
     design_tier: str,
     trusted_access_ledger_path: Path | None = None,
     plan_frozen_at_raw: str | None = None,
+    access_mode: str | None = None,
+    safe_source_root: Path | None = None,
+    forbidden_text: list[str] | None = None,
 ) -> dict[str, Any]:
     manifest, manifest_sha256 = load_manifest(manifest_path)
     trusted_is_exposure_ledger = (
@@ -153,6 +282,33 @@ def validate(
         require_append_only_chronology=trusted_is_exposure_ledger,
     )
     freeze_at = parse_time(freeze_at_raw, "freeze_at")
+    effective_access_events = [
+        event
+        for event in ledger
+        if event["exposure_type"] in ACCESS_EXPOSURE_TYPES
+        and parse_time(event["observed_at"], f"event {event['event_id']}") <= freeze_at
+    ]
+    if access_mode is not None and access_mode not in ACCESS_MODES:
+        raise ValidationError(f"unsupported access mode: {access_mode}")
+    mode_was_inferred = access_mode is None and not effective_access_events
+    effective_access_mode = access_mode or (
+        "public_source" if not effective_access_events else "unspecified"
+    )
+    mode_invalid = False
+    mode_reason: str | None = None
+    if effective_access_mode == "unspecified":
+        mode_invalid = True
+        mode_reason = "protected/design/execution exposure exists; --access-mode is required"
+    elif effective_access_mode == "public_source" and effective_access_events:
+        mode_invalid = True
+        mode_reason = "public_source cannot contain protected/design/execution exposure"
+    elif effective_access_mode in RISK_ACCESS_MODES and (
+        trusted_access_ledger_path is None or plan_frozen_at_raw is None
+    ):
+        mode_invalid = True
+        mode_reason = (
+            f"{effective_access_mode} requires --trusted-access-ledger and --plan-frozen-at"
+        )
     if (trusted_access_ledger_path is None) != (plan_frozen_at_raw is None):
         raise ValidationError(
             "trusted access chronology requires both trusted_access_ledger and plan_frozen_at"
@@ -210,9 +366,14 @@ def validate(
 
     unknown_ledger_artifacts = sorted(set(events_by_artifact) - artifact_ids)
     access_chronology: dict[str, Any] = {
-        "status": "NOT_EVALUATED",
-        "reason": "no trusted append-only access ledger was supplied",
+        "status": "NOT_APPLICABLE_PUBLIC_SOURCE",
+        "reason": "public-source work has no protected result-access chronology",
     }
+    if effective_access_mode in RISK_ACCESS_MODES:
+        access_chronology = {
+            "status": "NOT_EVALUATED",
+            "reason": "no trusted append-only access ledger and prospective plan were supplied",
+        }
     chronology_invalid = False
     if trusted_access_ledger_path is not None and plan_frozen_at_raw is not None:
         if trusted_is_exposure_ledger:
@@ -268,14 +429,52 @@ def validate(
             "sha256": access_ledger_sha256,
             "event_count": len(access_events),
         }
+    safe_source_validation: dict[str, Any] = {
+        "status": "NOT_APPLICABLE",
+        "reason": "strict_result_blind mode was not selected",
+    }
+    safe_source_invalid = False
+    if effective_access_mode == "strict_result_blind":
+        if safe_source_root is None:
+            safe_source_invalid = True
+            safe_source_validation = {
+                "status": "BLOCK_PRE_DISPATCH_ACCESS",
+                "reason": "strict_result_blind requires --safe-source-root",
+            }
+        else:
+            try:
+                safe_source_validation = validate_safe_source_tree(
+                    safe_source_root,
+                    entries,
+                    forbidden_text or [],
+                )
+            except ValidationError as exc:
+                safe_source_invalid = True
+                safe_source_validation = {
+                    "status": "BLOCK_PRE_DISPATCH_ACCESS",
+                    "reason": str(exc),
+                }
+
     status = "PASS_FRESHNESS_LEDGER"
-    if mismatches:
+    if mode_invalid:
+        status = "INVALID_ACCESS_MODE"
+    elif effective_access_mode in RISK_ACCESS_MODES and unknown_ledger_artifacts:
+        status = "INVALID_UNKNOWN_LEDGER_ARTIFACT"
+    elif safe_source_invalid:
+        status = "BLOCK_PRE_DISPATCH_ACCESS"
+    elif mismatches:
         status = "INVALID_FRESHNESS_LEDGER"
     elif chronology_invalid:
         status = "INVALID_ACCESS_CHRONOLOGY"
     return {
         "schema_version": "prospective-frame-validation-v1",
         "status": status,
+        "access_mode": {
+            "value": effective_access_mode,
+            "inferred": mode_was_inferred,
+            "reason": mode_reason,
+            "effective_protected_event_count": len(effective_access_events),
+        },
         "freeze_at": freeze_at_raw,
         "manifest": {
             "path": str(manifest_path),
@@ -299,6 +498,7 @@ def validate(
         "mismatch_count": len(mismatches),
         "mismatches": mismatches,
         "access_chronology": access_chronology,
+        "safe_source_validation": safe_source_validation,
         "entries": sorted(derived_entries, key=lambda item: item["artifact_id"]),
     }
 
@@ -314,6 +514,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--claim-tier", default="E")
     parser.add_argument("--design-tier", default="D")
     parser.add_argument(
+        "--access-mode",
+        choices=tuple(sorted(ACCESS_MODES)),
+        help=(
+            "public_source, protected, confirmatory, or strict_result_blind; "
+            "omit only when the ledger has no protected/design/execution exposure"
+        ),
+    )
+    parser.add_argument(
         "--trusted-access-ledger",
         type=Path,
         help="trusted append-only exposure ledger used only for plan/access chronology",
@@ -321,6 +529,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--plan-frozen-at",
         help="RFC3339 prospective plan freeze time; required with --trusted-access-ledger",
+    )
+    parser.add_argument(
+        "--safe-source-root",
+        type=Path,
+        help="exact text-only source tree required for strict_result_blind",
+    )
+    parser.add_argument(
+        "--forbidden-text",
+        action="append",
+        default=[],
+        help="non-empty UTF-8 sequence forbidden from the strict safe tree; repeatable",
     )
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
@@ -340,6 +559,9 @@ def main() -> int:
             args.design_tier,
             args.trusted_access_ledger,
             args.plan_frozen_at,
+            args.access_mode,
+            args.safe_source_root,
+            args.forbidden_text,
         )
     except ValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

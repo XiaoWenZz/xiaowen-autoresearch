@@ -232,12 +232,23 @@ For the selected candidate's readiness handoff, return an `R0`
 carrier/next-cell envelope and one proposed `R1` outcome-blind mechanical
 smoke/profile; do not execute `R1` or author the full `R2` contract here.
 The Controller preserves the proportional sequence
-`R0 -> R1 -> R2 -> R3`: `R2` freezes complete identity, cells, power,
-thresholds, stop/action rules, budget, and exposure before any scientific
-outcome; only `R3` may execute science. `R1` has no scientific payload or
-interpretation, and its failure is not a scientific negative. Full-program
-portability or future Confirmatory surfaces cannot block `R1` unless required
-for the next cell's identity or safety.
+`R0 -> R1 -> R2 -> R3`: `R2` freezes complete identity, cells, thresholds,
+stop/action rules, finite budget, and exposure before any scientific outcome;
+only `R3` may execute science. A first descriptive Scout does not require final
+power or multiplicity: use 2--3 necessary arms, six paired bundles, the primary
+metric, MPE, guard comparator, strongest fair baseline, distinct mechanism
+deletion when applicable, and a frozen action table. Confirmatory, final
+superiority, a powered negative, or scientific closure requires the complete
+power and multiplicity plan appropriate to that claim. `R1` has no scientific
+payload or interpretation, and its failure is not a scientific negative.
+Full-program portability or future Confirmatory surfaces cannot block `R1`
+unless required for the next cell's identity or safety.
+
+Stage the baseline burden. At `R0`, freeze baseline identity, fairness, and
+constructability; do not require it to be fully reproduced or executed. At
+`R1`, make the baseline and carrier runnable while remaining outcome-blind and
+reading no utility. At `R2/R3`, execute the exact baseline and mechanism
+deletion under the frozen scientific contract.
 
 In addition, retain at most one oldest `EVIDENCE_GAP_LEAD` and one
 `BROADER_ARTIFACT_LEAD` when their next evidence action is bounded. They are

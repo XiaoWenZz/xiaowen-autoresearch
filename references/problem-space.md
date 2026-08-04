@@ -12,9 +12,10 @@ cost.
 3. Search reductions before solutions
 4. Apply the zero-compute falsification ladder
 5. Separate repair from contribution
-6. Qualify the carrier
-7. Design a decision-complete witness
-8. Minimal record
+6. Apply proportional R0--R3 readiness
+7. Qualify the carrier
+8. Design a decision-complete witness
+9. Minimal record
 
 ## Ground the problem
 
@@ -27,7 +28,7 @@ observed failure and decision unit:
 target estimand and minimum practical effect:
 federation/deployment constraints:
 strongest current simple practice:
-adequate real carrier or data source:
+cheapest controlled/formal or natural witness and naturality status:
 evidence status and uncertainty:
 claimed mechanism and necessary support statistic:
 strongest mechanism-deletion control:
@@ -57,8 +58,8 @@ Separate:
 Separate opportunity admission from method admission:
 
 - an **Opportunity Search** may admit a hypothesized failure when the affected
-  actor, loss, target estimand, practical-effect floor, adequate carrier/source,
-  and decision-changing witness are concrete;
+  actor, loss, target estimand, practical-effect floor, candidate controlled or
+  formal witness, and decision-changing action are concrete;
 - a **method portfolio** requires an observed, analytically established, or
   source-supported material failure plus a residual method operation.
 
@@ -219,29 +220,73 @@ shared-capacity execution. A repair contrast may establish that the original
 operation is harmful. Only a nontrivial contribution contrast can establish
 that the proposed mechanism is needed.
 
+## Apply proportional R0--R3 readiness
+
+Do not import a complete scientific contract into problem-admission readiness:
+
+- `R0` freezes only the actor and action, lawful pre-decision inputs, the exact
+  smallest next cell, matched-cost invariants, fatal invalidators, a hard cap,
+  the cheapest decision-complete problem-existence witness, and the strongest
+  baseline's identity, fairness and constructability. It does not require the
+  baseline to be fully reproduced or executed.
+- `R1` permits one active outcome-blind implementation/profile smoke contract
+  at a time for that exact cell. It contains no protected, held-out,
+  public-test, or scientific payload, and its failure is engineering/carrier
+  evidence rather than a scientific negative. It makes the bound real carrier
+  and baseline runnable without reading utility. An unchanged-protocol repair
+  may rerun under a new attempt identity within the existing cap; a carrier or
+  scientific-contract change returns to prospective adjudication.
+- A first descriptive `R2` freezes exact code/config/data/model/carrier identity
+  and exposure; `2` or `3` necessary arms; `6` paired bundles; estimand, primary
+  metric, MPE, guard comparator, strongest complete fair baseline, distinct
+  mechanism deletion when applicable, analysis/action table, finite compute
+  cap, stop rule, and screening-only claim. It does not require final power,
+  multiplicity, every paper baseline, a full recipient matrix, or
+  publication-scale external validity.
+- Confirmatory/final `R2` additionally freezes the complete power and
+  multiplicity plan, full claim-proportionate baseline family, external-validity
+  scope, and any publication-level mechanism evidence needed for superiority,
+  a powered negative, or scientific closure.
+- `R3` executes scientific evidence only after `R2` and the applicable
+  integrity, authority, provenance, and fairness gates pass.
+
+Full license coverage, power and seed arithmetic, natural prevalence, a full
+recipient matrix, full-carrier portability, and publication-scale external
+validity are not default `R0` fatal gates. Move them to `R1` or `R2` unless one
+is necessary to identify the exact next cell or keep that cell lawful and safe.
+An unresolved later-stage field is a named downstream requirement, not a reason
+to kill a cheap interpretable `R0`.
+
+A source-grounded controlled synthetic generator, executable microcase, or
+formal fixture may establish scoped problem existence when it preserves the
+actor decision, lawful information, chronology, state, matched costs,
+recipients required by the estimand, and fatal invalidators. It cannot establish
+natural prevalence or external validity; test those only after the controlled
+signal exists.
+
 ## Qualify the carrier
 
-Before a method-performance Scout, verify prospectively that the carrier can
-answer the frozen question:
+Before `R1`, apply only fatal identity and runnability checks: the carrier must
+preserve the frozen actor, decision time, lawful pre-action information, action
+set/common parent and persistent state transition, sampling unit/recipients and
+estimand; name lawful code/model/data/exposure identity; expose the real primary
+metric; make the strongest fair baseline constructable; and have a plausible
+minimal execution path inside the frozen profile cap. A mismatch is
+`HARD_BLOCK`; missing official code is not.
 
-- one mathematical or operational condition necessary for the claimed
-  mechanism is measurable and materially nonzero above noise;
-- the base effect or failure can exceed the minimum practical-effect floor;
-- the strongest simple/static/matched-information reduction can be run;
-- a mechanism-deletion control can isolate the claimed causal term;
-- the residual causal quantity is identifiable above measurement and replay
-  noise;
-- the sampling and decision unit matches the target estimand, or the bridge is
-  calibrated;
-- a known positive and null/static control can reveal an insensitive
-  instrument or ceiling/floor effect.
+Route rather than hold the remaining unknowns. Runtime, VRAM, numerical
+stability, throughput and per-pair cost go to one outcome-blind real-path
+profile. Paired variance/covariance goes to disjoint calibration or counts in
+the frozen Scout. Effect direction/magnitude, guard behavior, mechanism
+statistics and whether the base loss exceeds MPE go to the Scout. Final power,
+multiplicity, full baselines and external validity wait for Confirmation.
 
-If these are unknown, the first Scout is a carrier/problem-existence witness,
-not a method comparison. If the carrier is known to fail one item, replace it
-before execution or close the scoped candidate; do not use a predictable null
-as permission for a post-hoc carrier ladder. A synthetic fixture whose
-necessary interaction term is zero may validate algebra or sensitivity, but it
-cannot establish the corresponding real mechanism.
+If a carrier is known structurally to erase the claimed actor transition or
+make the real metric/baseline impossible, reject that carrier before execution.
+Do not interpret an unknown mechanism magnitude as a carrier failure or use a
+predictable null as permission for a post-hoc carrier ladder. A synthetic
+fixture whose necessary interaction term is zero may validate algebra or
+sensitivity, but it cannot establish the corresponding real mechanism.
 
 ## Design a decision-complete witness
 
@@ -283,7 +328,10 @@ Keep the gate to one screen:
 problem thesis:
 stage: opportunity | problem-scout | contribution
 evidence status:
-carrier adequacy:
+R0 actor/action/lawful inputs:
+R0 exact next cell, matched-cost invariants and cap:
+R0 fatal invalidators and cheapest witness:
+later-stage carrier/power/license/naturality requirements:
 federation deletion:
 PEFT deletion:
 dynamic-decision deletion:

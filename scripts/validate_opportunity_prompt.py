@@ -11,15 +11,51 @@ from pathlib import Path
 
 PASS = "PASS_EXTERNAL_OPPORTUNITY_PROMPT_STRUCTURE"
 FAIL = "FAIL_EXTERNAL_OPPORTUNITY_PROMPT_STRUCTURE"
+TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "opportunity-search-prompt-template.md"
+PLACEHOLDER_PATTERN = re.compile(r"\{\{([A-Z0-9_]+)\}\}")
 
 
 def has_any(text: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, text, flags=re.IGNORECASE | re.MULTILINE) for pattern in patterns)
 
 
+def validate_canonical_assembly(text: str) -> str | None:
+    """Bind immutable template bytes while allowing only declared slot values."""
+    template = TEMPLATE.read_text(encoding="utf-8")
+    pieces: list[str] = []
+    seen: set[str] = set()
+    cursor = 0
+    for match in PLACEHOLDER_PATTERN.finditer(template):
+        pieces.append(re.escape(template[cursor : match.start()]))
+        name = match.group(1)
+        group = f"slot_{name}"
+        if name in seen:
+            pieces.append(f"(?P={group})")
+        else:
+            pieces.append(f"(?P<{group}>[\\s\\S]+?)")
+            seen.add(name)
+        cursor = match.end()
+    pieces.append(re.escape(template[cursor:]))
+    assembled = re.fullmatch("".join(pieces), text)
+    if assembled is None:
+        return "prompt is not an exact assembly of the canonical template"
+    empty = sorted(
+        name.removeprefix("slot_")
+        for name, value in assembled.groupdict().items()
+        if not value.strip()
+    )
+    if empty:
+        return "canonical prompt has empty mutable slots: " + ", ".join(empty)
+    return None
+
+
 def validate(text: str) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+
+    assembly_error = validate_canonical_assembly(text)
+    if assembly_error is not None:
+        errors.append(assembly_error)
 
     if not has_any(
         text,
@@ -146,10 +182,16 @@ def validate(text: str) -> tuple[list[str], list[str]]:
             r"R0\s*->\s*R1\s*->\s*R2\s*->\s*R3",
         ),
         "scientific contract precedes scientific outcome": (
-            r"R2[\s\S]{0,350}(?:identity|power)[\s\S]{0,350}before any scientific[\s\S]{0,80}outcome",
+            r"R2[\s\S]{0,500}identity[\s\S]{0,500}before any scientific[\s\S]{0,80}outcome",
+        ),
+        "two-tier Scout and Confirmatory R2": (
+            r"first descriptive Scout[\s\S]{0,500}(?:does not require|without)[\s\S]{0,180}(?:final power|multiplicity)[\s\S]{0,700}Confirmatory[\s\S]{0,300}power[\s\S]{0,300}multiplicity",
+        ),
+        "baseline staging": (
+            r"R0[\s\S]{0,220}baseline\s+identity[\s\S]{0,120}constructability[\s\S]{0,320}R1[\s\S]{0,220}runnable[\s\S]{0,220}utility[\s\S]{0,320}R2/R3[\s\S]{0,220}exact\s+baseline[\s\S]{0,120}mechanism\s+deletion",
         ),
         "R1 is non-scientific": (
-            r"R1[\s\S]{0,500}(?:no scientific payload|outcome-blind)[\s\S]{0,500}not a scientific negative",
+            r"R1[\s\S]{0,500}(?:no\s+scientific\s+payload|outcome-blind)[\s\S]{0,500}not\s+a\s+scientific\s+negative",
         ),
         "no numeric novelty admission score": (
             r"numeric LLM or expert novelty score as an admission threshold",

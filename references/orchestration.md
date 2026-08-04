@@ -22,16 +22,22 @@ Use this reference before creating work sessions, unattended work, subagent dele
 
 | Role | May do | Must not do |
 |---|---|---|
-| Owner | set charter, approve Class C actions, appoint or serve as an independent adjudicator | approve hidden protocol changes or accept a claim they produced as worker |
-| Orchestrator | choose bounded next step, manage budget/state, decide routing | fabricate evidence or accept Confirmatory/publication-facing claims without independent adjudication |
-| Worker | execute one direction, write artifacts/evidence | change charter or adjudicate own claims |
-| Verifier | reproduce, falsify, check provenance | edit raw worker artifacts |
-| Guardian | check lease, restart/nudge, report liveness | interpret results, edit evidence, report another role's conclusions |
-| Adjudicator | decide challenged claims from evidence/rebuttal | rely on an uncalibrated self-score |
+| Controller | route bounded work, freeze authority, accept evidence, choose the next gate | perform the Explorer/Audit/Executor's scientific semantics or accept a Confirmatory/publication claim without independent adjudication |
+| Explorer | complete one source-to-`PROBE` loop and return at most one admitted candidate | split source, brief, locator, or packet checks across workers; accept its own claim |
+| Audit | complete the whole `R0` reduction/readiness decision in one owner and one terminal | delegate individual predicates to successor Audits; execute scientific outcomes |
+| Executor | implement or run only after one complete implementation/execution contract is frozen | redefine the question, gate, estimand, baseline, exposure, or scientific contract |
 
-Use separate sessions for independence when possible. Independence means separate task context and no leaked expected answer, not merely a different reviewer persona.
+Keep role separation at decision boundaries, not at every file operation. A
+packet, locator, sidecar, hash, license lookup, or deterministic safe-source
+preflight stays inside the current Explorer or Audit owner and is never a new
+research role or session. Same-model separation is procedural red-teaming, not
+external scientific replication. Confirmatory claim acceptance still requires
+an independent adjudicator or owner who did not produce the decisive evidence.
 
-A separate session of the same model is useful procedural red-teaming, but must not be described as external scientific replication. Strong independence comes from separate code paths, clean checkouts, held-out data, independent validators, different implementations, or human/external review.
+While one Audit runs, the Explorer may search a substantively different
+problem space when no protected result analysis is pending, no real GPU
+saturation blocks useful work, and the two owners do not share write authority.
+A single Audit is not a global serialization lock.
 
 ## Controller, work sessions, and subagents
 
@@ -43,23 +49,20 @@ owner <-> controller session
                     -> optional short-lived subagents
 ```
 
-The controller session is the control plane. It maintains the Program/Epoch
-ledger, admits opportunities, freezes and amends worker contracts, accounts for
-cumulative budgets, registers live work, summarizes evidence, and decides
-scientific routing such as `probe`, `hold`, `drop`, promotion requests, and
-scoped closure. It records but does not self-accept Confirmatory or publication-
-facing claims. Claim acceptance belongs to an independent adjudicator; owner
-approval remains separately required only for charter and Class C actions.
-Unless the owner explicitly chooses otherwise, progress questions and
-scientific guidance return to this session.
+The Controller is the routing and acceptance plane. It admits opportunities,
+freezes or amends contracts, accounts for existing budgets, accepts returned
+evidence, and chooses `probe`, `hold`, `drop`, promotion, or scoped closure. It
+does not reproduce the Explorer's source synthesis, the Audit's R0 semantics,
+or the Executor's implementation. Program/Epoch and shared ledgers exist only
+when the route already has a real Managed or repeated-Program trigger.
 
-A work session is a persistent, inspectable evidence-production context. It
-handles exactly one admitted Problem Scout, confirmatory contract, or named
-uncertainty. Its contract must state:
+A work session is a persistent, inspectable evidence-production context used
+only when a session boundary has decision value. An Explorer receives one
+complete source-to-`PROBE` loop; an Audit receives the complete `R0`; an
+Executor receives one frozen implementation contract. Its contract states:
 
 - question and single unresolved uncertainty;
-- work type and explicit reasoning effort (`max` for audit/research/analysis
-  by default; `high` for implementation/execution by default);
+- exact model family and reasoning effort from the routing matrix below;
 - source, data, leakage, and deployment boundary;
 - allowed actions and tools;
 - attention, time, compute, API, and external-action budget;
@@ -67,14 +70,41 @@ uncertainty. Its contract must state:
 - positive, negative, and ambiguous stop/action rules;
 - conditions for pause, cancellation, reclamation, or return to the controller.
 
-Register each work session with `worker_id`, session/thread ID, Program/Epoch,
-contract revision, host/worktree or repository, role, frozen uncertainty,
-budget, status, artifact/state paths, last source-of-truth check, and stop,
-cancel, or reclaim condition. For a persistent worker, also record
-`callback_state`, `terminal_event_id`, `reclaim_deadline`, `watchdog_id`, and
-`watchdog_state`. Prefer compact waits or bounded status snapshots to routine
-polling. Operational details may stay in the work session; every decision-
-changing result and limitation must return to the controller ledger.
+Before creating or reusing a persistent Managed worker, verify the runtime's
+actual saved Project ID, cwd, repository, branch/remote, candidate/version,
+canonical role, and owner task. Echo them in the dispatch record. A projectless
+task or a worker whose Project/cwd/repository binding cannot be verified is
+never canonical and receives no scientific or shared-state authority. If the
+runtime exposes no Project/session/pin API, keep bounded work in the current
+verified in-Project task or report the operational limitation; do not translate
+it into `CARRIER_STOP`, scientific `HOLD`, or permission to create a projectless
+substitute.
+
+Keep only the live Managed objective pinned: the sole Controller and each
+active canonical Explorer, Audit, or Executor whose terminal needs Controller
+follow-up. Pin a verified successor at activation; unpin its predecessor only
+after terminal acceptance and routing. Unpin completed, superseded, archived,
+or merely reusable sessions, and pin them again only when a real Managed
+objective reactivates. Lite and Pro advisory tasks are never auto-pinned.
+
+Give every persistent Controller, Explorer, Audit, or Executor session the canonical sidebar title
+`<Role> · <candidate-or-bounded-scope> · <STATE>`. `Role` is one of
+`Controller|Explorer|Audit|Executor`; `STATE` is one of
+`ACTIVE|WAITING_EXTERNAL|HOLD|BLOCKED|COMPLETE`. Use a stable human-readable
+candidate/version, or a bounded scope when none exists; do not substitute raw
+task, dispatch, lease, terminal, or hash IDs for the scope. Set the title at
+verified activation, update it on reuse or a material phase/state change, and
+remove stale `ACTIVE` at terminal absorption. Titles are navigation only, not
+authority, evidence, a registry, or a lifecycle; exact IDs remain in existing
+durable records.
+
+For Lite/local work, the task itself is the ownership record; do not create a
+new Program, lease, lane, watchdog, or callback state. When the work belongs to
+an existing repeated Program, reuse its compact planning record without adding
+Managed state. Only a persistent Managed worker records the minimum live
+identity, contract revision, owner, budget, status, source-of-truth path,
+reclaim condition, and completion event needed for its actual coordination
+risk. Prefer event delivery and bounded snapshots to polling.
 
 At dispatch, also register one completion-return mechanism when the runtime
 supports worker-initiated callbacks or event-driven thread wakeups. Prefer this
@@ -139,32 +169,29 @@ Do not treat a visible `completed` thread state as proof that delivery occurred.
 Do not turn send timeout into an infinite wait, a retry loop, a fresh receiver,
 or a second worker.
 
-Treat terminal callback handling as one controller transaction. Before
-resuming unrelated owner conversation, the controller must read the evidence
-and limitations, record its scoped disposition, notify the worker, pause the
-completed event's watchdog, and commit exactly one next action:
-`dispatch_next`, `explicit_hold`, `owner_approval_required`, or `scoped_close`.
+For a persistent Managed event, the Controller reads the evidence and
+limitations, records its scoped disposition, closes any real watchdog, and
+commits exactly one next action: `dispatch_next`, `explicit_hold`,
+`owner_approval_required`, or `scoped_close`. The released worker is not part
+of this transaction and needs no `FINAL_ACK` or receiver ping.
 `dispatch_next` is incomplete until the next worker record and contract
-revision are registered with their own callback/watchdog state. For schema
-`1.2+`, record this transaction under `controller_action`; validation must fail
-for a latest terminal `delivered` state or a dangling dispatch target.
+revision are registered with their own callback/watchdog state. A latest
+terminal `delivered` state is complete worker delivery. Record
+`controller_action` only when a true shared-state commit is needed; validation
+rejects only a malformed transaction or dangling dispatch target, never the
+absence of an ACK.
 
 `dispatch_next` additionally requires the successful dispatch receipt and
-matching task-bound activation/callback lease evidence. `explicit_hold`
-requires one matching blocked backlog record with the same outcome-blind
-reopening predicate, observer, event/absolute-check trigger and next evidence
-action; otherwise it is an orphaned stop, not a closed controller transaction.
+matching task-bound activation/callback lease evidence. `explicit_hold` names
+one blocker, its observer, event/absolute-check trigger, and next evidence
+action in existing task state; it does not create a backlog or lane merely to
+certify the hold.
 
-The transaction is also incomplete until the controller reconciles the global
-GPU, zero-GPU, result-analysis and Pro lanes. A route-local `explicit_idle`
-recommendation has no global authority. If experiments are merely queued for
-GPU, dispatch the next bounded new-problem Opportunity Search unless a ready
-GPU result analysis preempts it or a complete global idle proof establishes a
-precise block/search-budget exhaustion. Use the compact contract in
-[portfolio-lanes.md](portfolio-lanes.md), not another orchestration state tree.
-Recompute queue authority from the newest validated experiment record or
-durable terminal before using Wiki synthesis; stale candidate maps can nominate
-an audit, but cannot launch or retain a superseded route.
+Reconcile only the shared resources actually touched by the Managed event. A
+GPU/remote completion may require its run, ownership and result-analysis queue;
+a local source or R0 completion requires none of the GPU, zero-GPU, Pro, lane,
+dashboard, or global-idle machinery. Load
+[portfolio-lanes.md](portfolio-lanes.md) only when a real shared lane changes.
 
 A heartbeat is not a substitute for this completion callback. Use one only as
 a low-frequency failure watchdog when a worker can crash, a callback can be
@@ -172,15 +199,11 @@ lost, or the runtime provides no reliable terminal event. Its checks must be
 bounded and silent while the worker is ordinarily active; it must not become a
 progress-report loop or the normal result-delivery path.
 
-Treat automation tools as user-visible mutations. Before calling one for an
-existing monitor, resolve its durable ID from
-`$CODEX_HOME/automations/<id>/automation.toml` and inspect all matching
-definitions directly. A `view`, `create`, or `update` call renders a persistent
-card in the conversation. If the desired effective fields are unchanged, make
-no tool call. Retarget the same ID and perform at most one create/update
-mutation after the controller has settled the complete next target. Multiple
-historical cards for one ID are not multiple schedulers and must not be
-"fixed" by deleting or recreating the live singleton.
+Automation is a user-visible mutation. Use it only when an independently real
+remote/unattended Managed trigger has no native completion return. Reuse the
+one existing bounded fallback by durable ID, change nothing when effective
+fields already match, and never create polling or a second monitor for advisory,
+Lite, source-search, R0, dashboard, or capacity state.
 
 If the runtime has no completion-return mechanism, record a bounded manual
 reclaim deadline and responsible controller in the worker registry. An
@@ -233,20 +256,34 @@ Program/Epoch budget. Use a persistent work session instead when the task needs
 owner-visible interaction, long-running jobs, repeated guidance, durable
 recovery, an isolated context, or an auditable evidence trail across turns.
 
-When creating or continuing any work session, pass the reasoning effort
-explicitly. Raise `high` implementation/execution work to `max` when it reveals
-scientific ambiguity, conflicting evidence or rules, a validity boundary, or
-complex concurrency/data-integrity risk. Lower effort only when the remaining
-subtask is demonstrably mechanical and outcome-independent; never downshift
-unresolved scientific judgment.
+When creating or continuing a work session, bind model family and reasoning
+effort explicitly:
+
+- `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
+  contracts, Audits, causal/statistical/algebraic reasoning, protected-result
+  interpretation, route decisions, closure, and adjudication;
+- `gpt-5.6-sol` + `xhigh`: first real-carrier Scout Executor, complex
+  implementation, remote integration/debugging, and evidence-bearing execution;
+- `gpt-5.6-sol` + `high`: demonstrably bounded frozen-contract implementation,
+  tests, deterministic integration, and routine execution; and
+- `gpt-5.6-luna` + `max`: high-volume deterministic rehashing, sync, packaging,
+  unchanged-contract reruns, or simple outcome-invariant repair only.
+
+Raise an Executor to `gpt-5.6-sol` + `max` when authority, evidence validity,
+concurrency, data integrity, exposure, or scientific interpretation becomes
+ambiguous. `luna max` never substitutes for `sol xhigh/max` scientific work. If
+a named tier is unavailable, use the nearest available `gpt-5.6-sol` tier and
+report the substitution before protected/scientific work.
 
 This session architecture is separate from the governance-track decision. A
-single bounded work session may still be Scout Lite when no durable
-coordination state is needed. Cross-session unattended recovery, multiple
-workers, paid execution, or a persistent lease requires a governance-admission
-proof for `operating_weight=managed`; public-test, publication-facing,
-expensive, or irreversible work requires `governance_track=confirmatory` and
-`operating_weight=full`.
+short-lived bounded subagent inside one user-visible owner may remain Lite; a
+persistent canonical work session needs a real Managed trigger. Cross-session
+unattended recovery, multiple write-capable workers, paid execution, or a
+persistent lease requires a governance-admission proof for
+`operating_weight=managed`; public-test,
+publication-facing, expensive, or irreversible work requires
+`governance_track=confirmatory` plus explicit authority, and uses Managed only
+when a Managed trigger is actually present.
 
 ## Governance tracks and process budget
 
@@ -264,7 +301,9 @@ For Scout:
 3. prefer cached/cheap witnesses and one real end-to-end smoke before the evidentiary run;
 4. treat unchanged-protocol code bugs as one engineering loop, not new contracts, schemas, activation states, or approval rounds;
 5. implement only controls that can change the witness decision;
-6. if governance-only effort exceeds scientific implementation, remove controls or bypass the framework with a direct bounded witness;
+6. if governance-only effort exceeds scientific implementation, remove
+   nonessential controls and execute the direct bounded witness under the same
+   evidence, authority, exposure, fairness, and budget hard controls;
 7. use one proportionate verifier that recomputes primary metrics, gates, coverage, and leakage; add stronger trust machinery only for a named threat;
 8. record launch, anomaly, completion, and adjudication, not routine heartbeats.
 9. freeze scientific decision invariants before evidence, but record incidental
@@ -398,11 +437,12 @@ Require the worker to return evidence and limitations, not a success verdict.
 
 ## Liveness and leases
 
-- Use `state/heartbeat.json` only for liveness.
-- Give one worker a time-bounded lease; include `runner_id`, `last_seen_at`, and `lease_expires_at`.
-- Use atomic updates through `scripts/update_state.py heartbeat`.
-- A stale lease permits restart or attention, not a scientific pivot.
-- Prevent duplicate execution by checking the active run ID and lease before restart.
+Use a lease only when concurrent duplicate execution or a persistent remote
+write is a real risk. Lite/local Explorer, Audit, deterministic preparation,
+and user-visible Executor tasks have no lease or heartbeat. For a Managed
+lease, keep only runner identity, source-of-truth run ID, expiry/reclaim rule,
+and atomic ownership update. A stale lease permits attention or recovery, never
+a scientific pivot; prove the prior run is inactive before replacement.
 
 ## Progress and stall detection
 
@@ -425,7 +465,18 @@ Do not force novelty when replication is required. Do not treat waiting for a sc
 
 ## Fresh session versus resume
 
-Prefer a fresh worker when reducing anchoring, testing an independent reproduction, or recovering from context saturation. Resume when continuity is required by an active terminal, browser state, uncommitted workspace, long-running job, or external transaction. In both cases, inject durable state and verify live state before acting.
+For the same idea, resume when continuity is required by an active terminal,
+browser state, uncommitted workspace, long-running job, or external
+transaction; compact only when decision-relevant history has become materially
+redundant. On an idea switch, reuse the canonical role session only after a
+runtime-supported compact/reset succeeds and its isolation is verifiable.
+Otherwise open one fresh session, transfer the canonical role binding, and
+close/archive the prior session so no duplicate owner remains. Never treat
+record selection as context isolation. A session that has seen bytes forbidden
+by a strict-blind contract cannot become an eligible strict-blind owner through
+compaction. Prefer a fresh worker for independent reproduction or anti-anchoring.
+In every case, inject only the minimal durable state and verify live state before
+acting.
 
 ## Long-running jobs
 

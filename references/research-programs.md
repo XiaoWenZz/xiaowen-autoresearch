@@ -48,9 +48,9 @@ authorization and resource budgets do not overlap. Portfolio filenames,
 revisions, rebuttals, candidate names, new sessions, and new repositories do
 not replenish Program or Epoch budgets.
 
-For Scout Lite, a compact planning record containing `program_id`, `epoch_id`,
-budgets, fingerprints, and decisions is sufficient. Do not initialize managed
-state solely to represent this hierarchy.
+When an existing Program governs Scout Lite, its compact planning record is
+sufficient. Do not initialize Managed state—or invent a Program/Epoch—solely
+to represent a one-off Lite search.
 
 The one-Scout rule applies to each active Epoch and Opportunity Search
 selection pass. A portfolio may retain multiple independently frozen,
@@ -209,7 +209,7 @@ complete defect inventory owner:
 root-cause acceptance tests:
 consolidated recheck:
 fallback executable claim or artifact:
-remaining attention and governance 20% target:
+retrospective governance-attention share (diagnostic only):
 ```
 
 Treat work as **governance-only** when it adds no target, mechanism, source,
@@ -223,9 +223,9 @@ Apply these defaults until the next decision-changing scientific observation:
 1. require one whole-path, root-cause-grouped defect inventory before repair;
 2. repair ordinary outcome-blind defects together in the canonical
    implementation session and run one consolidated recheck;
-3. treat 20% governance-only attention as an efficiency target. A breach
-   requires immediate simplification and root-cause review, not automatic
-   scientific closure;
+3. inspect governance-attention share retrospectively from existing records.
+   It is never a readiness, dispatch, acceptance, or stop gate; a high share is
+   a prompt to simplify nonessential process, not to block direct evidence;
 4. do not let a recheck expand into open-ended red teaming. If a root recurs or
    the defect set does not shrink, change implementation strategy, owner,
    or toolchain instead of opening serial predicate patches. A carrier change
@@ -334,37 +334,48 @@ changes scientific thresholds or promotes the historical case.
 
 Pause the Program or Epoch when any condition holds:
 
-1. two related Scouts fail the same causal link; close that route;
+1. two related Scouts fail the same causal link; propose one scoped closure
+   through the Closure Confidence Gate rather than closing automatically;
 2. the frozen search, review, or attention budget is exhausted; report
    operational search exhaustion unless the boundary is narrow enough for
    scientific closure. Exhaustion of an aggregate GPU planning envelope alone
    is not a circuit breaker;
 3. a new portfolio filename or version is used without a substantive Epoch
    change;
-4. planning/review artifacts outnumber decision-changing evidence artifacts
-   by more than 3:1;
-5. the next action changes only carrier, rank, checkpoint, horizon, component
+4. the next action changes only carrier, rank, checkpoint, horizon, component
    identity, selector, threshold, or an ad hoc seed. A later complete paired
    seed tranche explicitly admitted by the frozen staged action table is not
    this breaker;
-6. governance or implementation grows while the target estimand remains
+5. governance or implementation grows while the target estimand remains
    unobserved;
-7. the initial opportunity map and its one refresh return no probe; report
+6. the initial opportunity map and its one refresh return no probe; report
    search exhaustion or a narrow-boundary no-opportunity result;
-8. the frozen search clock expires without a complete portfolio disposition;
-9. two contribution briefs fail the same specificity deletion or preserving
+7. the frozen search clock expires without a complete portfolio disposition;
+8. two contribution briefs fail the same specificity deletion or preserving
    reduction while proposing no distinct causal prediction; do not apply this
    circuit breaker to distinct actor-level opportunity theses;
-10. after a material signal, the same defect root recurs after a complete
+9. after a material signal, the same defect root recurs after a complete
     inventory and consolidated recheck and no bounded authorized remediation
     remains before another decision-changing observation.
+10. three consecutively admitted `PROBE`s in one funnel produce no valid `R1`;
+11. the same repairable access/tool root cause produces two
+    `HOLD_ACCESS_CHANNEL` events.
 
-After a circuit breaker, permit only a route closure/synthesis record,
+For breakers 10 or 11, pause candidate generation rather than changing
+ontology. Use one workflow owner to repair the access/tool/readiness path.
+Resume only after deterministic forward traces show that public-source `R0`
+reaches a decision and strict-blind work with a missing safe tree blocks before
+dispatch; neither trace may create a packet or fresh-Audit cascade. Breaker 11
+also requires one representative repaired `R1` to pass under an unchanged
+protocol and existing cap. Breaker 12 applies only to the same repairable root
+cause, not unrelated access failures or distinct mechanisms.
+
+After any other circuit breaker, permit only a route closure/synthesis record,
 knowledge handoff, `SEARCH_BUDGET_EXHAUSTED_WITHOUT_SELECTION`, a justified
-narrow-boundary no-opportunity result, or a substantively new Program
-proposal. Do not launch a new Scout from the pause itself.
+narrow-boundary no-opportunity result, or a substantively new Program proposal.
+Do not launch a new Scout from the pause itself.
 
-For circuit breaker 10, preserve the observed signal and change the
+For circuit breaker 9, preserve the observed signal and change the
 implementation strategy, owner, or toolchain. A carrier change requires a new
 prospective contract, exposure validation, and budget authorization. Downgrade
 the claim or artifact, or hold validity, only when a real hard block or budget
@@ -424,6 +435,10 @@ At each Scout close and Program pause, report:
 raw leads generated:
 grounded opportunity briefs:
 problem-admission probes:
+time-to-valid-R1:
+R0-to-R1 pass rate:
+access-hold rate:
+governance-attention share:
 protected estimands observed:
 material problem signals:
 signals attributed to the claimed mechanism:
@@ -439,8 +454,11 @@ external-review calls or material attention spent:
 positive-signal attribution: attributed / repair-only / unresolved / not applicable
 ```
 
-Use this funnel—not Program numbers, filenames, sessions, or repository count—to
-estimate research recall and conversion. A high raw-lead count with few
+Use this funnel—not artifact, source, Program, filename, session, or repository
+counts—to estimate research recall and conversion. `time-to-valid-R1`,
+`R0-to-R1 pass rate`, `access-hold rate`, and `governance-attention share` are
+retrospective workflow diagnostics from existing records, never new telemetry,
+sidecars, validators, or per-item gates. A high raw-lead count with few
 grounded briefs diagnoses ideation/grounding quality. Many grounded briefs with
 almost no probes diagnoses an over-strict admission gate. Many probes with no
 estimands diagnoses carrier or engineering design. Material signals with no
@@ -504,7 +522,7 @@ epoch_id:
 epoch_question:
 epoch_fingerprint:
 governance_track: scout | confirmatory
-operating_weight: lite | managed | full
+operating_weight: lite | managed
 governance_admission_proof:
 portfolio_ledger:
 selected_scout_or_search_terminal:
