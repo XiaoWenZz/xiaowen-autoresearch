@@ -181,9 +181,9 @@ absorption: read the evidence and limitations, record the scoped disposition,
 close any real watchdog, and commit exactly one next action: `dispatch_next`,
 `explicit_hold`, `owner_approval_required`, or `scoped_close`. This applies to
 every actionable terminal, including `PROBE`, `PASS_R0*`, `PASS_R1*`,
-`PASS_R2*`, `PROFILE_VALID`, `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and
-`CARRIER_STOP`. The released worker is not part of this transaction and needs
-no `FINAL_ACK` or receiver ping.
+`PASS_R2*`, `PROFILE_*`, `ENGINEERING_*`, `CONTRACT_CONFLICT`,
+`HOLD_ACCESS_CHANNEL`, and `CARRIER_STOP`. The released worker is not part of
+this transaction and needs no `FINAL_ACK` or receiver ping.
 `dispatch_next` is incomplete until the next worker record and contract
 revision are registered with their own callback/watchdog state. A latest
 terminal `delivered` state is complete worker delivery. Record
@@ -200,8 +200,8 @@ real blocker, its observer, event/absolute-check trigger, and next evidence
 action in existing task state; it does not create a backlog or lane merely to
 certify the hold.
 
-Treat `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and `CARRIER_STOP` as
-worker-local terminals, never Controller route decisions. When the candidate
+Treat `ENGINEERING_*`, `CONTRACT_CONFLICT`, `HOLD_ACCESS_CHANNEL`, and
+`CARRIER_STOP` as worker-local terminals, never Controller route decisions. When the candidate
 remains open or `UNTESTED`, terminal absorption is incomplete until the
 Controller records exactly one of: a successfully activated same-idea
 successor (`DELEGATED`/`dispatch_next`), one explicit blocker with reopening
@@ -210,6 +210,11 @@ evidence-gap archive with a reopening fact (`DONE`). A worker recommendation
 such as “keep open,” “do not launch,” “no automatic successor,” or its
 `NEXT_ACTION` cannot discharge this Controller duty. `OPEN_WITHOUT_OWNER` is an
 invalid lifecycle state, not an idle candidate.
+
+An attributed `SCOUT_SIGNAL` also remains open until the same Controller turn
+binds one Contribution Gate owner/action or a genuine blocker with reopening
+fact, observer, and trigger. The signal never self-promotes, but a user-visible
+status/final cannot leave it ownerless between Scout adjudication and the Gate.
 
 Reconcile only the shared resources actually touched by the Managed event. A
 GPU/remote completion may require its run, ownership and result-analysis queue;

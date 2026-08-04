@@ -302,6 +302,15 @@ randomized or counterbalanced arm order, one mechanism statistic, failures and
 missingness, any severe-harm boundary, analysis code, compute cap, and every
 action below. Publication-scale coverage follows only after material signal.
 
+Before protected outcome access, deterministically compare the frozen
+candidate, strongest baseline, mechanism deletion, and guard/parent action and
+state signatures wherever the claim requires a contrast. If candidate and
+matched baseline take identical actions on every frozen unit, their comparison
+cannot attribute a mechanism effect; candidate-versus-parent harm can support
+only the prospectively frozen safety/guard boundary. If a deletion arm is not
+distinct, it cannot support mechanism attribution. Stop or narrow the claim
+before exposure rather than discovering a zero contrast after the Scout.
+
 | frozen branch | action and claim boundary |
 | --- | --- |
 | invalid identity, leakage, failed arm, or broken matched-cost invariant | `ENGINEERING_INVALID` or exact `CARRIER_STOP`; no scientific inference |
@@ -326,6 +335,10 @@ and exclusions; (1) refresh nearest-neighbor residual and carrier conformance;
 external validity across the scopes the claim names; and (5) complete final
 inference, failure reporting, resource accounting, and reproducibility. Failure
 at any gate revises or archives the scoped claim; Scout outcomes cannot rescue it.
+The Controller must bind one Contribution Gate owner/action in that same turn,
+or record a genuine blocker with reopening fact, observer, and trigger. A
+material or attributed signal left without either is `OPEN_WITHOUT_OWNER`, not
+a completed handoff.
 
 ### Anti-stall routing
 
@@ -537,9 +550,9 @@ a fresh falsifiable synthesis estimand; then open a new charter for that pivot.
 ## Review and adjudication
 
 - Use reviewers to generate falsification attempts, missing controls, alternative explanations, citation challenges, and reproducibility checks.
-- For Confirmatory or publication-claim review, dispatch a fresh path-only
-  Audit with the frozen claim boundary, exact paper/claim text path, raw
-  result/config paths, hashes, and checklist. Exclude Executor summaries,
+- For protected-result attribution, Confirmatory, or publication-claim review,
+  dispatch a fresh-owner path-only Audit with the frozen claim boundary, exact
+  paper/claim text path, raw result/config paths, hashes, and checklist. Exclude Executor summaries,
   persuasive review narratives, prior Pro verdicts, prior claim
   interpretations, raw conversations, and contribution forecasts. The Audit
   rebinds every input hash before semantic review.

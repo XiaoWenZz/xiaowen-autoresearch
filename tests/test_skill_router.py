@@ -154,7 +154,8 @@ class SkillRouterTest(unittest.TestCase):
                 self.assertIn(phrase, router)
 
         for phrase in (
-            "fresh path-only Audit",
+            "fresh-owner path-only Audit",
+            "For protected-result attribution, Confirmatory, or publication-claim review",
             "exact paper/claim text path",
             "Exclude Executor summaries",
             "rebinds every input hash",
@@ -586,6 +587,12 @@ class SkillRouterTest(unittest.TestCase):
             "descriptive six-paired-bundle portfolio screen",
             "`SCOUT_SIGNAL` does not authorize Confirmation by itself",
             "refresh nearest-neighbor residual and carrier conformance",
+            "deterministically compare the frozen candidate, strongest baseline, mechanism deletion, and guard/parent action and state signatures",
+            "take identical actions on every frozen unit",
+            "cannot attribute a mechanism effect",
+            "it cannot support mechanism attribution",
+            "bind one Contribution Gate owner/action in that same turn",
+            "`OPEN_WITHOUT_OWNER`, not a completed handoff",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, integrity)
@@ -726,7 +733,8 @@ class SkillRouterTest(unittest.TestCase):
 
         for phrase in (
             "Atomic terminal absorption covers",
-            "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_VALID`",
+            "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_*`",
+            "`ENGINEERING_*`, `CONTRACT_CONFLICT`",
             "`OPEN_WITHOUT_OWNER`",
             "successful dispatch receipt plus matching activation snapshot",
             "`BLOCKED` with one reopening fact/observer/trigger",
@@ -741,6 +749,7 @@ class SkillRouterTest(unittest.TestCase):
         for phrase in (
             "performs atomic terminal absorption",
             "every actionable terminal, including `PROBE`, `PASS_R0*`, `PASS_R1*`",
+            "`PROFILE_*`, `ENGINEERING_*`, `CONTRACT_CONFLICT`",
             "may not send a user-visible status/final before that activation exists",
             "“Controller decides whether” is not `owner_approval_required`",
             "worker-local terminals, never Controller route decisions",
@@ -751,6 +760,8 @@ class SkillRouterTest(unittest.TestCase):
             "A heartbeat is recovery fallback",
             "wake the Controller for lifecycle repair",
             "it cannot choose the scientific successor",
+            "binds one Contribution Gate owner/action or a genuine blocker",
+            "cannot leave it ownerless between Scout adjudication and the Gate",
         ):
             with self.subTest(orchestration_phrase=phrase):
                 self.assertIn(phrase, orchestration)
@@ -758,7 +769,8 @@ class SkillRouterTest(unittest.TestCase):
         if workspace:
             for phrase in (
                 "Use atomic terminal absorption for every actionable terminal",
-                "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_VALID`",
+                "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_*`",
+                "`ENGINEERING_*`, `CONTRACT_CONFLICT`",
                 "Controller absorption is incomplete",
                 "successful dispatch receipt and matching activation snapshot",
                 "`dispatch_next` is incomplete before activation",
@@ -766,6 +778,8 @@ class SkillRouterTest(unittest.TestCase):
                 "`OPEN_WITHOUT_OWNER`",
                 "may not send a user-visible final before it is complete",
                 "recovery fallback, not normal successor dispatch",
+                "mechanically verify that candidate, strongest baseline, mechanism deletion, and guard/parent action/state signatures are distinct",
+                "fresh-owner path-only Audit with raw paths/hashes",
             ):
                 with self.subTest(workspace_phrase=phrase):
                     self.assertIn(phrase, workspace)

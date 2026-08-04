@@ -291,7 +291,7 @@ one bounded top-level send; release on successful receipt; never resend an
 ambiguous delivery; ACK never blocks. Fallback has idempotent effects.
 
 Atomic terminal absorption covers `PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`,
-`PROFILE_VALID`, `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and
+`PROFILE_*`, `ENGINEERING_*`, `CONTRACT_CONFLICT`, `HOLD_ACCESS_CHANNEL`, and
 `CARRIER_STOP`. An open/`UNTESTED` candidate must finish the same turn as:
 `DELEGATED` with successful dispatch receipt plus matching activation snapshot;
 `BLOCKED` with one reopening fact/observer/trigger; or `DONE` by scoped
