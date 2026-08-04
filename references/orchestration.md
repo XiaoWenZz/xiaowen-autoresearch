@@ -86,6 +86,11 @@ follow-up. Pin a verified successor at activation; unpin its predecessor only
 after terminal acceptance and routing. Unpin completed, superseded, archived,
 or merely reusable sessions, and pin them again only when a real Managed
 objective reactivates. Lite and Pro advisory tasks are never auto-pinned.
+At every Controller resume, activation, reuse, material state change, terminal
+absorption and pre-final audit, recompute this set from live thread state and
+call `set_thread_pinned`; do not trust an earlier message or desired-state
+record as proof that the sidebar changed. An API failure is an explicit
+operational limitation, not permission to claim synchronization.
 
 Give every persistent Controller, Explorer, Audit, or Executor session the canonical sidebar title
 `<Role> · <candidate-or-bounded-scope> · <STATE>`. `Role` is one of
@@ -97,6 +102,8 @@ verified activation, update it on reuse or a material phase/state change, and
 remove stale `ACTIVE` at terminal absorption. Titles are navigation only, not
 authority, evidence, a registry, or a lifecycle; exact IDs remain in existing
 durable records.
+Use `set_thread_title` when the runtime exposes it, and verify the live title
+alongside the pin set. Never leave a completed or waiting role titled `ACTIVE`.
 
 For Lite/local work, the task itself is the ownership record; do not create a
 new Program, lease, lane, watchdog, or callback state. When the work belongs to
@@ -257,7 +264,8 @@ owner-visible interaction, long-running jobs, repeated guidance, durable
 recovery, an isolated context, or an auditable evidence trail across turns.
 
 When creating or continuing a work session, bind model family and reasoning
-effort explicitly:
+effort explicitly. The route is sticky for the active objective, not forever
+for the reusable session and not independently for every turn or microphase:
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
   contracts, Audits, causal/statistical/algebraic reasoning, protected-result
@@ -268,6 +276,14 @@ effort explicitly:
   tests, deterministic integration, and routine execution; and
 - `gpt-5.6-luna` + `max`: high-volume deterministic rehashing, sync, packaging,
   unchanged-contract reruns, or simple outcome-invariant repair only.
+
+Do not switch model while one objective is in flight merely because its final
+steps look mechanical; finish its terminal with the selected route. Reclassify
+only after terminal absorption or an explicit redispatch creates a separately
+bounded successor. If that successor is purely Luna-class work, resume the same
+canonical session with `gpt-5.6-luna` + `max`. Do not create an Implementer,
+Runner, second owner, or new session solely to avoid a model switch. Split roles
+only for a real ownership, independence, exposure, or authority boundary.
 
 Raise an Executor to `gpt-5.6-sol` + `max` when authority, evidence validity,
 concurrency, data integrity, exposure, or scientific interpretation becomes

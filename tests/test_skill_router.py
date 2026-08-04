@@ -49,7 +49,7 @@ class SkillRouterTest(unittest.TestCase):
     def test_core_router_stays_within_prompt_byte_budget(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("# Xiaowen AutoResearch", text)
-        self.assertLessEqual(len(text.encode("utf-8")), 19_000)
+        self.assertLessEqual(len(text.encode("utf-8")), 19_500)
         module_prefix = Path(__file__).read_text(encoding="utf-8").split("def flat", 1)[0]
         self.assertNotIn("/Users/", module_prefix)
 
@@ -647,16 +647,32 @@ class SkillRouterTest(unittest.TestCase):
             "A projectless or unverified worker has no scientific/shared-state authority",
             "Pin only active Managed canonical roles that need Controller follow-up",
             "Lite and Pro advisory tasks are never auto-pinned",
+            "At each Controller resume, activation, state transition, and terminal",
+            "use runtime APIs to reconcile pins",
             "`gpt-5.6-sol max`",
             "`gpt-5.6-sol xhigh`",
             "`gpt-5.6-sol high`",
             "`gpt-5.6-luna max`",
+            "Bind the route to the active objective",
+            "Keep model and effort stable until that objective's terminal",
+            "Reclassify only a separately bounded successor",
+            "Resume the same canonical session on `gpt-5.6-luna max`",
+            "Never create another role or session solely to change model",
             "never substitute `luna max` for `sol xhigh/max`",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
         self.assertIn("A projectless task", orchestration)
         self.assertIn("Lite and Pro advisory tasks are never auto-pinned", orchestration)
+        for phrase in (
+            "call `set_thread_pinned`",
+            "The route is sticky for the active objective",
+            "Do not switch model while one objective is in flight",
+            "Reclassify only after terminal absorption or an explicit redispatch",
+            "Do not create an Implementer, Runner, second owner, or new session",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
 
     def test_research_role_session_titles_are_canonical_and_stateful(self) -> None:
         router = flat(SKILL)
@@ -674,6 +690,8 @@ class SkillRouterTest(unittest.TestCase):
             "update it on reuse or a material phase/state change",
             "remove stale `ACTIVE` at terminal absorption",
             "Titles are navigation only, not authority, evidence, a registry, or a lifecycle",
+            "Use `set_thread_title` when the runtime exposes it",
+            "Never leave a completed or waiting role titled `ACTIVE`",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, orchestration)
@@ -683,6 +701,8 @@ class SkillRouterTest(unittest.TestCase):
                 "`<Role> · <candidate-or-bounded-scope> · <STATE>`",
                 workspace,
             )
+            self.assertIn("Keep the sidebar pinned set synchronized", workspace)
+            self.assertIn("`gpt-5.6-luna` with `max`", workspace)
 
     def test_funnel_circuit_breaker_uses_r1_and_access_failures(self) -> None:
         programs = flat(PROGRAMS)

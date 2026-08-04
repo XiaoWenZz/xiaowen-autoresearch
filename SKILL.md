@@ -112,12 +112,14 @@ creates a new candidate/version and preserves the old records.
 Before a persistent Managed worker is created or reused, verify its saved
 Project ID, cwd/repository, candidate/version, and canonical role. A projectless
 or unverified worker has no scientific/shared-state authority. Pin only active
-Managed canonical roles that need Controller follow-up; Lite and Pro advisory
-tasks are never auto-pinned.
+Managed canonical roles that need Controller follow-up. At each Controller
+resume, activation, state transition, and terminal, use runtime APIs to
+reconcile pins; Lite and Pro advisory tasks are never auto-pinned.
 
 Name each persistent research-role session
 `<Role> · <candidate-or-bounded-scope> · <STATE>` and update it at activation,
-reuse, material phase/state change, and terminal absorption.
+reuse, material phase/state change, and terminal absorption with the runtime
+title API; never rely on conversation memory alone.
 
 These are operational selection rules over existing records, not a new data
 protocol, capsule, schema, lifecycle, context-bootstrap layer, automation, or
@@ -143,6 +145,14 @@ executor returns its final directly; Managed uses section 8.
   deterministic integration, and routine execution.
 - `gpt-5.6-luna max`: high-volume deterministic rehash/sync/package/rerun or
   simple outcome-invariant repair only; never scientific adjudication.
+
+Bind the route to the active objective, not permanently to the reusable session
+and not to each microphase. Keep model and effort stable until that objective's
+terminal or explicit handoff. Reclassify only a separately bounded successor.
+Resume the same canonical session on `gpt-5.6-luna max` when it is purely
+deterministic rehash/sync/package, unchanged-contract rerun, or root-caused
+outcome-invariant repair. Never create another role or session solely to change
+model.
 
 Raise ambiguity about authority, evidence, exposure, concurrency, or data
 integrity to `sol max`; never substitute `luna max` for `sol xhigh/max`.
