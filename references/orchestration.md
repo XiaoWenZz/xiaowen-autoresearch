@@ -260,7 +260,8 @@ transaction. A remote terminal wake uses an outbox transition `NONE -> CLAIMED
 -> SENT`: claim before the one bounded send, complete only after its successful
 receipt, and never resend an ambiguous `CLAIMED` delivery. The heartbeat reads
 the snapshot first, calls one thread-list operation, batch-waits only the named
-active roles, and executes only the fixed systemd/file-presence monitor shape.
+active roles, advances only their opaque cursors through a bounded CAS command,
+and executes only the fixed systemd/file-presence monitor shape.
 Invalid, stale, or contradictory state wakes the Controller for rebuild; it
 does not invent an owner, successor, terminal, job, or scientific meaning.
 

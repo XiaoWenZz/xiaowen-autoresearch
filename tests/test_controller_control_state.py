@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.controller_control_state import StateError, read_state, validate_state, write_state
+from scripts.controller_control_state import StateError, cmd_advance_cursors, read_state, validate_state, write_state
 
 
 def base_state() -> dict:
@@ -133,6 +133,30 @@ class ControllerControlStateTest(unittest.TestCase):
         state["remote_jobs"][0]["expected_files"] = ["../terminal.json"]
         with self.assertRaisesRegex(StateError, "must be basenames"):
             validate_state(state)
+
+    def test_cursor_advancement_is_bounded_and_compare_and_swap_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, base_state(), -1)
+            args = type("Args", (), {
+                "state": str(path),
+                "expected_revision": 0,
+                "updates_json": json.dumps([
+                    {"thread_id": "worker-1", "expected_cursor": None, "new_cursor": "cursor:1"}
+                ]),
+            })()
+            cmd_advance_cursors(args)
+            self.assertEqual(read_state(path)["managed_roles"][0]["cursor"], "cursor:1")
+
+            stale = type("Args", (), {
+                "state": str(path),
+                "expected_revision": 1,
+                "updates_json": json.dumps([
+                    {"thread_id": "worker-1", "expected_cursor": None, "new_cursor": "cursor:2"}
+                ]),
+            })()
+            with self.assertRaisesRegex(StateError, "expected_cursor does not match"):
+                cmd_advance_cursors(stale)
 
 
 if __name__ == "__main__":

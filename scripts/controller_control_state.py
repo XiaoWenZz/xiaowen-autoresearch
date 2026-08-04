@@ -329,6 +329,35 @@ def cmd_complete(args: argparse.Namespace) -> None:
     print(json.dumps({"status": "PASS", "revision": result["revision"], "delivery": "SENT"}, sort_keys=True))
 
 
+def cmd_advance_cursors(args: argparse.Namespace) -> None:
+    path = Path(args.state)
+    state = read_state(path)
+    updates = json.loads(args.updates_json)
+    if not isinstance(updates, list) or not updates:
+        raise StateError("cursor updates must be a non-empty list")
+    roles = {role["thread_id"]: role for role in state["managed_roles"]}
+    seen: set[str] = set()
+    for index, update in enumerate(updates):
+        where = f"cursor_updates[{index}]"
+        if not isinstance(update, dict):
+            raise StateError(f"{where} must be an object")
+        _require(update, ("thread_id", "expected_cursor", "new_cursor"), where)
+        thread_id = update["thread_id"]
+        if not _nonempty(thread_id) or thread_id in seen:
+            raise StateError(f"{where}.thread_id is invalid or duplicate")
+        seen.add(thread_id)
+        role = roles.get(thread_id)
+        if role is None:
+            raise StateError(f"{where}.thread_id is not an active managed role")
+        if update["expected_cursor"] != role["cursor"]:
+            raise StateError(f"{where}.expected_cursor does not match")
+        if not _nonempty(update["new_cursor"]):
+            raise StateError(f"{where}.new_cursor must be non-empty")
+        role["cursor"] = update["new_cursor"]
+    result = write_state(path, state, args.expected_revision)
+    print(json.dumps({"status": "PASS", "revision": result["revision"], "advanced": len(updates)}, sort_keys=True))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -354,6 +383,11 @@ def build_parser() -> argparse.ArgumentParser:
     complete.add_argument("--expected-revision", type=int, required=True)
     complete.add_argument("--claim-token", required=True)
     complete.set_defaults(handler=cmd_complete)
+    advance = subparsers.add_parser("advance-cursors")
+    advance.add_argument("--state", required=True)
+    advance.add_argument("--expected-revision", type=int, required=True)
+    advance.add_argument("--updates-json", required=True)
+    advance.set_defaults(handler=cmd_advance_cursors)
     return parser
 
 
