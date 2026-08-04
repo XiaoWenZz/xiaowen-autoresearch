@@ -48,7 +48,7 @@ def base_state() -> dict:
                 "owner_thread_id": "worker-1",
                 "host": "dual5090",
                 "unit": "job-1.service",
-                "output_path": "/runs/job-1",
+                "output_path": "/home/xiaowen/runs/job-1",
                 "expected_files": ["terminal.json"],
                 "eta": "2026-08-05T01:00:00Z",
                 "late_threshold": "2026-08-05T02:00:00Z",
@@ -82,6 +82,12 @@ class ControllerControlStateTest(unittest.TestCase):
         with self.assertRaisesRegex(StateError, "missing keys"):
             validate_state(state)
 
+    def test_delegated_owner_must_match_active_role(self) -> None:
+        state = base_state()
+        state["objectives"][0]["owner_state"] = "ACTIVE"
+        with self.assertRaisesRegex(StateError, "does not match managed role"):
+            validate_state(state)
+
     def test_blocked_objective_requires_reopening_observer_trigger(self) -> None:
         state = base_state()
         objective = state["objectives"][0]
@@ -110,6 +116,22 @@ class ControllerControlStateTest(unittest.TestCase):
             "observation_id": "obs-1",
         }
         with self.assertRaisesRegex(StateError, "claimed identifiers"):
+            validate_state(state)
+
+    def test_remote_monitor_fields_are_allowlisted(self) -> None:
+        state = base_state()
+        state["remote_jobs"][0]["host"] = "unknown-host"
+        with self.assertRaisesRegex(StateError, "host is not allowlisted"):
+            validate_state(state)
+
+        state = base_state()
+        state["remote_jobs"][0]["output_path"] = "/tmp/untrusted"
+        with self.assertRaisesRegex(StateError, "outside allowlisted roots"):
+            validate_state(state)
+
+        state = base_state()
+        state["remote_jobs"][0]["expected_files"] = ["../terminal.json"]
+        with self.assertRaisesRegex(StateError, "must be basenames"):
             validate_state(state)
 
 

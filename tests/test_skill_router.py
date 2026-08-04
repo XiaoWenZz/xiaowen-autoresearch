@@ -781,6 +781,10 @@ class SkillRouterTest(unittest.TestCase):
                 "recovery fallback, not normal successor dispatch",
                 "mechanically verify that candidate, strongest baseline, mechanism deletion, and guard/parent action/state signatures are distinct",
                 "fresh-owner path-only Audit with raw paths/hashes",
+                "Keep the heartbeat prompt static",
+                "checksum-bound Controller control snapshot under `experiments/control/`",
+                "compare-and-swap and atomic replace",
+                "A remote wake uses `NONE -> CLAIMED -> SENT`",
             ):
                 with self.subTest(workspace_phrase=phrase):
                     self.assertIn(phrase, workspace)

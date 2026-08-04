@@ -11,7 +11,7 @@ import os
 import re
 import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -20,6 +20,9 @@ LIFECYCLES = {"DELEGATED", "BLOCKED", "DONE"}
 ROLE_STATES = {"ACTIVE", "WAITING_EXTERNAL", "HOLD", "BLOCKED"}
 WAKE_STATES = {"NONE", "CLAIMED", "SENT"}
 TITLE_RE = re.compile(r"^(Controller|Explorer|Audit|Executor) · .+ · (ACTIVE|WAITING_EXTERNAL|HOLD|BLOCKED)$")
+UNIT_RE = re.compile(r"^[A-Za-z0-9_.@:-]+\.service$")
+REMOTE_HOSTS = {"dual5090", "ecnuhpc"}
+REMOTE_OUTPUT_ROOTS = (PurePosixPath("/home/xiaowen/runs"), PurePosixPath("/home/xiaowen/projects"))
 
 
 class StateError(ValueError):
@@ -134,6 +137,17 @@ def validate_state(state: Any) -> dict[str, Any]:
         if role["cursor"] is not None and not _nonempty(role["cursor"]):
             raise StateError(f"{where}.cursor must be null or non-empty")
 
+    role_by_thread = {role["thread_id"]: role for role in roles}
+    for index, objective in enumerate(objectives):
+        if objective["lifecycle"] != "DELEGATED":
+            continue
+        where = f"objectives[{index}]"
+        role = role_by_thread.get(objective["owner_thread_id"])
+        if role is None:
+            raise StateError(f"{where}.owner_thread_id is not an active managed role")
+        if role["role"] != objective["owner_role"] or role["state"] != objective["owner_state"]:
+            raise StateError(f"{where} owner identity/state does not match managed role")
+
     jobs = state["remote_jobs"]
     if not isinstance(jobs, list):
         raise StateError("remote_jobs must be a list")
@@ -169,8 +183,17 @@ def validate_state(state: Any) -> dict[str, Any]:
             raise StateError(f"{where}.objective_id is unknown")
         if job["owner_thread_id"] not in role_threads:
             raise StateError(f"{where}.owner_thread_id is not an active managed role")
+        if job["host"] not in REMOTE_HOSTS:
+            raise StateError(f"{where}.host is not allowlisted")
+        if not UNIT_RE.fullmatch(job["unit"]):
+            raise StateError(f"{where}.unit is unsafe")
+        output_path = PurePosixPath(job["output_path"])
+        if not output_path.is_absolute() or not any(output_path.is_relative_to(root) for root in REMOTE_OUTPUT_ROOTS):
+            raise StateError(f"{where}.output_path is outside allowlisted roots")
         if not isinstance(job["expected_files"], list) or not all(_nonempty(item) for item in job["expected_files"]):
             raise StateError(f"{where}.expected_files must contain non-empty names")
+        if any(PurePosixPath(item).name != item or item in {".", ".."} for item in job["expected_files"]):
+            raise StateError(f"{where}.expected_files must be basenames")
         if job["monitor_state"] not in {"ACTIVE", "TERMINAL_OBSERVED"}:
             raise StateError(f"{where}.monitor_state is invalid")
         wake = job["wake_delivery"]
