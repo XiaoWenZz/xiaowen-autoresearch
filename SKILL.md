@@ -282,23 +282,23 @@ evidence/validation, `FACT / INFERENCE / HYPOTHESIS`, one disposition, and one
 next action/reopening fact. Add knowledge provenance only for a
 decision-changing synthesis handoff, never a routine local workflow/code audit.
 
-A bounded delegated worker sends at most one ordinary completion message. A
-successful tool receipt releases it immediately; Lite creates no receiver,
+A successful tool receipt releases the worker immediately; Lite creates no receiver,
 fallback, acknowledgement, or callback transaction and never waits for
 `FINAL_ACK`.
 
-Persistent Managed completion follows
-[orchestration.md](references/orchestration.md): freeze one terminal, make one
-bounded top-level send, release the worker on a successful receipt, and never
-resend an ambiguous delivery. One pre-registered Controller fallback recovers
-by event/final-turn ID with idempotent effects. An ACK never blocks the worker.
+Persistent Managed completion follows orchestration:
+one bounded top-level send; release on successful receipt; never resend an
+ambiguous delivery; ACK never blocks. Fallback has idempotent effects.
 
-After `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, or `CARRIER_STOP`, an
-open/`UNTESTED` candidate may end Controller absorption only as `DELEGATED`
-with a successful same-idea successor receipt, `BLOCKED` with one reopening
-fact/observer/trigger, or `DONE` as a non-active evidence-gap archive with a
-reopening fact. `OPEN_WITHOUT_OWNER`, “keep open,” “do not launch,” or a worker
-`NEXT_ACTION` alone is invalid; the Controller owns the route.
+Atomic terminal absorption covers `PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`,
+`PROFILE_VALID`, `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and
+`CARRIER_STOP`. An open/`UNTESTED` candidate must finish the same turn as:
+`DELEGATED` with successful dispatch receipt plus matching activation snapshot;
+`BLOCKED` with one reopening fact/observer/trigger; or `DONE` by scoped
+close/archive plus reopening fact. `dispatch_next` is incomplete before
+activation. A status reply, “Controller decides whether,” or worker
+`NEXT_ACTION` leaves `OPEN_WITHOUT_OWNER`; the Controller owns the route before
+user-visible final. Heartbeat is fallback, never normal dispatch.
 
 ## 9. Use external advisory as a one-shot
 

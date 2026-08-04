@@ -176,11 +176,14 @@ Do not treat a visible `completed` thread state as proof that delivery occurred.
 Do not turn send timeout into an infinite wait, a retry loop, a fresh receiver,
 or a second worker.
 
-For a persistent Managed event, the Controller reads the evidence and
-limitations, records its scoped disposition, closes any real watchdog, and
-commits exactly one next action: `dispatch_next`, `explicit_hold`,
-`owner_approval_required`, or `scoped_close`. The released worker is not part
-of this transaction and needs no `FINAL_ACK` or receiver ping.
+For a persistent Managed event, the Controller performs atomic terminal
+absorption: read the evidence and limitations, record the scoped disposition,
+close any real watchdog, and commit exactly one next action: `dispatch_next`,
+`explicit_hold`, `owner_approval_required`, or `scoped_close`. This applies to
+every actionable terminal, including `PROBE`, `PASS_R0*`, `PASS_R1*`,
+`PASS_R2*`, `PROFILE_VALID`, `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and
+`CARRIER_STOP`. The released worker is not part of this transaction and needs
+no `FINAL_ACK` or receiver ping.
 `dispatch_next` is incomplete until the next worker record and contract
 revision are registered with their own callback/watchdog state. A latest
 terminal `delivered` state is complete worker delivery. Record
@@ -189,8 +192,11 @@ rejects only a malformed transaction or dangling dispatch target, never the
 absence of an ACK.
 
 `dispatch_next` additionally requires the successful dispatch receipt and
-matching task-bound activation/callback lease evidence. `explicit_hold` names
-one blocker, its observer, event/absolute-check trigger, and next evidence
+matching task-bound activation/callback lease evidence. The Controller may not
+send a user-visible status/final before that activation exists. A boilerplate
+“Controller decides whether” is not `owner_approval_required` when standing
+delegation already covers the frozen bounded action. `explicit_hold` names one
+real blocker, its observer, event/absolute-check trigger, and next evidence
 action in existing task state; it does not create a backlog or lane merely to
 certify the hold.
 
@@ -211,7 +217,8 @@ a local source or R0 completion requires none of the GPU, zero-GPU, Pro, lane,
 dashboard, or global-idle machinery. Load
 [portfolio-lanes.md](portfolio-lanes.md) only when a real shared lane changes.
 
-A heartbeat is not a substitute for this completion callback. Use one only as
+A heartbeat is recovery fallback, not a substitute for atomic terminal
+absorption or normal `dispatch_next`. Use one only as
 a low-frequency failure watchdog when a worker can crash, a callback can be
 lost, or the runtime provides no reliable terminal event. Its checks must be
 bounded and silent while the worker is ordinarily active; it must not become a

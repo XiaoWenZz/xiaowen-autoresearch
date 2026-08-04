@@ -210,10 +210,10 @@ class SkillRouterTest(unittest.TestCase):
         managed = flat(ORCHESTRATION)
         for phrase in (
             "Persistent Managed completion follows",
-            "make one bounded top-level send",
-            "release the worker on a successful receipt",
+            "one bounded top-level send",
+            "release on successful receipt",
             "never resend an ambiguous delivery",
-            "An ACK never blocks the worker",
+            "ACK never blocks",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
@@ -229,7 +229,7 @@ class SkillRouterTest(unittest.TestCase):
         router = flat(SKILL)
         managed = flat(ORCHESTRATION)
         self.assertIn("never resend an ambiguous delivery", router)
-        self.assertIn("One pre-registered Controller fallback recovers", router)
+        self.assertIn("Fallback has idempotent effects", router)
         for phrase in (
             "unavailable, times out, or returns an ambiguous result",
             "`callback_delivery=unconfirmed`",
@@ -269,7 +269,7 @@ class SkillRouterTest(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
-        self.assertIn("An ACK never blocks the worker", router)
+        self.assertIn("ACK never blocks", router)
 
     def test_pro_is_risk_triggered_one_shot_not_sink_lifecycle(self) -> None:
         router = flat(SKILL)
@@ -719,28 +719,36 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, router)
 
-    def test_open_candidate_cannot_end_without_owner_or_explicit_archive(self) -> None:
+    def test_actionable_terminal_absorption_is_atomic_before_controller_final(self) -> None:
         router = flat(SKILL)
         orchestration = flat(ORCHESTRATION)
         workspace = flat(WORKSPACE_AGENTS) if WORKSPACE_AGENTS is not None else ""
 
         for phrase in (
-            "After `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, or `CARRIER_STOP`",
+            "Atomic terminal absorption covers",
+            "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_VALID`",
             "`OPEN_WITHOUT_OWNER`",
-            "a successful same-idea successor receipt",
+            "successful dispatch receipt plus matching activation snapshot",
             "`BLOCKED` with one reopening fact/observer/trigger",
-            "non-active evidence-gap archive with a reopening fact",
-            "the Controller owns the route",
+            "`dispatch_next` is incomplete before activation",
+            "A status reply, “Controller decides whether,”",
+            "the Controller owns the route before user-visible final",
+            "Heartbeat is fallback, never normal dispatch",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
 
         for phrase in (
+            "performs atomic terminal absorption",
+            "every actionable terminal, including `PROBE`, `PASS_R0*`, `PASS_R1*`",
+            "may not send a user-visible status/final before that activation exists",
+            "“Controller decides whether” is not `owner_approval_required`",
             "worker-local terminals, never Controller route decisions",
             "terminal absorption is incomplete",
             "A worker recommendation",
             "cannot discharge this Controller duty",
             "`OPEN_WITHOUT_OWNER` is an invalid lifecycle state",
+            "A heartbeat is recovery fallback",
             "wake the Controller for lifecycle repair",
             "it cannot choose the scientific successor",
         ):
@@ -749,11 +757,15 @@ class SkillRouterTest(unittest.TestCase):
 
         if workspace:
             for phrase in (
-                "`ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, and `CARRIER_STOP` are local execution terminals",
+                "Use atomic terminal absorption for every actionable terminal",
+                "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_VALID`",
                 "Controller absorption is incomplete",
+                "successful dispatch receipt and matching activation snapshot",
+                "`dispatch_next` is incomplete before activation",
+                "A status reply, “Controller decides whether,”",
                 "`OPEN_WITHOUT_OWNER`",
-                "The Controller—not the Executor—owns",
-                "global continuity heartbeat must flag an ownerless open candidate",
+                "may not send a user-visible final before it is complete",
+                "recovery fallback, not normal successor dispatch",
             ):
                 with self.subTest(workspace_phrase=phrase):
                     self.assertIn(phrase, workspace)
