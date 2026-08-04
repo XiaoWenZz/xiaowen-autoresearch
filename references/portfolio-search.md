@@ -376,3 +376,12 @@ Contribution table after signal:
 Record Program/Epoch identity, resource budget, and why the chosen witness is
 cheaper and more decisive than alternatives. Do not convert missing
 publication-stage fields into a pre-signal `drop`.
+
+Funnel denominators must be stage-homogeneous and prospectively identifiable.
+Do not combine brief-local `PROBE` tokens, historical selected lineages, and
+later experiment records under the label “admitted PROBEs.” When recovery
+necessarily mixes those sources, label the count `admission-equivalent
+lineages`, publish its exact construction, and keep it separate from the
+prospective admission cohort. Unknown raw-lead, all-time idea, or owner
+denominators remain `NOT_ESTIMABLE`; missing global terminals are evidence gaps,
+not negative outcomes.

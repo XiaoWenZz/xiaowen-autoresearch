@@ -740,8 +740,9 @@ class SkillRouterTest(unittest.TestCase):
             "`BLOCKED` with one reopening fact/observer/trigger",
             "`dispatch_next` is incomplete before activation",
             "A status reply, “Controller decides whether,”",
-            "the Controller owns the route before user-visible final",
-            "Heartbeat is fallback, never normal dispatch",
+            "leaves `OPEN_WITHOUT_OWNER`; route before final",
+            "Static heartbeat reads a rebuildable snapshot",
+            "fallback only, never authority/dispatch",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
@@ -869,6 +870,31 @@ class SkillRouterTest(unittest.TestCase):
         self.assertIn("Adjust its cadence in place", orchestration)
         self.assertIn("do not create a faster or slower duplicate", orchestration)
         self.assertIn("The explicitly owner-authorized Controller-global singleton", orchestration)
+        for phrase in (
+            "Keep that heartbeat prompt static",
+            "rebuildable Controller control snapshot",
+            "compare-and-swap revision",
+            "atomic replace",
+            "`NONE -> CLAIMED -> SENT`",
+            "calls one thread-list operation",
+            "batch-waits only the named active roles",
+            "does not invent an owner, successor, terminal, job, or scientific meaning",
+        ):
+            with self.subTest(snapshot_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_recovered_funnel_denominators_are_honestly_named(self) -> None:
+        portfolio = flat(PORTFOLIO_SEARCH)
+        for phrase in (
+            "Funnel denominators must be stage-homogeneous",
+            "Do not combine brief-local `PROBE` tokens, historical selected lineages",
+            "`admission-equivalent lineages`",
+            "publish its exact construction",
+            "remain `NOT_ESTIMABLE`",
+            "missing global terminals are evidence gaps, not negative outcomes",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, portfolio)
 
     def test_funnel_circuit_breaker_uses_r1_and_access_failures(self) -> None:
         programs = flat(PROGRAMS)

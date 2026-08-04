@@ -296,9 +296,9 @@ Atomic terminal absorption covers `PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`,
 `DELEGATED` with successful dispatch receipt plus matching activation snapshot;
 `BLOCKED` with one reopening fact/observer/trigger; or `DONE` by scoped
 close/archive plus reopening fact. `dispatch_next` is incomplete before
-activation. A status reply, “Controller decides whether,” or worker
-`NEXT_ACTION` leaves `OPEN_WITHOUT_OWNER`; the Controller owns the route before
-user-visible final. Heartbeat is fallback, never normal dispatch.
+activation. A status reply, “Controller decides whether,” or `NEXT_ACTION`
+leaves `OPEN_WITHOUT_OWNER`; route before final. Static heartbeat reads a
+rebuildable snapshot; fallback only, never authority/dispatch.
 
 ## 9. Use external advisory as a one-shot
 

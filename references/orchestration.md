@@ -244,6 +244,26 @@ wake the Controller for idempotent lifecycle absorption, but it cannot perform
 Explorer/Audit/Executor semantics, inspect protected outcomes, launch work,
 invent successors or certify science.
 
+Keep that heartbeat prompt static. Store only operational pointers in the
+rebuildable Controller control snapshot: revision/checksum, active objectives,
+canonical role threads and cursors, lifecycle/next action, remote job identity,
+ETA/late threshold, bounded file-presence expectations, and absorbed terminal
+IDs. The snapshot is a cache, never scientific/shared-state authority; raw
+outcomes, metrics, predictions, claims, secrets, and model/data payloads are
+forbidden. Thread APIs, immutable terminals, and scheduler/process state remain
+the facts from which a missing or corrupt snapshot is rebuilt.
+
+Controller updates use compare-and-swap revision, checksum verification, fsync,
+and atomic replace. Terminal absorption, successor activation, pin/title
+reconciliation, and the matching snapshot revision form one Controller
+transaction. A remote terminal wake uses an outbox transition `NONE -> CLAIMED
+-> SENT`: claim before the one bounded send, complete only after its successful
+receipt, and never resend an ambiguous `CLAIMED` delivery. The heartbeat reads
+the snapshot first, calls one thread-list operation, batch-waits only the named
+active roles, and executes only the fixed systemd/file-presence monitor shape.
+Invalid, stale, or contradictory state wakes the Controller for rebuild; it
+does not invent an owner, successor, terminal, job, or scientific meaning.
+
 Automation is a user-visible mutation. Use it only when an independently real
 remote/unattended Managed trigger has no native completion return. Reuse the
 one existing bounded fallback by durable ID, change nothing when effective
