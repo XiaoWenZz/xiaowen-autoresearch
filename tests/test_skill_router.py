@@ -749,6 +749,27 @@ class SkillRouterTest(unittest.TestCase):
             self.assertIn("Keep the sidebar pinned set synchronized", workspace)
             self.assertIn("`gpt-5.6-luna` with `max`", workspace)
 
+    def test_controller_global_continuity_heartbeat_is_persistent_singleton(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        workspace = flat(WORKSPACE_AGENTS) if WORKSPACE_AGENTS is not None else ""
+
+        for phrase in (
+            "one persistent Controller-global continuity heartbeat",
+            "remains active through idle periods and worker/job completions",
+            "clear only the exact job block",
+            "never delete the global automation",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, router)
+                self.assertIn(phrase, orchestration)
+                if workspace:
+                    self.assertIn(phrase, workspace)
+
+        self.assertIn("Adjust its cadence in place", orchestration)
+        self.assertIn("do not create a faster or slower duplicate", orchestration)
+        self.assertIn("The explicitly owner-authorized Controller-global singleton", orchestration)
+
     def test_funnel_circuit_breaker_uses_r1_and_access_failures(self) -> None:
         programs = flat(PROGRAMS)
         for phrase in (

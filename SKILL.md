@@ -121,6 +121,13 @@ Name each persistent research-role session
 reuse, material phase/state change, and terminal absorption with the runtime
 title API; never rely on conversation memory alone.
 
+Maintain one persistent Controller-global continuity
+heartbeat. It remains active through idle periods and worker/job completions.
+Adjust cadence in place; add an exact remote-job block only while live, then
+clear only the exact job block and never delete the global automation. It may
+reconcile liveness, pins/titles, lost completion and missing owners, but cannot
+act as a research role, read protected results, launch jobs or certify science.
+
 These are operational selection rules over existing records, not a new data
 protocol, capsule, schema, lifecycle, context-bootstrap layer, automation, or
 evidence substitute. They cannot change the research contract, metric, seed,

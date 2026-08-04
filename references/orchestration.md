@@ -206,11 +206,28 @@ lost, or the runtime provides no reliable terminal event. Its checks must be
 bounded and silent while the worker is ordinarily active; it must not become a
 progress-report loop or the normal result-delivery path.
 
+When the owner explicitly requires continuous whole-program oversight,
+maintain exactly one persistent Controller-global continuity heartbeat. It
+remains active through idle periods and worker/job completions. Adjust its
+cadence in place according to active-work latency; do not create a faster or
+slower duplicate. Its baseline scope is only current Managed-role liveness,
+ordinary-completion loss, canonical pin/title drift and an admitted objective
+with no owner. Add an exact process/job/output/ETA check block only for a live
+remote job without native wake. At terminal, clear only the exact job block
+and never delete the global automation. The global singleton may
+wake the Controller for idempotent lifecycle absorption, but it cannot perform
+Explorer/Audit/Executor semantics, inspect protected outcomes, launch work,
+invent successors or certify science.
+
 Automation is a user-visible mutation. Use it only when an independently real
 remote/unattended Managed trigger has no native completion return. Reuse the
 one existing bounded fallback by durable ID, change nothing when effective
 fields already match, and never create polling or a second monitor for advisory,
 Lite, source-search, R0, dashboard, or capacity state.
+
+The explicitly owner-authorized Controller-global singleton above is the only
+standing exception to the remote-trigger creation rule. Lite work never creates
+or retargets another heartbeat merely because the global singleton exists.
 
 If the runtime has no completion-return mechanism, record a bounded manual
 reclaim deadline and responsible controller in the worker registry. An
