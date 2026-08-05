@@ -8,7 +8,7 @@ from scripts.controller_control_state import StateError, cmd_advance_cursors, re
 
 def base_state() -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "revision": 0,
         "updated_at": "2026-08-05T00:00:00Z",
         "controller": {
@@ -22,6 +22,7 @@ def base_state() -> dict:
             {
                 "objective_id": "objective-1",
                 "candidate_id": "candidate-1",
+                "candidate_state": "OPEN",
                 "stage": "R2_SCOUT",
                 "scientific_outcome": "UNOBSERVED",
                 "lifecycle": "DELEGATED",
@@ -97,6 +98,87 @@ class ControllerControlStateTest(unittest.TestCase):
         objective["blocker"] = {"reopening_fact": "FACT", "observer": "OWNER"}
         with self.assertRaisesRegex(StateError, "missing keys"):
             validate_state(state)
+
+    def test_blocked_candidate_requires_reopening_observer_trigger(self) -> None:
+        state = base_state()
+        state["objectives"][0]["candidate_state"] = "BLOCKED"
+        with self.assertRaisesRegex(StateError, "blocker must be an object"):
+            validate_state(state)
+
+    def test_engineering_failure_cannot_close_candidate(self) -> None:
+        state = base_state()
+        objective = state["objectives"][0]
+        objective.update(
+            {
+                "candidate_state": "CLOSED",
+                "lifecycle": "DONE",
+                "reopening_fact": "A repaired implementation becomes available.",
+                "idea_closure": {
+                    "basis": "ENGINEERING_INVALID",
+                    "scope": "exact cell",
+                    "evidence_ref": "terminal-1",
+                    "reopening_fact": "A repaired implementation becomes available.",
+                },
+            }
+        )
+        for key in ("owner_thread_id", "owner_role", "owner_state"):
+            objective.pop(key)
+        with self.assertRaisesRegex(StateError, "basis must be one of"):
+            validate_state(state)
+
+    def test_valid_scientific_negative_requires_eligibility_power_and_audit(self) -> None:
+        state = base_state()
+        objective = state["objectives"][0]
+        objective.update(
+            {
+                "candidate_state": "CLOSED",
+                "lifecycle": "DONE",
+                "reopening_fact": "A new prospectively distinct estimand is frozen.",
+                "idea_closure": {
+                    "basis": "VALID_SCIENTIFIC_NEGATIVE",
+                    "scope": "frozen exact estimand",
+                    "evidence_ref": "terminal-1",
+                    "reopening_fact": "A new prospectively distinct estimand is frozen.",
+                    "independent_audit_terminal_id": "audit-1",
+                    "evidence_eligible": True,
+                    "prospective_action_table_pass": True,
+                    "power_or_futility_pass": False,
+                },
+            }
+        )
+        for key in ("owner_thread_id", "owner_role", "owner_state"):
+            objective.pop(key)
+        with self.assertRaisesRegex(StateError, "power_or_futility_pass must be true"):
+            validate_state(state)
+        objective["idea_closure"]["power_or_futility_pass"] = True
+        self.assertIs(validate_state(state), state)
+
+    def test_external_impossibility_reason_is_allowlisted(self) -> None:
+        state = base_state()
+        objective = state["objectives"][0]
+        objective.update(
+            {
+                "candidate_state": "CLOSED",
+                "lifecycle": "DONE",
+                "reopening_fact": "Required data becomes lawfully available.",
+                "idea_closure": {
+                    "basis": "EXTERNAL_IMPOSSIBILITY",
+                    "scope": "frozen exact carrier",
+                    "evidence_ref": "audit-1",
+                    "reopening_fact": "Required data becomes lawfully available.",
+                    "reason_code": "IMPLEMENTATION_BUG",
+                    "observer": "Controller",
+                    "trigger": "Required data is released.",
+                    "unavoidable": True,
+                },
+            }
+        )
+        for key in ("owner_thread_id", "owner_role", "owner_state"):
+            objective.pop(key)
+        with self.assertRaisesRegex(StateError, "not an allowed external impossibility"):
+            validate_state(state)
+        objective["idea_closure"]["reason_code"] = "DATA_UNAVAILABLE"
+        self.assertIs(validate_state(state), state)
 
     def test_checksum_tampering_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

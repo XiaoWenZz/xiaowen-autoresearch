@@ -15,8 +15,18 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 LIFECYCLES = {"DELEGATED", "BLOCKED", "DONE"}
+CANDIDATE_STATES = {"OPEN", "BLOCKED", "CLOSED"}
+CLOSURE_BASES = {"VALID_SCIENTIFIC_NEGATIVE", "EXTERNAL_IMPOSSIBILITY"}
+EXTERNAL_IMPOSSIBILITY_REASONS = {
+    "DATA_UNAVAILABLE",
+    "HARDWARE_UNAVAILABLE",
+    "IRRETRIEVABLE_REQUIRED_EVIDENCE",
+    "LEGAL_OR_LICENSE_PROHIBITION",
+    "REQUIRED_AUTHORITY_UNAVAILABLE",
+    "SERVICE_OR_API_UNAVAILABLE",
+}
 ROLE_STATES = {"ACTIVE", "WAITING_EXTERNAL", "HOLD", "BLOCKED"}
 WAKE_STATES = {"NONE", "CLAIMED", "SENT"}
 TITLE_RE = re.compile(r"^(Controller|Explorer|Audit|Executor) · .+ · (ACTIVE|WAITING_EXTERNAL|HOLD|BLOCKED)$")
@@ -85,10 +95,25 @@ def validate_state(state: Any) -> dict[str, Any]:
             raise StateError(f"{where} must be an object")
         _require(
             objective,
-            ("objective_id", "candidate_id", "stage", "scientific_outcome", "lifecycle", "next_action"),
+            (
+                "objective_id",
+                "candidate_id",
+                "candidate_state",
+                "stage",
+                "scientific_outcome",
+                "lifecycle",
+                "next_action",
+            ),
             where,
         )
-        for key in ("objective_id", "candidate_id", "stage", "scientific_outcome", "next_action"):
+        for key in (
+            "objective_id",
+            "candidate_id",
+            "candidate_state",
+            "stage",
+            "scientific_outcome",
+            "next_action",
+        ):
             if not _nonempty(objective[key]):
                 raise StateError(f"{where}.{key} must be non-empty")
         if objective["objective_id"] in objective_ids:
@@ -97,6 +122,9 @@ def validate_state(state: Any) -> dict[str, Any]:
         lifecycle = objective["lifecycle"]
         if lifecycle not in LIFECYCLES:
             raise StateError(f"{where}.lifecycle must be one of {sorted(LIFECYCLES)}")
+        candidate_state = objective["candidate_state"]
+        if candidate_state not in CANDIDATE_STATES:
+            raise StateError(f"{where}.candidate_state must be one of {sorted(CANDIDATE_STATES)}")
         if lifecycle == "DELEGATED":
             _require(objective, ("owner_thread_id", "owner_role", "owner_state"), where)
             if not all(_nonempty(objective[key]) for key in ("owner_thread_id", "owner_role", "owner_state")):
@@ -113,6 +141,61 @@ def validate_state(state: Any) -> dict[str, Any]:
                     raise StateError(f"{where}.blocker fields must be non-empty")
             if lifecycle == "DONE" and not _nonempty(objective.get("reopening_fact")):
                 raise StateError(f"{where}.reopening_fact is required for DONE")
+
+        if candidate_state == "BLOCKED":
+            blocker = objective.get("blocker")
+            if not isinstance(blocker, dict):
+                raise StateError(f"{where}.blocker must be an object for blocked candidate")
+            _require(blocker, ("reopening_fact", "observer", "trigger"), f"{where}.blocker")
+            if not all(_nonempty(blocker[key]) for key in ("reopening_fact", "observer", "trigger")):
+                raise StateError(f"{where}.blocker fields must be non-empty")
+
+        closure = objective.get("idea_closure")
+        if candidate_state != "CLOSED":
+            if closure is not None:
+                raise StateError(f"{where}.idea_closure is only valid for closed candidates")
+            continue
+        if lifecycle != "DONE":
+            raise StateError(f"{where} closed candidate must have lifecycle DONE")
+        if not isinstance(closure, dict):
+            raise StateError(f"{where}.idea_closure must be an object for closed candidate")
+        _require(
+            closure,
+            ("basis", "scope", "evidence_ref", "reopening_fact"),
+            f"{where}.idea_closure",
+        )
+        if closure["basis"] not in CLOSURE_BASES:
+            raise StateError(f"{where}.idea_closure.basis must be one of {sorted(CLOSURE_BASES)}")
+        if not all(_nonempty(closure[key]) for key in ("scope", "evidence_ref", "reopening_fact")):
+            raise StateError(f"{where}.idea_closure required fields must be non-empty")
+        if closure["basis"] == "VALID_SCIENTIFIC_NEGATIVE":
+            _require(
+                closure,
+                (
+                    "independent_audit_terminal_id",
+                    "evidence_eligible",
+                    "prospective_action_table_pass",
+                    "power_or_futility_pass",
+                ),
+                f"{where}.idea_closure",
+            )
+            if not _nonempty(closure["independent_audit_terminal_id"]):
+                raise StateError(f"{where}.idea_closure independent Audit must be bound")
+            for key in ("evidence_eligible", "prospective_action_table_pass", "power_or_futility_pass"):
+                if closure[key] is not True:
+                    raise StateError(f"{where}.idea_closure.{key} must be true")
+        else:
+            _require(
+                closure,
+                ("reason_code", "observer", "trigger", "unavoidable"),
+                f"{where}.idea_closure",
+            )
+            if closure["reason_code"] not in EXTERNAL_IMPOSSIBILITY_REASONS:
+                raise StateError(f"{where}.idea_closure.reason_code is not an allowed external impossibility")
+            if not _nonempty(closure["observer"]) or not _nonempty(closure["trigger"]):
+                raise StateError(f"{where}.idea_closure external observer/trigger must be non-empty")
+            if closure["unavoidable"] is not True:
+                raise StateError(f"{where}.idea_closure.unavoidable must be true")
 
     roles = state["managed_roles"]
     if not isinstance(roles, list):
