@@ -5,11 +5,37 @@ Research, another LLM, or a human reviewer. The external response is advisory
 search evidence, never authorization to create a repository, run a Scout, or
 claim novelty.
 
-When multiple distinct decisions are ready, submit up to three asynchronous
-Pro reviews through the shared dispatcher and continue local primary-source,
-code, algebra or implementation work while they generate. Give every job a
-unique decision-bound identity and one polling owner. Do not create duplicate
-prompts merely to fill capacity.
+For broad Opportunity Search, use two complementary Pro modes. A dedicated
+`PRO_INDEPENDENT_EXPLORER` conversation searches the frozen domain/date boundary
+without local rankings, candidate outcomes or conclusions. After the local map
+exists, `PRO_EMBEDDED_CHALLENGE` receives that bounded map only to search for
+missing strong neighbors, complete reductions, falsifiers and better problem
+formulations. Continue local primary-source, code and algebra work while either
+batch runs. Do not create duplicate prompts merely to fill capacity.
+
+Route every prompt through the scientific owner, never through Controller
+semantics. Explorer owns public-source discovery and neighbor/reduction
+challenges. An eligible Audit owns pre-Scout contract challenges,
+signal-versus-implementation-versus-estimand diagnosis from already registered
+aggregates, material-signal contribution challenges, pre-Confirmation review
+and high-risk closure rebuttal. The Controller may identify the trigger and
+dispatch that owner; it must not author or adjudicate the scientific prompt.
+Executor never consults Pro to modify frozen execution.
+
+At each material idea boundary, consider one review only when it can change the
+next route and a cheaper primary-source, code/algebra or direct observation
+cannot answer the question. Routine implementation, deterministic repair and
+ordinary carrier debugging are not Pro triggers. Post-result prompts may use
+only the exact aggregates admitted by the Audit access boundary, never raw or
+per-unit protected evidence.
+
+The independent conversation may persist between bounded batches, but it is
+not a Managed lane, Controller owner or authority source. Give each batch a
+unique scope/date identity, submit it once and read it once. If the reply may
+outlive the owner turn, record only one outcome-free `advisory_reads` obligation
+in the Controller snapshot so the existing singleton can wake the named
+Explorer/Audit from task metadata; never store or poll the prompt/reply, and
+never attach another automation or invent a Pro lifecycle.
 
 For idea-stage cross-checking, keep the Pro pass genuinely independent:
 
@@ -81,6 +107,7 @@ downstream component nouns.
 An external Opportunity Search prompt must state:
 
 ```text
+review mode: PRO_INDEPENDENT_EXPLORER | PRO_EMBEDDED_CHALLENGE
 search objective:
 user boundary and hard exclusions:
 evidence-freeze date:
@@ -101,10 +128,11 @@ placement and the publication-grade novelty/irreducibility gate after a
 material signal. A review may expose missing neighbors or reductions, but it
 cannot certify novelty or acceptance probability.
 
-Count the review against an existing Program's budget or the current Lite
-task's one-shot advisory cap. A reviewer may recommend `probe`, `hold`, or
-`drop`; it cannot create a Program, replenish budgets, or authorize code, data,
-compute, or public-test access.
+By default, permit one bounded batch in each mode per broad search boundary.
+Additional batches require a newly frozen question or source/date boundary,
+not mere dissatisfaction with the answer. A reviewer may recommend `probe`,
+`hold`, or `drop`; it cannot create a Program, replenish budgets, or authorize
+code, data, compute, public-test access, scientific closure or claims.
 
 ## Calibrate admission before search
 
@@ -161,6 +189,10 @@ bounded briefs. Each brief must report two independent states:
 problem_admission:
 contribution_forecast:
 ```
+
+Also require `idea_origin=PRO_INDEPENDENT|PRO_EMBEDDED` and enough primary-paper
+and official-code locators for the local Explorer to set `source_verified=YES`
+or reject the lead. External self-certification never sets that field.
 
 The forecast cannot determine admission. A direct neighbor may make a method
 contribution unlikely while the actor-level problem still deserves a cheap

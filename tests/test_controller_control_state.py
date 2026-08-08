@@ -1,14 +1,56 @@
+import hashlib
+import io
 import json
+import multiprocessing
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
-from scripts.controller_control_state import StateError, cmd_advance_cursors, read_state, validate_state, write_state
+from scripts.controller_control_state import (
+    StateError,
+    cmd_absorb_and_block,
+    cmd_absorb_nonblocking_advisory,
+    canonical_bytes,
+    checksum_path,
+    cmd_activate_successor,
+    cmd_advance_cursors,
+    cmd_claim_advisory,
+    cmd_close_objective,
+    cmd_complete_advisory,
+    cmd_derive_startup_chain_id,
+    cmd_migrate_v2,
+    cmd_migrate_v3,
+    cmd_observe_terminal,
+    cmd_record_startup_attempt,
+    cmd_reconcile_open,
+    cmd_replace,
+    cmd_verify_pending_terminal,
+    completion_binding_sha256,
+    derive_startup_chain_id,
+    read_state,
+    validate_state,
+    write_state,
+)
 
 
-def base_state() -> dict:
+def completion_binding(
+    terminal_path: str = "/private/tmp/TERM-AUTHORITY-1.json",
+    suffix: str = "1",
+) -> dict:
     return {
-        "schema_version": 2,
+        "task_id": f"task-{suffix}",
+        "dispatch_id": f"dispatch-{suffix}",
+        "lease_epoch": 1,
+        "contract_revision": f"contract-{suffix}",
+        "terminal_event_id": f"TERM-AUTHORITY-{suffix}",
+        "terminal_path": terminal_path,
+    }
+
+
+def base_state(terminal_path: str = "/private/tmp/TERM-AUTHORITY-1.json") -> dict:
+    return {
+        "schema_version": 5,
         "revision": 0,
         "updated_at": "2026-08-05T00:00:00Z",
         "controller": {
@@ -30,6 +72,7 @@ def base_state() -> dict:
                 "owner_thread_id": "worker-1",
                 "owner_role": "Executor",
                 "owner_state": "WAITING_EXTERNAL",
+                "completion_binding": completion_binding(terminal_path),
             }
         ],
         "managed_roles": [
@@ -57,13 +100,251 @@ def base_state() -> dict:
                 "wake_delivery": {"state": "NONE", "claim_token": None, "observation_id": None},
             }
         ],
+        "advisory_reads": [],
+        "absorbed_advisory_scopes": [],
+        "pending_absorptions": [],
         "absorbed_terminal_event_ids": [],
     }
 
 
+def observe_and_verify(path: Path, revision: int, objective_id: str = "objective-1") -> int:
+    state = read_state(path)
+    objective = next(item for item in state["objectives"] if item["objective_id"] == objective_id)
+    binding = objective["completion_binding"]
+    terminal = Path(binding["terminal_path"])
+    terminal_body = {"completion_binding": binding}
+    if objective.get("owner_role") == "Executor":
+        terminal_body["startup_chain_authority"] = objective.get(
+            "startup_chain_authority"
+        )
+    terminal_data = canonical_bytes(terminal_body)
+    terminal.write_bytes(terminal_data)
+    terminal.chmod(0o444)
+    cmd_observe_terminal(
+        type(
+            "Args",
+            (),
+            {
+                "state": str(path),
+                "expected_revision": revision,
+                "objective_id": objective_id,
+                "owner_thread_id": objective["owner_thread_id"],
+                "observation_id": "fixture-observation",
+                "expected_terminal_bytes": len(terminal_data),
+                "expected_terminal_sha256": hashlib.sha256(terminal_data).hexdigest(),
+                "terminal_cursor": "fixture-terminal-cursor",
+                "source_final_turn_id": "fixture-final-turn",
+            },
+        )()
+    )
+    cmd_verify_pending_terminal(
+        type(
+            "Args",
+            (),
+            {
+                "state": str(path),
+                "expected_revision": revision + 1,
+                "terminal_event_id": binding["terminal_event_id"],
+                "completion_binding_sha256": completion_binding_sha256(binding),
+                "controller_verification_ref": "fixture-controller-turn",
+            },
+        )()
+    )
+    return revision + 2
+
+
+def set_terminal_binding(state: dict, path: Path, terminal_event_id: str) -> None:
+    binding = state["objectives"][0]["completion_binding"]
+    binding["terminal_event_id"] = terminal_event_id
+    binding["terminal_path"] = str(path.parent / f"{terminal_event_id}.json")
+
+
+def write_and_verify(path: Path, state: dict, terminal_event_id: str) -> int:
+    set_terminal_binding(state, path, terminal_event_id)
+    write_state(path, state, -1)
+    return observe_and_verify(path, 0)
+
+
+def successor_args(**overrides: object) -> object:
+    values: dict[str, object] = {
+        "state": "",
+        "expected_revision": 0,
+        "objective_id": "objective-1",
+        "new_objective_id": "objective-2",
+        "terminal_event_id": "TERM-AUTHORITY-1",
+        "old_owner_thread_id": "worker-1",
+        "new_owner_thread_id": "worker-1",
+        "fresh_thread_reason": None,
+        "fresh_thread_evidence_ref": None,
+        "new_owner_role": "Executor",
+        "new_owner_state": "ACTIVE",
+        "new_owner_title": "Executor · Candidate Two · ACTIVE",
+        "new_cursor": "cursor:activation",
+        "new_candidate_state": "OPEN",
+        "new_stage": "R3_ACTIVE",
+        "new_scientific_outcome": "UNOBSERVED",
+        "new_next_action": "WAIT_EXECUTOR_TERMINAL",
+        "new_completion_binding_json": json.dumps(
+            completion_binding("/private/tmp/TERM-AUTHORITY-2.json", "2")
+        ),
+        "clear_remote_job_id": ["job-1"],
+        "clear_advisory_id": [],
+    }
+    values.update(overrides)
+    return type("Args", (), values)()
+
+
+def sealed_startup_authority(
+    directory: Path,
+    *,
+    rounds: tuple[int, ...] = (1, 2),
+    suffix: str = "main",
+    entrypoint_suffix: str = "",
+) -> dict:
+    scientific_projection = {
+        key: f"frozen-{key}"
+        for key in (
+            "scientific_identity",
+            "estimand",
+            "metric",
+            "baseline",
+            "seeds",
+            "exposure",
+            "authority",
+            "budget",
+            "stop",
+            "claim",
+        )
+    }
+    production_entrypoint = (
+        "public-cli->prepare_run->coordinator" + entrypoint_suffix
+    )
+    zero_utility_barrier = "READY_BEFORE_FIRST_UTILITY"
+    chain_id = derive_startup_chain_id(
+        scientific_projection,
+        production_entrypoint,
+        zero_utility_barrier,
+    )
+    contract_path = directory / f"startup-contract-{suffix}.json"
+    contract_data = canonical_bytes(
+        {
+            "startup_chain_binding": {
+                "scientific_projection": scientific_projection,
+                "production_entrypoint": production_entrypoint,
+                "zero_utility_barrier": zero_utility_barrier,
+            }
+        }
+    )
+    contract_path.write_bytes(contract_data)
+    contract_path.chmod(0o444)
+    attempt_records = []
+    for repair_round in rounds:
+        attempt_path = directory / f"startup-attempt-{suffix}-{repair_round}.json"
+        attempt_data = canonical_bytes(
+            {
+                "startup_chain_attempt": {
+                    "attempt_id": f"{suffix}-attempt-{repair_round:03d}",
+                    "startup_chain_id": chain_id,
+                    "repair_round": repair_round,
+                    "boundary": "PRE_UTILITY_FAILURE",
+                    "utility_observed": False,
+                    "protected_access": False,
+                }
+            }
+        )
+        attempt_path.write_bytes(attempt_data)
+        attempt_path.chmod(0o444)
+        attempt_records.append(
+            {
+                "path": str(attempt_path),
+                "sha256": hashlib.sha256(attempt_data).hexdigest(),
+            }
+        )
+    return {
+        "startup_chain_id": chain_id,
+        "contract_path": str(contract_path),
+        "contract_sha256": hashlib.sha256(contract_data).hexdigest(),
+        "prior_attempt_records": attempt_records,
+    }
+
+
+def advisory_record(**overrides: object) -> dict:
+    values: dict[str, object] = {
+        "advisory_id": "advisory-1",
+        "objective_id": "objective-1",
+        "conversation_thread_id": "pro-thread-1",
+        "reader_thread_id": "audit-thread-1",
+        "reader_role": "Audit",
+        "submitted_at": "2026-08-05T00:10:00Z",
+        "submitted_thread_updated_at": 100,
+        "not_before": "2026-08-05T00:20:00Z",
+        "scope_revision": 1,
+        "scope_sha256": "a" * 64,
+        "batch_mode": "NON_BLOCKING",
+        "decision_gate": "NON_BLOCKING",
+        "blocking_gate_id": None,
+        "monitor_state": "AWAITING_RESPONSE",
+        "observed_thread_updated_at": None,
+        "wake_delivery": {"state": "NONE", "claim_token": None, "observation_id": None},
+    }
+    values.update(overrides)
+    return values
+
+
+def audit_owner_state() -> dict:
+    state = base_state()
+    state["objectives"][0].update(
+        {"stage": "R2_AUDIT", "owner_role": "Audit", "owner_state": "ACTIVE"}
+    )
+    state["managed_roles"][0].update(
+        {
+            "role": "Audit",
+            "title": "Audit · Candidate One · ACTIVE",
+            "state": "ACTIVE",
+        }
+    )
+    state["remote_jobs"] = []
+    return state
+
+
+def scoped_close_record() -> dict:
+    return {
+        "basis": "PROSPECTIVE_SCOPED_MPE_FAILURE",
+        "scope": "exact finite Scout cell",
+        "evidence_ref": "terminal-1",
+        "reopening_fact": "A distinct prospective estimand is frozen.",
+        "independent_audit_terminal_id": "audit-1",
+        "evidence_eligible": True,
+        "prospective_action_table_pass": True,
+        "finite_cell_complete": True,
+        "preregistered_mpe_failure": True,
+        "scope_boundary_preserved": True,
+        "adversarial_review_pass": True,
+        "powered_negative_claimed": False,
+    }
+
+
+def close_args(path: Path, **overrides: object) -> object:
+    values: dict[str, object] = {
+        "state": str(path),
+        "expected_revision": 0,
+        "objective_id": "objective-1",
+        "terminal_event_id": "TERM-CLOSE-1",
+        "old_owner_thread_id": "worker-1",
+        "new_stage": "SCOPED_CLOSE",
+        "new_scientific_outcome": "OBSERVED_BELOW_MPE_SCOPED_CLOSED",
+        "new_next_action": "NO_SUCCESSOR_UNLESS_REOPENED",
+        "closure_json": json.dumps(scoped_close_record()),
+        "clear_remote_job_id": [],
+        "clear_advisory_id": [],
+    }
+    values.update(overrides)
+    return type("Args", (), values)()
+
+
 class ControllerControlStateTest(unittest.TestCase):
     def test_valid_state_round_trips_with_checksum(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
             written = write_state(path, base_state(), -1)
             self.assertEqual(written["revision"], 0)
@@ -71,7 +352,7 @@ class ControllerControlStateTest(unittest.TestCase):
             self.assertTrue(path.with_name(path.name + ".sha256").is_file())
 
     def test_compare_and_swap_rejects_stale_revision(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
             write_state(path, base_state(), -1)
             with self.assertRaisesRegex(StateError, "revision conflict"):
@@ -89,11 +370,18 @@ class ControllerControlStateTest(unittest.TestCase):
         with self.assertRaisesRegex(StateError, "does not match managed role"):
             validate_state(state)
 
+    def test_managed_role_title_prefix_must_match_role(self) -> None:
+        state = base_state()
+        state["managed_roles"][0]["title"] = "Audit · Candidate One · WAITING_EXTERNAL"
+        with self.assertRaisesRegex(StateError, "title role does not match role"):
+            validate_state(state)
+
     def test_blocked_objective_requires_reopening_observer_trigger(self) -> None:
         state = base_state()
         objective = state["objectives"][0]
+        objective["candidate_state"] = "BLOCKED"
         objective["lifecycle"] = "BLOCKED"
-        for key in ("owner_thread_id", "owner_role", "owner_state"):
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
             objective.pop(key)
         objective["blocker"] = {"reopening_fact": "FACT", "observer": "OWNER"}
         with self.assertRaisesRegex(StateError, "missing keys"):
@@ -101,8 +389,40 @@ class ControllerControlStateTest(unittest.TestCase):
 
     def test_blocked_candidate_requires_reopening_observer_trigger(self) -> None:
         state = base_state()
-        state["objectives"][0]["candidate_state"] = "BLOCKED"
+        objective = state["objectives"][0]
+        objective["candidate_state"] = "BLOCKED"
+        objective["lifecycle"] = "BLOCKED"
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+            objective.pop(key)
         with self.assertRaisesRegex(StateError, "blocker must be an object"):
+            validate_state(state)
+
+    def test_valid_blocker_must_be_external_and_finite(self) -> None:
+        state = base_state()
+        objective = state["objectives"][0]
+        objective.update({"candidate_state": "BLOCKED", "lifecycle": "BLOCKED"})
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+            objective.pop(key)
+        objective["blocker"] = {
+            "kind": "INTERNAL_ENGINEERING",
+            "reopening_fact": "External service recovers.",
+            "observer": "Controller",
+            "trigger": "SERVICE_RECOVERED",
+            "next_check_at": None,
+            "resolution_deadline": "2026-08-06T00:00:00Z",
+        }
+        with self.assertRaisesRegex(StateError, "blocker.kind"):
+            validate_state(state)
+        objective["blocker"]["kind"] = "EXTERNAL_FACT"
+        self.assertIs(validate_state(state), state)
+
+    def test_open_done_archive_is_invalid(self) -> None:
+        state = base_state()
+        objective = state["objectives"][0]
+        objective.update({"lifecycle": "DONE", "reopening_fact": "A later witness appears."})
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+            objective.pop(key)
+        with self.assertRaisesRegex(StateError, "OPEN/DONE is invalid"):
             validate_state(state)
 
     def test_engineering_failure_cannot_close_candidate(self) -> None:
@@ -121,7 +441,7 @@ class ControllerControlStateTest(unittest.TestCase):
                 },
             }
         )
-        for key in ("owner_thread_id", "owner_role", "owner_state"):
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
             objective.pop(key)
         with self.assertRaisesRegex(StateError, "basis must be one of"):
             validate_state(state)
@@ -146,11 +466,41 @@ class ControllerControlStateTest(unittest.TestCase):
                 },
             }
         )
-        for key in ("owner_thread_id", "owner_role", "owner_state"):
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
             objective.pop(key)
         with self.assertRaisesRegex(StateError, "power_or_futility_pass must be true"):
             validate_state(state)
         objective["idea_closure"]["power_or_futility_pass"] = True
+        self.assertIs(validate_state(state), state)
+
+    def test_scoped_mpe_failure_is_not_encoded_as_powered_negative(self) -> None:
+        state = base_state()
+        objective = state["objectives"][0]
+        objective.update(
+            {
+                "candidate_state": "CLOSED",
+                "lifecycle": "DONE",
+                "idea_closure": {
+                    "basis": "PROSPECTIVE_SCOPED_MPE_FAILURE",
+                    "scope": "exact finite Scout cell",
+                    "evidence_ref": "terminal-1",
+                    "reopening_fact": "A distinct prospective estimand is frozen.",
+                    "independent_audit_terminal_id": "audit-1",
+                    "evidence_eligible": True,
+                    "prospective_action_table_pass": True,
+                    "finite_cell_complete": True,
+                    "preregistered_mpe_failure": True,
+                    "scope_boundary_preserved": True,
+                    "adversarial_review_pass": True,
+                    "powered_negative_claimed": True,
+                },
+            }
+        )
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+            objective.pop(key)
+        with self.assertRaisesRegex(StateError, "powered_negative_claimed must be false"):
+            validate_state(state)
+        objective["idea_closure"]["powered_negative_claimed"] = False
         self.assertIs(validate_state(state), state)
 
     def test_external_impossibility_reason_is_allowlisted(self) -> None:
@@ -173,7 +523,7 @@ class ControllerControlStateTest(unittest.TestCase):
                 },
             }
         )
-        for key in ("owner_thread_id", "owner_role", "owner_state"):
+        for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
             objective.pop(key)
         with self.assertRaisesRegex(StateError, "not an allowed external impossibility"):
             validate_state(state)
@@ -181,7 +531,7 @@ class ControllerControlStateTest(unittest.TestCase):
         self.assertIs(validate_state(state), state)
 
     def test_checksum_tampering_fails_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
             write_state(path, base_state(), -1)
             state = json.loads(path.read_text(encoding="utf-8"))
@@ -200,6 +550,789 @@ class ControllerControlStateTest(unittest.TestCase):
         with self.assertRaisesRegex(StateError, "claimed identifiers"):
             validate_state(state)
 
+    def test_advisory_read_is_minimal_and_scientific_owner_bound(self) -> None:
+        state = base_state()
+        state["advisory_reads"] = [advisory_record()]
+        self.assertIs(validate_state(state), state)
+
+        state["advisory_reads"][0]["reader_role"] = "Controller"
+        with self.assertRaisesRegex(StateError, "reader_role must be Explorer or Audit"):
+            validate_state(state)
+
+    def test_explicit_advisory_batch_modes_are_bounded(self) -> None:
+        state = base_state()
+        advisory = advisory_record(advisory_id="advisory-nonblocking-1")
+        state["advisory_reads"] = [advisory]
+        self.assertIs(validate_state(state), state)
+
+        advisory["blocking_gate_id"] = "SHOULD_NOT_BLOCK"
+        with self.assertRaisesRegex(StateError, "must be null for NON_BLOCKING"):
+            validate_state(state)
+
+        advisory.update(
+            {
+                "batch_mode": "BLOCKING_HIGH_RISK",
+                "decision_gate": "BLOCKING_HIGH_RISK",
+                "blocking_gate_id": "DURABLE_HIGH_RISK_CLOSE",
+                "reader_thread_id": "worker-1",
+            }
+        )
+        state["objectives"][0].update({"owner_role": "Audit", "owner_state": "ACTIVE"})
+        state["managed_roles"][0].update(
+            {"role": "Audit", "title": "Audit · Candidate One · ACTIVE", "state": "ACTIVE"}
+        )
+        state["objectives"][0]["advisory_blocking_gate"] = {
+            "blocking_gate_id": "DURABLE_HIGH_RISK_CLOSE",
+            "transition": "CLOSE_OBJECTIVE",
+            "target_stage": "SCOPED_CLOSE",
+            "authority_ref": "terminal://prospective-close-gate",
+        }
+        self.assertIs(validate_state(state), state)
+        advisory["reader_thread_id"] = "audit-thread-1"
+        with self.assertRaisesRegex(StateError, "blocking reader must be the current scientific owner"):
+            validate_state(state)
+
+    def test_advisory_channel_has_one_inflight_batch_and_rejects_duplicate_scope(self) -> None:
+        state = audit_owner_state()
+        first = advisory_record(scope_sha256="b" * 64)
+        second = dict(first, advisory_id="advisory-2")
+        state["advisory_reads"] = [first, second]
+        with self.assertRaisesRegex(StateError, "already has an in-flight advisory batch"):
+            validate_state(state)
+
+        second["conversation_thread_id"] = "pro-thread-2"
+        with self.assertRaisesRegex(StateError, "duplicates an in-flight advisory scope"):
+            validate_state(state)
+
+        second["scope_revision"] = 2
+        with self.assertRaisesRegex(StateError, "duplicates an in-flight advisory scope"):
+            validate_state(state)
+
+    def test_legacy_advisory_cannot_be_validated_or_written(self) -> None:
+        state = base_state()
+        legacy = advisory_record()
+        for key in ("scope_revision", "scope_sha256", "batch_mode", "blocking_gate_id"):
+            legacy.pop(key)
+        legacy["decision_gate"] = "BEFORE_NEXT_SCIENTIFIC_ROUTE_DECISION"
+        state["advisory_reads"] = [legacy]
+        with self.assertRaisesRegex(StateError, "missing keys"):
+            validate_state(state)
+
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, base_state(), -1)
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(state), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "missing keys"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 0},
+                    )()
+                )
+
+            fabricated = base_state()
+            fabricated["advisory_reads"] = [
+                advisory_record(
+                    submitted_at=None,
+                    submitted_thread_updated_at=None,
+                    monitor_state="RESPONSE_OBSERVED",
+                    observed_thread_updated_at=101,
+                    wake_delivery={
+                        "state": "SENT",
+                        "claim_token": "fabricated-claim",
+                        "observation_id": "fabricated-observation",
+                    },
+                )
+            ]
+            candidate_path.write_text(json.dumps(fabricated), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "new advisory must start AWAITING_RESPONSE"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 0},
+                    )()
+                )
+
+    def test_generic_replace_cannot_claim_advisory(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["advisory_reads"] = [advisory_record()]
+            write_state(path, state, -1)
+
+            fabricated = read_state(path)
+            advisory = fabricated["advisory_reads"][0]
+            advisory["monitor_state"] = "RESPONSE_OBSERVED"
+            advisory["observed_thread_updated_at"] = 101
+            advisory["wake_delivery"] = {
+                "state": "CLAIMED",
+                "claim_token": "fabricated-claim",
+                "observation_id": "fabricated-observation",
+            }
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(fabricated), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "only by claim-advisory-wake"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 0},
+                    )()
+                )
+            self.assertEqual(read_state(path)["advisory_reads"][0]["monitor_state"], "AWAITING_RESPONSE")
+
+    def test_generic_replace_cannot_complete_advisory(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["advisory_reads"] = [advisory_record()]
+            write_state(path, state, -1)
+            cmd_claim_advisory(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "advisory_id": "advisory-1",
+                        "expected_revision": 0,
+                        "claim_token": "claim-1",
+                        "observation_id": "observation-1",
+                        "observed_thread_updated_at": 101,
+                    },
+                )()
+            )
+
+            fabricated = read_state(path)
+            fabricated["advisory_reads"][0]["wake_delivery"]["state"] = "SENT"
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(fabricated), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "only by complete-advisory-wake"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 1},
+                    )()
+                )
+            self.assertEqual(
+                read_state(path)["advisory_reads"][0]["wake_delivery"]["state"],
+                "CLAIMED",
+            )
+
+    def test_initial_write_cannot_seed_observed_sent_advisory(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["advisory_reads"] = [
+                advisory_record(
+                    monitor_state="RESPONSE_OBSERVED",
+                    observed_thread_updated_at=101,
+                    wake_delivery={
+                        "state": "SENT",
+                        "claim_token": "fabricated-claim",
+                        "observation_id": "fabricated-observation",
+                    },
+                )
+            ]
+            with self.assertRaisesRegex(StateError, "new advisory must start AWAITING_RESPONSE"):
+                write_state(path, state, -1)
+            self.assertFalse(path.exists())
+
+    def test_high_risk_gate_cannot_clear_after_generic_fabricated_delivery(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            initial = audit_owner_state()
+            set_terminal_binding(initial, path, "TERM-CLOSE-1")
+            write_state(path, initial, -1)
+            gated = read_state(path)
+            gated["objectives"][0]["advisory_blocking_gate"] = {
+                "blocking_gate_id": "GATE-CLOSE-1",
+                "transition": "CLOSE_OBJECTIVE",
+                "target_stage": "SCOPED_CLOSE",
+                "authority_ref": "terminal://prospective-close-gate",
+            }
+            write_state(path, gated, 0)
+            awaiting = read_state(path)
+            awaiting["advisory_reads"] = [
+                advisory_record(
+                    reader_thread_id="worker-1",
+                    batch_mode="BLOCKING_HIGH_RISK",
+                    decision_gate="BLOCKING_HIGH_RISK",
+                    blocking_gate_id="GATE-CLOSE-1",
+                    scope_sha256="f" * 64,
+                )
+            ]
+            write_state(path, awaiting, 1)
+
+            fabricated = read_state(path)
+            advisory = fabricated["advisory_reads"][0]
+            advisory["monitor_state"] = "RESPONSE_OBSERVED"
+            advisory["observed_thread_updated_at"] = 101
+            advisory["wake_delivery"] = {
+                "state": "CLAIMED",
+                "claim_token": "fabricated-claim",
+                "observation_id": "fabricated-observation",
+            }
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(fabricated), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "only by claim-advisory-wake"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 2},
+                    )()
+                )
+            verified_revision = observe_and_verify(path, 2)
+            with self.assertRaisesRegex(StateError, "is not observed with SENT delivery"):
+                cmd_close_objective(
+                    close_args(
+                        path,
+                        expected_revision=verified_revision,
+                        clear_advisory_id=["advisory-1"],
+                    )
+                )
+
+    def test_blocking_gate_must_preexist_and_is_unique(self) -> None:
+        state = audit_owner_state()
+        state["objectives"][0]["advisory_blocking_gate"] = {
+            "blocking_gate_id": "GATE-X",
+            "transition": "CLOSE_OBJECTIVE",
+            "target_stage": "SCOPED_CLOSE",
+            "authority_ref": "terminal://gate-x",
+        }
+        first = advisory_record(
+            batch_mode="BLOCKING_HIGH_RISK",
+            decision_gate="BLOCKING_HIGH_RISK",
+            blocking_gate_id="GATE-X",
+            scope_sha256="b" * 64,
+            reader_thread_id="worker-1",
+        )
+        second = advisory_record(
+            advisory_id="advisory-2",
+            conversation_thread_id="pro-thread-2",
+            batch_mode="BLOCKING_HIGH_RISK",
+            decision_gate="BLOCKING_HIGH_RISK",
+            blocking_gate_id="GATE-X",
+            scope_sha256="c" * 64,
+            reader_thread_id="worker-1",
+        )
+        state["advisory_reads"] = [first, second]
+        with self.assertRaisesRegex(StateError, "duplicates an active blocking gate"):
+            validate_state(state)
+
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, audit_owner_state(), -1)
+            simultaneous = read_state(path)
+            simultaneous["objectives"][0]["advisory_blocking_gate"] = state["objectives"][0][
+                "advisory_blocking_gate"
+            ]
+            simultaneous["advisory_reads"] = [first]
+            with self.assertRaisesRegex(StateError, "gate bound in the previous state"):
+                write_state(path, simultaneous, 0)
+
+            prebound = read_state(path)
+            prebound["objectives"][0]["advisory_blocking_gate"] = state["objectives"][0][
+                "advisory_blocking_gate"
+            ]
+            write_state(path, prebound, 0)
+            removable = read_state(path)
+            removable["objectives"][0].pop("advisory_blocking_gate")
+            candidate_path = Path(tmp) / "remove-gate.json"
+            candidate_path.write_text(json.dumps(removable), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "cannot change or remove blocking gate"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 1},
+                    )()
+                )
+
+    def test_absorbed_scope_cannot_be_resubmitted_with_new_revision(self) -> None:
+        state = base_state()
+        state["absorbed_terminal_event_ids"] = ["TERM-LOCAL-1"]
+        state["absorbed_advisory_scopes"] = [
+            {
+                "candidate_id": "candidate-1",
+                "scope_sha256": "d" * 64,
+                "local_validation_terminal_event_id": "TERM-LOCAL-1",
+            }
+        ]
+        state["advisory_reads"] = [advisory_record(scope_revision=99, scope_sha256="d" * 64)]
+        with self.assertRaisesRegex(StateError, "repeats an absorbed advisory scope"):
+            validate_state(state)
+
+    def test_generic_replace_cannot_rebind_owner_or_lifecycle(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, base_state(), -1)
+            candidate = read_state(path)
+            candidate["objectives"][0]["owner_thread_id"] = "worker-2"
+            candidate["managed_roles"][0].update(
+                {
+                    "thread_id": "worker-2",
+                    "title": "Executor · Candidate One · WAITING_EXTERNAL",
+                }
+            )
+            candidate["remote_jobs"][0]["owner_thread_id"] = "worker-2"
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "generic replacement cannot change owner/lifecycle"):
+                cmd_replace(
+                    type(
+                        "Args",
+                        (),
+                        {"state": str(path), "input": str(candidate_path), "expected_revision": 0},
+                    )()
+                )
+            self.assertEqual(read_state(path)["objectives"][0]["owner_thread_id"], "worker-1")
+
+    def test_validate_state_rejects_duplicate_delegated_owner_thread(self) -> None:
+        state = base_state()
+        duplicate = dict(state["objectives"][0])
+        duplicate.update(
+            {
+                "objective_id": "objective-2",
+                "candidate_id": "candidate-2",
+                "stage": "R1_IMPLEMENTATION",
+                "next_action": "WAIT_SECOND_TERMINAL",
+            }
+        )
+        state["objectives"].append(duplicate)
+        with self.assertRaisesRegex(StateError, "duplicate delegated owner_thread_id worker-1"):
+            validate_state(state)
+
+    def test_reconcile_open_cannot_assign_blocked_objective_to_existing_delegated_owner(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["objectives"].append(
+                {
+                    "objective_id": "objective-2",
+                    "candidate_id": "candidate-2",
+                    "candidate_state": "BLOCKED",
+                    "stage": "WAIT_EXTERNAL",
+                    "scientific_outcome": "UNOBSERVED",
+                    "lifecycle": "BLOCKED",
+                    "next_action": "CHECK_EXTERNAL_FACT",
+                    "blocker": {
+                        "kind": "EXTERNAL_FACT",
+                        "reopening_fact": "A required external artifact becomes available.",
+                        "observer": "Controller",
+                        "trigger": "ARTIFACT_AVAILABLE",
+                        "next_check_at": "2026-08-06T00:00:00Z",
+                        "resolution_deadline": "2026-08-07T00:00:00Z",
+                    },
+                }
+            )
+            write_state(path, state, -1)
+            transitions = [
+                {
+                    "objective_id": "objective-2",
+                    "new_objective_id": "objective-2",
+                    "stage": "R1_IMPLEMENTATION",
+                    "scientific_outcome": "UNOBSERVED",
+                    "next_action": "WAIT_SECOND_TERMINAL",
+                    "owner_thread_id": "worker-1",
+                    "owner_role": "Executor",
+                    "owner_state": "WAITING_EXTERNAL",
+                    "owner_title": "Executor · Candidate One · WAITING_EXTERNAL",
+                    "cursor": None,
+                    "recovery_evidence_ref": "terminal://artifact-available-proof",
+                    "completion_binding": completion_binding(
+                        str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                    ),
+                }
+            ]
+            with self.assertRaisesRegex(StateError, "duplicate delegated owner_thread_id worker-1"):
+                cmd_reconcile_open(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": 0,
+                            "transitions_json": json.dumps(transitions),
+                            "remote_jobs_json": json.dumps(state["remote_jobs"]),
+                        },
+                    )()
+                )
+            unchanged = read_state(path)
+            self.assertEqual(unchanged["revision"], 0)
+            blocked = next(item for item in unchanged["objectives"] if item["objective_id"] == "objective-2")
+            self.assertEqual(blocked["lifecycle"], "BLOCKED")
+
+    def test_v4_reconcile_open_cannot_rebind_a_delegated_owner(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, base_state(), -1)
+            transitions = [
+                {
+                    "objective_id": "objective-1",
+                    "new_objective_id": "objective-1",
+                    "stage": "AUDIT_ACTIVE",
+                    "scientific_outcome": "UNOBSERVED",
+                    "next_action": "WAIT_AUDIT_TERMINAL",
+                    "owner_thread_id": "audit-1",
+                    "owner_role": "Audit",
+                    "owner_state": "ACTIVE",
+                    "owner_title": "Audit · Candidate One · ACTIVE",
+                    "cursor": None,
+                    "recovery_evidence_ref": "terminal://recovery-proof",
+                    "completion_binding": completion_binding(
+                        str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                    ),
+                }
+            ]
+            with self.assertRaisesRegex(StateError, "may only reopen a BLOCKED objective"):
+                cmd_reconcile_open(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": 0,
+                            "transitions_json": json.dumps(transitions),
+                            "remote_jobs_json": "[]",
+                        },
+                    )()
+                )
+
+    def test_v4_reconcile_open_requires_and_records_recovery_evidence(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            objective = state["objectives"][0]
+            objective.update(
+                {
+                    "candidate_state": "BLOCKED",
+                    "stage": "WAIT_EXTERNAL",
+                    "lifecycle": "BLOCKED",
+                    "next_action": "CHECK_EXTERNAL_FACT",
+                    "blocker": {
+                        "kind": "EXTERNAL_FACT",
+                        "reopening_fact": "A required external artifact becomes available.",
+                        "observer": "Controller",
+                        "trigger": "ARTIFACT_AVAILABLE",
+                        "next_check_at": "2026-08-06T00:00:00Z",
+                        "resolution_deadline": "2026-08-07T00:00:00Z",
+                    },
+                }
+            )
+            for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+                objective.pop(key)
+            state["managed_roles"] = []
+            state["remote_jobs"] = []
+            write_state(path, state, -1)
+            transitions = [
+                {
+                    "objective_id": "objective-1",
+                    "new_objective_id": "objective-1",
+                    "stage": "AUDIT_ACTIVE",
+                    "scientific_outcome": "UNOBSERVED",
+                    "next_action": "WAIT_AUDIT_TERMINAL",
+                    "owner_thread_id": "audit-1",
+                    "owner_role": "Audit",
+                    "owner_state": "ACTIVE",
+                    "owner_title": "Audit · Candidate One · ACTIVE",
+                    "cursor": None,
+                    "recovery_evidence_ref": "terminal://artifact-available-proof",
+                    "completion_binding": completion_binding(
+                        str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                    ),
+                }
+            ]
+            cmd_reconcile_open(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "expected_revision": 0,
+                        "transitions_json": json.dumps(transitions),
+                        "remote_jobs_json": "[]",
+                    },
+                )()
+            )
+            reopened = read_state(path)["objectives"][0]
+            self.assertEqual(reopened["owner_thread_id"], "audit-1")
+            self.assertEqual(
+                reopened["owner_recovery_evidence_ref"], "terminal://artifact-available-proof"
+            )
+
+    def test_nonblocking_advisory_does_not_block_scoped_close(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["remote_jobs"] = []
+            state["advisory_reads"] = [
+                advisory_record(reader_thread_id="worker-1", scope_sha256="e" * 64)
+            ]
+            revision = write_and_verify(path, state, "TERM-CLOSE-1")
+            cmd_close_objective(close_args(path, expected_revision=revision))
+            closed = read_state(path)
+            self.assertEqual(closed["objectives"][0]["lifecycle"], "DONE")
+            self.assertEqual([item["advisory_id"] for item in closed["advisory_reads"]], ["advisory-1"])
+
+    def test_blocking_advisory_enforces_exact_gate_until_local_absorption(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            initial = audit_owner_state()
+            set_terminal_binding(initial, path, "TERM-CLOSE-1")
+            write_state(path, initial, -1)
+
+            gated = read_state(path)
+            gated["objectives"][0]["advisory_blocking_gate"] = {
+                "blocking_gate_id": "GATE-CLOSE-1",
+                "transition": "CLOSE_OBJECTIVE",
+                "target_stage": "SCOPED_CLOSE",
+                "authority_ref": "terminal://prospective-close-gate",
+            }
+            write_state(path, gated, 0)
+
+            awaiting = read_state(path)
+            awaiting["advisory_reads"] = [
+                advisory_record(
+                    reader_thread_id="worker-1",
+                    batch_mode="BLOCKING_HIGH_RISK",
+                    decision_gate="BLOCKING_HIGH_RISK",
+                    blocking_gate_id="GATE-CLOSE-1",
+                    scope_sha256="f" * 64,
+                )
+            ]
+            write_state(path, awaiting, 1)
+            verified_revision = observe_and_verify(path, 2)
+
+            with self.assertRaisesRegex(StateError, "exact blocking gate requires one"):
+                cmd_close_objective(close_args(path, expected_revision=verified_revision))
+            with self.assertRaisesRegex(StateError, "is not observed with SENT delivery"):
+                cmd_close_objective(
+                    close_args(
+                        path,
+                        expected_revision=verified_revision,
+                        clear_advisory_id=["advisory-1"],
+                    )
+                )
+
+            cmd_claim_advisory(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "advisory_id": "advisory-1",
+                        "expected_revision": verified_revision,
+                        "claim_token": "claim-close-1",
+                        "observation_id": "observation-close-1",
+                        "observed_thread_updated_at": 101,
+                    },
+                )()
+            )
+            cmd_complete_advisory(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "advisory_id": "advisory-1",
+                        "expected_revision": verified_revision + 1,
+                        "claim_token": "claim-close-1",
+                    },
+                )()
+            )
+            cmd_close_objective(
+                close_args(
+                    path,
+                    expected_revision=verified_revision + 2,
+                    clear_advisory_id=["advisory-1"],
+                )
+            )
+            closed = read_state(path)
+            self.assertEqual(closed["advisory_reads"], [])
+            self.assertNotIn("advisory_blocking_gate", closed["objectives"][0])
+            self.assertEqual(
+                closed["absorbed_advisory_scopes"],
+                [
+                    {
+                        "candidate_id": "candidate-1",
+                        "scope_sha256": "f" * 64,
+                        "local_validation_terminal_event_id": "TERM-CLOSE-1",
+                    }
+                ],
+            )
+
+    def test_advisory_response_wake_is_exactly_once_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["advisory_reads"] = [advisory_record()]
+            write_state(path, state, -1)
+            with self.assertRaisesRegex(StateError, "is not observed with SENT delivery"):
+                cmd_absorb_nonblocking_advisory(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "advisory_id": "advisory-1",
+                            "expected_revision": 0,
+                            "local_validation_terminal_event_id": "TERM-PRO-EARLY",
+                        },
+                    )()
+                )
+            claim = type("Args", (), {
+                "state": str(path),
+                "advisory_id": "advisory-1",
+                "expected_revision": 0,
+                "claim_token": "claim-1",
+                "observation_id": "obs-1",
+                "observed_thread_updated_at": 101,
+            })()
+            cmd_claim_advisory(claim)
+            observed = read_state(path)["advisory_reads"][0]
+            self.assertEqual(observed["monitor_state"], "RESPONSE_OBSERVED")
+            self.assertEqual(observed["wake_delivery"]["state"], "CLAIMED")
+
+            with self.assertRaisesRegex(StateError, "already RESPONSE_OBSERVED"):
+                cmd_claim_advisory(type("Args", (), {
+                    "state": str(path),
+                    "advisory_id": "advisory-1",
+                    "expected_revision": 1,
+                    "claim_token": "claim-2",
+                    "observation_id": "obs-2",
+                    "observed_thread_updated_at": 102,
+                })())
+
+            complete = type("Args", (), {
+                "state": str(path),
+                "advisory_id": "advisory-1",
+                "expected_revision": 1,
+                "claim_token": "claim-1",
+            })()
+            cmd_complete_advisory(complete)
+            self.assertEqual(read_state(path)["advisory_reads"][0]["wake_delivery"]["state"], "SENT")
+
+            cmd_absorb_nonblocking_advisory(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "advisory_id": "advisory-1",
+                        "expected_revision": 2,
+                        "local_validation_terminal_event_id": "TERM-PRO-LOCAL-1",
+                    },
+                )()
+            )
+            absorbed = read_state(path)
+            self.assertEqual(absorbed["advisory_reads"], [])
+            self.assertIn("TERM-PRO-LOCAL-1", absorbed["absorbed_terminal_event_ids"])
+            self.assertEqual(
+                absorbed["absorbed_advisory_scopes"][0]["local_validation_terminal_event_id"],
+                "TERM-PRO-LOCAL-1",
+            )
+
+    def test_already_observed_advisory_can_bind_reader_without_fabricated_baseline(self) -> None:
+        state = base_state()
+        state["advisory_reads"] = [
+            advisory_record(
+                advisory_id="advisory-ready-1",
+                submitted_at=None,
+                submitted_thread_updated_at=None,
+                not_before="2026-08-05T00:00:00Z",
+                monitor_state="RESPONSE_OBSERVED",
+                observed_thread_updated_at=101.5,
+                wake_delivery={"state": "SENT", "claim_token": "direct-1", "observation_id": "obs-1"},
+            )
+        ]
+        self.assertIs(validate_state(state), state)
+
+    def test_v2_migration_requires_checksum_and_writes_v5(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 2
+            legacy.pop("advisory_reads")
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            candidate = base_state()
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            cmd_migrate_v2(type("Args", (), {
+                "state": str(path),
+                "input": str(candidate_path),
+                "expected_revision": 0,
+            })())
+            migrated = read_state(path)
+            self.assertEqual(migrated["schema_version"], 5)
+            self.assertEqual(migrated["revision"], 1)
+            self.assertEqual(migrated["advisory_reads"], [])
+
+    def test_v3_migration_requires_explicit_v5_candidate(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 3
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            candidate = base_state()
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            cmd_migrate_v3(type("Args", (), {
+                "state": str(path),
+                "input": str(candidate_path),
+                "expected_revision": 0,
+            })())
+            migrated = read_state(path)
+            self.assertEqual(migrated["schema_version"], 5)
+            self.assertEqual(migrated["revision"], 1)
+
+    def test_v3_migration_cannot_upgrade_legacy_advisory_into_authority(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 3
+            legacy_advisory = advisory_record()
+            for key in ("scope_revision", "scope_sha256", "batch_mode", "blocking_gate_id"):
+                legacy_advisory.pop(key)
+            legacy_advisory["decision_gate"] = "BEFORE_NEXT_SCIENTIFIC_ROUTE_DECISION"
+            legacy["advisory_reads"] = [legacy_advisory]
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            candidate = base_state()
+            candidate["advisory_reads"] = [advisory_record()]
+            candidate_path = Path(tmp) / "candidate.json"
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            with self.assertRaisesRegex(StateError, "legacy advisory obligations cannot be migrated"):
+                cmd_migrate_v3(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "input": str(candidate_path),
+                            "expected_revision": 0,
+                        },
+                    )()
+                )
+
     def test_remote_monitor_fields_are_allowlisted(self) -> None:
         state = base_state()
         state["remote_jobs"][0]["host"] = "unknown-host"
@@ -217,14 +1350,19 @@ class ControllerControlStateTest(unittest.TestCase):
             validate_state(state)
 
     def test_cursor_advancement_is_bounded_and_compare_and_swap_bound(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
             write_state(path, base_state(), -1)
             args = type("Args", (), {
                 "state": str(path),
                 "expected_revision": 0,
                 "updates_json": json.dumps([
-                    {"thread_id": "worker-1", "expected_cursor": None, "new_cursor": "cursor:1"}
+                    {
+                        "thread_id": "worker-1",
+                        "expected_cursor": None,
+                        "new_cursor": "cursor:1",
+                        "observation_kind": "NON_TERMINAL",
+                    }
                 ]),
             })()
             cmd_advance_cursors(args)
@@ -234,11 +1372,1058 @@ class ControllerControlStateTest(unittest.TestCase):
                 "state": str(path),
                 "expected_revision": 1,
                 "updates_json": json.dumps([
-                    {"thread_id": "worker-1", "expected_cursor": None, "new_cursor": "cursor:2"}
+                    {
+                        "thread_id": "worker-1",
+                        "expected_cursor": None,
+                        "new_cursor": "cursor:2",
+                        "observation_kind": "NON_TERMINAL",
+                    }
                 ]),
             })()
             with self.assertRaisesRegex(StateError, "expected_cursor does not match"):
                 cmd_advance_cursors(stale)
+
+    def test_cursor_must_not_cross_unabsorbed_terminal(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, base_state(), -1)
+            args = type("Args", (), {
+                "state": str(path),
+                "expected_revision": 0,
+                "updates_json": json.dumps([{
+                    "thread_id": "worker-1",
+                    "expected_cursor": None,
+                    "new_cursor": "cursor:terminal",
+                    "observation_kind": "TERMINAL",
+                    "terminal_event_id": "TERM-1",
+                }]),
+            })()
+            with self.assertRaisesRegex(StateError, "is not absorbed"):
+                cmd_advance_cursors(args)
+            self.assertIsNone(read_state(path)["managed_roles"][0]["cursor"])
+
+    def test_cursor_may_cross_already_absorbed_terminal(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["absorbed_terminal_event_ids"] = ["TERM-1"]
+            write_state(path, state, -1)
+            args = type("Args", (), {
+                "state": str(path),
+                "expected_revision": 0,
+                "updates_json": json.dumps([{
+                    "thread_id": "worker-1",
+                    "expected_cursor": None,
+                    "new_cursor": "cursor:terminal",
+                    "observation_kind": "TERMINAL",
+                    "terminal_event_id": "TERM-1",
+                }]),
+            })()
+            cmd_advance_cursors(args)
+            self.assertEqual(read_state(path)["managed_roles"][0]["cursor"], "cursor:terminal")
+
+    def test_activate_successor_atomically_absorbs_and_reuses_owner(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            args = successor_args(state=str(path), expected_revision=revision)
+            cmd_activate_successor(args)
+            state = read_state(path)
+            self.assertEqual(state["revision"], revision + 1)
+            self.assertEqual(state["objectives"][0]["objective_id"], "objective-2")
+            self.assertEqual(state["objectives"][0]["owner_thread_id"], "worker-1")
+            self.assertEqual(state["managed_roles"][0]["thread_id"], "worker-1")
+            self.assertEqual(state["remote_jobs"], [])
+            self.assertNotIn("fresh_thread_reason", state["objectives"][0])
+            self.assertIn("TERM-AUTHORITY-1", state["absorbed_terminal_event_ids"])
+
+    def test_activate_successor_reuses_same_executor_without_fork_reason(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            args = successor_args(
+                state=str(path),
+                expected_revision=revision,
+                new_owner_thread_id="worker-1",
+                fresh_thread_reason=None,
+            )
+            cmd_activate_successor(args)
+            state = read_state(path)
+            self.assertEqual(state["objectives"][0]["owner_thread_id"], "worker-1")
+            self.assertNotIn("fresh_thread_reason", state["objectives"][0])
+
+    def test_activate_successor_rejects_unjustified_or_role_changing_fork(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            with self.assertRaisesRegex(StateError, "requires an allowlisted fresh_thread_reason"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path), expected_revision=revision, new_owner_thread_id="worker-2"
+                    )
+                )
+            with self.assertRaisesRegex(StateError, "requires an allowlisted fresh_thread_reason"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_owner_thread_id="worker-2",
+                        fresh_thread_reason="MODEL_SWITCH",
+                        fresh_thread_evidence_ref="terminal://model-switch",
+                    )
+                )
+            with self.assertRaisesRegex(StateError, "requires immutable fresh_thread_evidence_ref"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_owner_thread_id="worker-2",
+                        fresh_thread_reason="VERIFIED_CONTEXT_ISOLATION_REQUIRED",
+                    )
+                )
+            with self.assertRaisesRegex(StateError, "requires a canonical role change"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_owner_thread_id="worker-2",
+                        fresh_thread_reason="WRITE_OWNERSHIP_TRANSFER",
+                        fresh_thread_evidence_ref="terminal://ownership-transfer",
+                    )
+                )
+            with self.assertRaisesRegex(StateError, "requires an Audit successor"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_owner_thread_id="worker-2",
+                        fresh_thread_reason="PROTECTED_RESULT_INDEPENDENCE",
+                        fresh_thread_evidence_ref="terminal://protected-independence",
+                    )
+                )
+            with self.assertRaisesRegex(StateError, "must preserve the canonical role"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_owner_thread_id="worker-2",
+                        new_owner_role="Audit",
+                        new_owner_title="Audit · Candidate Two · ACTIVE",
+                        fresh_thread_reason="VERIFIED_CONTEXT_ISOLATION_REQUIRED",
+                        fresh_thread_evidence_ref="terminal://context-rollover",
+                    )
+                )
+            with self.assertRaisesRegex(StateError, "same-thread successor must preserve the canonical role"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_owner_thread_id="worker-1",
+                        fresh_thread_reason=None,
+                        new_owner_role="Audit",
+                        new_owner_title="Audit · Candidate Two · ACTIVE",
+                    )
+                )
+
+    def test_activate_successor_allows_evidenced_same_role_context_rollover(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            cmd_activate_successor(
+                successor_args(
+                    state=str(path),
+                    expected_revision=revision,
+                    new_owner_thread_id="worker-2",
+                    fresh_thread_reason="VERIFIED_CONTEXT_ISOLATION_REQUIRED",
+                    fresh_thread_evidence_ref="terminal://context-epoch-2",
+                )
+            )
+            objective = read_state(path)["objectives"][0]
+            self.assertEqual(objective["owner_thread_id"], "worker-2")
+            self.assertEqual(objective["fresh_thread_evidence_ref"], "terminal://context-epoch-2")
+
+    def test_successor_cannot_reuse_pending_or_absorbed_terminal_event_id(self) -> None:
+        state = base_state()
+        current_event = state["objectives"][0]["completion_binding"][
+            "terminal_event_id"
+        ]
+        state["absorbed_terminal_event_ids"] = [current_event]
+        with self.assertRaisesRegex(StateError, "already absorbed"):
+            validate_state(state)
+
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            path = directory / "controller-state.json"
+            initial = base_state()
+            initial["absorbed_terminal_event_ids"] = ["TERM-HISTORICAL"]
+            revision = write_and_verify(path, initial, "TERM-NO-REUSE")
+            before = read_state(path)
+            reused_binding = completion_binding(
+                str(directory / "future-successor-terminal.json"),
+                "future",
+            )
+            reused_binding["terminal_event_id"] = "TERM-NO-REUSE"
+            with self.assertRaisesRegex(StateError, "pending or absorbed"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        terminal_event_id="TERM-NO-REUSE",
+                        new_completion_binding_json=json.dumps(reused_binding),
+                    )
+                )
+            self.assertEqual(read_state(path), before)
+
+            historical_binding = completion_binding(
+                str(directory / "historical-successor-terminal.json"),
+                "historical",
+            )
+            historical_binding["terminal_event_id"] = "TERM-HISTORICAL"
+            historical_before = read_state(path)
+            with self.assertRaisesRegex(StateError, "pending or absorbed"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        terminal_event_id="TERM-NO-REUSE",
+                        new_completion_binding_json=json.dumps(historical_binding),
+                    )
+                )
+            self.assertEqual(read_state(path), historical_before)
+
+    def test_controller_thread_cannot_be_managed_owner(self) -> None:
+        state = base_state()
+        state["managed_roles"][0]["thread_id"] = "controller-1"
+        state["objectives"][0]["owner_thread_id"] = "controller-1"
+        with self.assertRaisesRegex(StateError, "Controller thread cannot also be a managed role"):
+            validate_state(state)
+
+    def test_new_v5_state_cannot_seed_legacy_terminal_applicability(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            state = base_state()
+            state["objectives"][0][
+                "legacy_terminal_schema"
+            ] = "V4_EXECUTOR_NO_STARTUP_AUTHORITY_MIRROR"
+            path = Path(tmp) / "controller-state.json"
+            with self.assertRaisesRegex(StateError, "initial state cannot seed"):
+                write_state(path, state, -1)
+            self.assertFalse(path.exists())
+
+    def test_successor_activation_prebinds_verified_startup_authority_and_generic_replace_cannot_mutate_it(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            contract_path = directory / "startup-contract.json"
+            scientific_projection = {
+                key: f"frozen-{key}"
+                for key in (
+                    "scientific_identity",
+                    "estimand",
+                    "metric",
+                    "baseline",
+                    "seeds",
+                    "exposure",
+                    "authority",
+                    "budget",
+                    "stop",
+                    "claim",
+                )
+            }
+            production_entrypoint = "public-cli->prepare_run->coordinator"
+            zero_utility_barrier = "READY_BEFORE_FIRST_UTILITY"
+            contract_data = canonical_bytes(
+                {
+                    "startup_chain_binding": {
+                        "scientific_projection": scientific_projection,
+                        "production_entrypoint": production_entrypoint,
+                        "zero_utility_barrier": zero_utility_barrier,
+                    }
+                }
+            )
+            contract_path.write_bytes(contract_data)
+            contract_path.chmod(0o444)
+            authority = {
+                "startup_chain_id": derive_startup_chain_id(
+                    scientific_projection,
+                    production_entrypoint,
+                    zero_utility_barrier,
+                ),
+                "contract_path": str(contract_path),
+                "contract_sha256": hashlib.sha256(contract_data).hexdigest(),
+                "prior_attempt_records": [],
+            }
+
+            path = directory / "controller-state.json"
+            state = base_state()
+            revision = write_and_verify(path, state, "TERM-STARTUP-AUTHORITY")
+            cmd_activate_successor(
+                successor_args(
+                    state=str(path),
+                    expected_revision=revision,
+                    terminal_event_id="TERM-STARTUP-AUTHORITY",
+                    new_startup_chain_authority_json=json.dumps(authority),
+                )
+            )
+            activated = read_state(path)
+            self.assertEqual(
+                activated["objectives"][0]["startup_chain_authority"], authority
+            )
+
+            changed = json.loads(json.dumps(activated))
+            changed["objectives"][0]["startup_chain_authority"][
+                "contract_sha256"
+            ] = "f" * 64
+            with self.assertRaisesRegex(
+                StateError, "generic replacement cannot change owner/lifecycle"
+            ):
+                write_state(path, changed, activated["revision"])
+            unchanged = read_state(path)
+            self.assertEqual(unchanged["revision"], activated["revision"])
+            self.assertEqual(
+                unchanged["objectives"][0]["startup_chain_authority"], authority
+            )
+
+    def test_same_executor_cas_consumes_two_startup_repairs_without_terminal_route(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            complete_authority = sealed_startup_authority(directory)
+            empty_authority = json.loads(json.dumps(complete_authority))
+            empty_authority["prior_attempt_records"] = []
+            state = base_state()
+            state["objectives"][0]["owner_state"] = "ACTIVE"
+            state["objectives"][0]["startup_chain_authority"] = empty_authority
+            state["managed_roles"][0]["state"] = "ACTIVE"
+            state["managed_roles"][0]["title"] = "Executor · Candidate One · ACTIVE"
+            state["remote_jobs"] = []
+            path = directory / "controller-state.json"
+            written = write_state(path, state, -1)
+            original_binding = json.loads(
+                json.dumps(written["objectives"][0]["completion_binding"])
+            )
+            original_role = json.loads(json.dumps(written["managed_roles"][0]))
+
+            def derive() -> dict:
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    cmd_derive_startup_chain_id(
+                        type(
+                            "Args",
+                            (),
+                            {"state": str(path), "objective_id": "objective-1"},
+                        )()
+                    )
+                return json.loads(output.getvalue())
+
+            initial_decision = derive()
+            self.assertEqual(initial_decision["pre_utility_failures_recorded"], 0)
+            self.assertIsNone(initial_decision["authorized_repair_round"])
+            self.assertEqual(
+                initial_decision["disposition"], "RUN_INITIAL_STARTUP_WITNESS"
+            )
+
+            # A future round cannot be consumed before its predecessor.
+            second_ref = complete_authority["prior_attempt_records"][1]
+            with self.assertRaisesRegex(StateError, "consecutive|round 1"):
+                cmd_record_startup_attempt(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": 0,
+                            "objective_id": "objective-1",
+                            "owner_thread_id": "worker-1",
+                            "attempt_record_path": second_ref["path"],
+                            "attempt_record_sha256": second_ref["sha256"],
+                        },
+                    )()
+                )
+            self.assertEqual(read_state(path)["revision"], 0)
+
+            # Generic state replacement still cannot spend the repair budget.
+            generic = read_state(path)
+            generic["objectives"][0]["startup_chain_authority"] = json.loads(
+                json.dumps(complete_authority)
+            )
+            generic["objectives"][0]["startup_chain_authority"][
+                "prior_attempt_records"
+            ] = complete_authority["prior_attempt_records"][:1]
+            with self.assertRaisesRegex(
+                StateError, "generic replacement cannot change owner/lifecycle"
+            ):
+                write_state(path, generic, 0)
+
+            first_ref = complete_authority["prior_attempt_records"][0]
+            first_command = type(
+                "Args",
+                (),
+                {
+                    "state": str(path),
+                    "expected_revision": 0,
+                    "objective_id": "objective-1",
+                    "owner_thread_id": "worker-1",
+                    "attempt_record_path": first_ref["path"],
+                    "attempt_record_sha256": first_ref["sha256"],
+                },
+            )()
+            cmd_record_startup_attempt(first_command)
+            after_first = read_state(path)
+            self.assertEqual(after_first["revision"], 1)
+            self.assertEqual(len(after_first["objectives"]), 1)
+            self.assertEqual(after_first["managed_roles"], [original_role])
+            self.assertEqual(after_first["pending_absorptions"], [])
+            self.assertEqual(after_first["absorbed_terminal_event_ids"], [])
+            self.assertEqual(
+                after_first["objectives"][0]["completion_binding"], original_binding
+            )
+            first_decision = derive()
+            self.assertEqual(first_decision["pre_utility_failures_recorded"], 1)
+            self.assertEqual(first_decision["authorized_repair_round"], 1)
+            self.assertEqual(
+                first_decision["disposition"], "MINIMAL_REPAIR_IN_SAME_EXECUTOR"
+            )
+            self.assertEqual(
+                first_decision["on_full_witness_failure"],
+                "RECORD_STARTUP_ATTEMPT",
+            )
+
+            # Lost-receipt retry is idempotent even with the pre-CAS revision.
+            retry_output = io.StringIO()
+            with redirect_stdout(retry_output):
+                cmd_record_startup_attempt(first_command)
+            self.assertEqual(
+                json.loads(retry_output.getvalue())["status"], "ALREADY_APPLIED"
+            )
+            self.assertEqual(read_state(path)["revision"], 1)
+
+            with self.assertRaisesRegex(StateError, "owner does not match"):
+                cmd_record_startup_attempt(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": 1,
+                            "objective_id": "objective-1",
+                            "owner_thread_id": "different-worker",
+                            "attempt_record_path": second_ref["path"],
+                            "attempt_record_sha256": second_ref["sha256"],
+                        },
+                    )()
+                )
+            with self.assertRaisesRegex(StateError, "digest does not match"):
+                cmd_record_startup_attempt(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": 1,
+                            "objective_id": "objective-1",
+                            "owner_thread_id": "worker-1",
+                            "attempt_record_path": second_ref["path"],
+                            "attempt_record_sha256": "f" * 64,
+                        },
+                    )()
+                )
+            self.assertEqual(read_state(path)["revision"], 1)
+
+            cmd_record_startup_attempt(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "expected_revision": 1,
+                        "objective_id": "objective-1",
+                        "owner_thread_id": "worker-1",
+                        "attempt_record_path": second_ref["path"],
+                        "attempt_record_sha256": second_ref["sha256"],
+                    },
+                )()
+            )
+            final = read_state(path)
+            self.assertEqual(final["revision"], 2)
+            self.assertEqual(len(final["objectives"]), 1)
+            self.assertEqual(final["managed_roles"], [original_role])
+            self.assertEqual(final["pending_absorptions"], [])
+            self.assertEqual(final["absorbed_terminal_event_ids"], [])
+            derived = derive()
+            self.assertEqual(derived["pre_utility_failures_recorded"], 2)
+            self.assertEqual(derived["authorized_repair_round"], 2)
+            self.assertEqual(
+                derived["disposition"],
+                "CLEAN_CHAIN_REIMPLEMENTATION_IN_SAME_EXECUTOR",
+            )
+            self.assertEqual(
+                derived["on_full_witness_failure"],
+                "BOUNDED_ROOT_CAUSE_INVENTORY",
+            )
+
+    def test_executor_and_controller_writers_share_one_process_atomic_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            complete_authority = sealed_startup_authority(directory)
+            empty_authority = json.loads(json.dumps(complete_authority))
+            empty_authority["prior_attempt_records"] = []
+            state = base_state()
+            state["objectives"][0]["owner_state"] = "ACTIVE"
+            state["objectives"][0]["startup_chain_authority"] = empty_authority
+            state["managed_roles"][0]["state"] = "ACTIVE"
+            state["managed_roles"][0]["title"] = (
+                "Executor · Candidate One · ACTIVE"
+            )
+            state["remote_jobs"] = []
+            path = directory / "controller-state.json"
+            write_state(path, state, -1)
+            first_ref = complete_authority["prior_attempt_records"][0]
+
+            context = multiprocessing.get_context("fork")
+            executor_at_commit = context.Event()
+            release_executor = context.Event()
+            results = context.Queue()
+
+            def executor_writer() -> None:
+                import scripts.controller_control_state as state_module
+
+                original_atomic_write = state_module._atomic_write
+                delayed = False
+
+                def delayed_atomic_write(
+                    target: Path, data: bytes, mode: int = 0o640
+                ) -> None:
+                    nonlocal delayed
+                    if not delayed and Path(target) == path:
+                        delayed = True
+                        executor_at_commit.set()
+                        release_executor.wait(1.0)
+                    original_atomic_write(target, data, mode)
+
+                state_module._atomic_write = delayed_atomic_write
+                try:
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        cmd_record_startup_attempt(
+                            type(
+                                "Args",
+                                (),
+                                {
+                                    "state": str(path),
+                                    "expected_revision": 0,
+                                    "objective_id": "objective-1",
+                                    "owner_thread_id": "worker-1",
+                                    "attempt_record_path": first_ref["path"],
+                                    "attempt_record_sha256": first_ref["sha256"],
+                                },
+                            )()
+                        )
+                    results.put(("Executor", "PASS", output.getvalue()))
+                except Exception as exc:  # pragma: no cover - asserted in parent
+                    results.put(("Executor", type(exc).__name__, str(exc)))
+                finally:
+                    state_module._atomic_write = original_atomic_write
+
+            def controller_writer() -> None:
+                try:
+                    if not executor_at_commit.wait(3.0):
+                        raise RuntimeError("Executor did not reach its commit boundary")
+                    candidate = read_state(path)
+                    candidate["objectives"][0]["stage"] = (
+                        "CONTROLLER_CONCURRENT_UPDATE"
+                    )
+                    write_state(path, candidate, 0)
+                    results.put(("Controller", "PASS", ""))
+                except Exception as exc:  # pragma: no cover - asserted in parent
+                    results.put(("Controller", type(exc).__name__, str(exc)))
+                finally:
+                    release_executor.set()
+
+            executor = context.Process(target=executor_writer)
+            controller = context.Process(target=controller_writer)
+            executor.start()
+            controller.start()
+            executor.join(6.0)
+            controller.join(6.0)
+            if executor.is_alive():
+                executor.terminate()
+                executor.join()
+                self.fail("Executor writer did not terminate")
+            if controller.is_alive():
+                controller.terminate()
+                controller.join()
+                self.fail("Controller writer did not terminate")
+            self.assertEqual(executor.exitcode, 0)
+            self.assertEqual(controller.exitcode, 0)
+
+            outcomes = [results.get(timeout=2.0), results.get(timeout=2.0)]
+            self.assertEqual(sum(item[1] == "PASS" for item in outcomes), 1)
+            conflicts = [item for item in outcomes if "revision conflict" in item[2]]
+            self.assertEqual(len(conflicts), 1, outcomes)
+            final = read_state(path)
+            self.assertEqual(final["revision"], 1)
+            self.assertEqual(final["pending_absorptions"], [])
+            self.assertEqual(final["absorbed_terminal_event_ids"], [])
+            self.assertEqual(
+                len(
+                    final["objectives"][0]["startup_chain_authority"]
+                    ["prior_attempt_records"]
+                ),
+                1,
+            )
+
+    def test_successor_activation_rejects_unbound_or_digest_drifted_startup_contract(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            path = directory / "controller-state.json"
+            state = base_state()
+            revision = write_and_verify(path, state, "TERM-STARTUP-DRIFT")
+            authority = {
+                "startup_chain_id": "startup-chain-sha256:" + "a" * 64,
+                "contract_path": str(directory / "missing-contract.json"),
+                "contract_sha256": "b" * 64,
+                "prior_attempt_records": [],
+            }
+            with self.assertRaisesRegex(StateError, "unavailable or symlinked component"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        terminal_event_id="TERM-STARTUP-DRIFT",
+                        new_startup_chain_authority_json=json.dumps(authority),
+                    )
+                )
+            unchanged = read_state(path)
+            self.assertEqual(unchanged["revision"], revision)
+            self.assertNotIn(
+                "startup_chain_authority", unchanged["objectives"][0]
+            )
+
+    def test_executor_successor_cannot_shrink_or_replace_startup_authority(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            full_authority = sealed_startup_authority(directory)
+            state = base_state()
+            state["objectives"][0]["startup_chain_authority"] = full_authority
+            path = directory / "controller-state.json"
+            revision = write_and_verify(path, state, "TERM-STARTUP-MONOTONIC")
+
+            shrunk = json.loads(json.dumps(full_authority))
+            shrunk["prior_attempt_records"] = []
+            with self.assertRaisesRegex(StateError, "cannot shrink|monotonic"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        terminal_event_id="TERM-STARTUP-MONOTONIC",
+                        new_startup_chain_authority_json=json.dumps(shrunk),
+                    )
+                )
+            replacement = sealed_startup_authority(
+                directory,
+                rounds=(),
+                suffix="replacement",
+                entrypoint_suffix="->replacement",
+            )
+            with self.assertRaisesRegex(StateError, "Audit|replace"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        terminal_event_id="TERM-STARTUP-MONOTONIC",
+                        new_startup_chain_authority_json=json.dumps(replacement),
+                    )
+                )
+            unchanged = read_state(path)
+            self.assertEqual(unchanged["revision"], revision)
+            self.assertEqual(
+                unchanged["pending_absorptions"][0]["terminal_event_id"],
+                "TERM-STARTUP-MONOTONIC",
+            )
+            self.assertEqual(
+                unchanged["objectives"][0]["startup_chain_authority"],
+                full_authority,
+            )
+
+            # Omitting a repeated JSON argument carries the current authority
+            # forward; it never means delete/reset.
+            cmd_activate_successor(
+                successor_args(
+                    state=str(path),
+                    expected_revision=revision,
+                    terminal_event_id="TERM-STARTUP-MONOTONIC",
+                    new_startup_chain_authority_json=None,
+                )
+            )
+            activated = read_state(path)
+            self.assertEqual(
+                activated["objectives"][0]["startup_chain_authority"],
+                full_authority,
+            )
+
+    def test_executor_successor_may_append_only_the_next_startup_attempt(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            full_authority = sealed_startup_authority(directory)
+            first_round_authority = json.loads(json.dumps(full_authority))
+            first_round_authority["prior_attempt_records"] = full_authority[
+                "prior_attempt_records"
+            ][:1]
+            state = base_state()
+            state["objectives"][0][
+                "startup_chain_authority"
+            ] = first_round_authority
+            path = directory / "controller-state.json"
+            revision = write_and_verify(path, state, "TERM-STARTUP-APPEND")
+            cmd_activate_successor(
+                successor_args(
+                    state=str(path),
+                    expected_revision=revision,
+                    terminal_event_id="TERM-STARTUP-APPEND",
+                    new_startup_chain_authority_json=json.dumps(full_authority),
+                )
+            )
+            activated = read_state(path)
+            self.assertEqual(
+                activated["objectives"][0]["startup_chain_authority"],
+                full_authority,
+            )
+
+    def test_finite_block_and_reopen_preserve_and_revalidate_startup_authority(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            authority = sealed_startup_authority(directory)
+            state = base_state()
+            state["objectives"][0]["startup_chain_authority"] = authority
+            path = directory / "controller-state.json"
+            revision = write_and_verify(path, state, "TERM-STARTUP-BLOCK")
+            blocker = {
+                "kind": "EXTERNAL_FACT",
+                "reopening_fact": "The exact external launch authority becomes available.",
+                "observer": "Controller",
+                "trigger": "EXTERNAL_LAUNCH_AUTHORITY_AVAILABLE",
+                "next_check_at": None,
+                "resolution_deadline": "2026-08-09T00:00:00Z",
+            }
+            cmd_absorb_and_block(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "state": str(path),
+                        "expected_revision": revision,
+                        "objective_id": "objective-1",
+                        "terminal_event_id": "TERM-STARTUP-BLOCK",
+                        "old_owner_thread_id": "worker-1",
+                        "new_stage": "WAIT_EXTERNAL_AUTHORITY",
+                        "new_scientific_outcome": "UNOBSERVED",
+                        "new_next_action": "REOPEN_ON_BOUND_TRIGGER",
+                        "blocker_json": json.dumps(blocker),
+                        "clear_remote_job_id": ["job-1"],
+                        "clear_advisory_id": [],
+                    },
+                )()
+            )
+            blocked = read_state(path)
+            self.assertEqual(blocked["objectives"][0]["lifecycle"], "BLOCKED")
+            self.assertEqual(
+                blocked["objectives"][0]["startup_chain_authority"], authority
+            )
+
+            transitions = [
+                {
+                    "objective_id": "objective-1",
+                    "new_objective_id": "objective-1",
+                    "stage": "EXECUTOR_STARTUP",
+                    "scientific_outcome": "UNOBSERVED",
+                    "next_action": "RUN_EXACT_STARTUP_WITNESS",
+                    "owner_thread_id": "worker-2",
+                    "owner_role": "Executor",
+                    "owner_state": "ACTIVE",
+                    "owner_title": "Executor · Candidate One · ACTIVE",
+                    "cursor": None,
+                    "recovery_evidence_ref": "terminal://external-authority-restored",
+                    "completion_binding": completion_binding(
+                        str(directory / "TERM-STARTUP-REOPEN.json"), "reopen"
+                    ),
+                }
+            ]
+            reconcile_args = type(
+                "Args",
+                (),
+                {
+                    "state": str(path),
+                    "expected_revision": blocked["revision"],
+                    "transitions_json": json.dumps(transitions),
+                    "remote_jobs_json": "[]",
+                },
+            )()
+
+            attempt_path = Path(authority["prior_attempt_records"][1]["path"])
+            original_attempt = attempt_path.read_bytes()
+            attempt_path.unlink()
+            attempt_path.write_bytes(canonical_bytes({"tampered": True}))
+            attempt_path.chmod(0o444)
+            with self.assertRaisesRegex(StateError, "digest does not match"):
+                cmd_reconcile_open(reconcile_args)
+            still_blocked = read_state(path)
+            self.assertEqual(still_blocked["revision"], blocked["revision"])
+            self.assertEqual(
+                still_blocked["objectives"][0]["startup_chain_authority"],
+                authority,
+            )
+            attempt_path.unlink()
+            attempt_path.write_bytes(original_attempt)
+            attempt_path.chmod(0o444)
+            cmd_reconcile_open(
+                reconcile_args
+            )
+            reopened = read_state(path)
+            self.assertEqual(
+                reopened["objectives"][0]["startup_chain_authority"], authority
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                cmd_derive_startup_chain_id(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "objective_id": "objective-1",
+                        },
+                    )()
+                )
+            derived = json.loads(output.getvalue())
+            self.assertEqual(derived["pre_utility_failures_recorded"], 2)
+            self.assertEqual(derived["authorized_repair_round"], 2)
+            self.assertEqual(
+                derived["disposition"],
+                "CLEAN_CHAIN_REIMPLEMENTATION_IN_SAME_EXECUTOR",
+            )
+            self.assertEqual(
+                derived["on_full_witness_failure"],
+                "BOUNDED_ROOT_CAUSE_INVENTORY",
+            )
+
+    def test_close_objective_atomically_absorbs_and_releases_owner(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            path = directory / "controller-state.json"
+            state = base_state()
+            state["remote_jobs"] = []
+            state["objectives"][0][
+                "startup_chain_authority"
+            ] = sealed_startup_authority(directory)
+            revision = write_and_verify(path, state, "TERM-CLOSE-1")
+            closure = {
+                "basis": "PROSPECTIVE_SCOPED_MPE_FAILURE",
+                "scope": "exact finite Scout cell",
+                "evidence_ref": "terminal-1",
+                "reopening_fact": "A distinct prospective estimand is frozen.",
+                "independent_audit_terminal_id": "audit-1",
+                "evidence_eligible": True,
+                "prospective_action_table_pass": True,
+                "finite_cell_complete": True,
+                "preregistered_mpe_failure": True,
+                "scope_boundary_preserved": True,
+                "adversarial_review_pass": True,
+                "powered_negative_claimed": False,
+            }
+            args = type("Args", (), {
+                "state": str(path),
+                "expected_revision": revision,
+                "objective_id": "objective-1",
+                "terminal_event_id": "TERM-CLOSE-1",
+                "old_owner_thread_id": "worker-1",
+                "new_stage": "SCOPED_CLOSE",
+                "new_scientific_outcome": "OBSERVED_BELOW_MPE_SCOPED_CLOSED",
+                "new_next_action": "NO_SUCCESSOR_UNLESS_REOPENED",
+                "closure_json": json.dumps(closure),
+                "clear_remote_job_id": [],
+                "clear_advisory_id": [],
+            })()
+            cmd_close_objective(args)
+            closed = read_state(path)
+            self.assertEqual(closed["objectives"][0]["candidate_state"], "CLOSED")
+            self.assertEqual(closed["objectives"][0]["lifecycle"], "DONE")
+            self.assertNotIn(
+                "startup_chain_authority", closed["objectives"][0]
+            )
+            self.assertEqual(closed["managed_roles"], [])
+            self.assertIn("TERM-CLOSE-1", closed["absorbed_terminal_event_ids"])
+
+    def test_v3_reconcile_rejects_open_done(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 3
+            objective = legacy["objectives"][0]
+            objective.update({
+                "candidate_state": "OPEN",
+                "lifecycle": "DONE",
+                "reopening_fact": "A bounded witness becomes available.",
+            })
+            for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+                objective.pop(key)
+            legacy["managed_roles"] = []
+            legacy["remote_jobs"] = []
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            transitions = [{
+                "objective_id": "objective-1",
+                "new_objective_id": "objective-1-route",
+                "stage": "AUDIT_ACTIVE",
+                "scientific_outcome": "UNOBSERVED",
+                "next_action": "WAIT_AUDIT_TERMINAL",
+                "owner_thread_id": "audit-1",
+                "owner_role": "Audit",
+                "owner_state": "ACTIVE",
+                "owner_title": "Audit · Candidate One Route · ACTIVE",
+                "cursor": "cursor:activation",
+                "recovery_evidence_ref": "terminal://v3-reconciliation",
+                "completion_binding": completion_binding(
+                    str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                ),
+            }]
+            with self.assertRaisesRegex(StateError, "only reopen a BLOCKED objective"):
+                cmd_reconcile_open(type("Args", (), {
+                    "state": str(path),
+                    "expected_revision": 0,
+                    "transitions_json": json.dumps(transitions),
+                    "remote_jobs_json": "[]",
+                })())
+
+    def test_v3_reconcile_cannot_rebind_delegated_owner_without_fresh_reason(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 3
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            transitions = [{
+                "objective_id": "objective-1",
+                "new_objective_id": "objective-1",
+                "stage": "R3_ACTIVE",
+                "scientific_outcome": "UNOBSERVED",
+                "next_action": "WAIT_EXECUTOR_TERMINAL",
+                "owner_thread_id": "worker-2",
+                "owner_role": "Executor",
+                "owner_state": "ACTIVE",
+                "owner_title": "Executor · Candidate One · ACTIVE",
+                "cursor": None,
+                "recovery_evidence_ref": "terminal://generic-recovery-proof",
+                "completion_binding": completion_binding(
+                    str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                ),
+            }]
+            with self.assertRaisesRegex(StateError, "only reopen a BLOCKED objective"):
+                cmd_reconcile_open(type("Args", (), {
+                    "state": str(path),
+                    "expected_revision": 0,
+                    "transitions_json": json.dumps(transitions),
+                    "remote_jobs_json": "[]",
+                })())
+
+    def test_v3_reconcile_cannot_change_delegated_role_with_recovery_ref_only(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 3
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            transitions = [{
+                "objective_id": "objective-1",
+                "new_objective_id": "objective-1",
+                "stage": "AUDIT_ACTIVE",
+                "scientific_outcome": "UNOBSERVED",
+                "next_action": "WAIT_AUDIT_TERMINAL",
+                "owner_thread_id": "audit-2",
+                "owner_role": "Audit",
+                "owner_state": "ACTIVE",
+                "owner_title": "Audit · Candidate One · ACTIVE",
+                "cursor": None,
+                "recovery_evidence_ref": "terminal://generic-recovery-proof",
+                "completion_binding": completion_binding(
+                    str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                ),
+            }]
+            with self.assertRaisesRegex(StateError, "only reopen a BLOCKED objective"):
+                cmd_reconcile_open(type("Args", (), {
+                    "state": str(path),
+                    "expected_revision": 0,
+                    "transitions_json": json.dumps(transitions),
+                    "remote_jobs_json": "[]",
+                })())
+
+    def test_v3_reconcile_migrates_only_finite_blocked_recovery(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            legacy = base_state()
+            legacy["schema_version"] = 3
+            objective = legacy["objectives"][0]
+            objective.update(
+                {
+                    "candidate_state": "BLOCKED",
+                    "stage": "WAIT_EXTERNAL",
+                    "lifecycle": "BLOCKED",
+                    "next_action": "CHECK_EXTERNAL_FACT",
+                    "blocker": {
+                        "kind": "EXTERNAL_FACT",
+                        "reopening_fact": "A required external artifact becomes available.",
+                        "observer": "Controller",
+                        "trigger": "ARTIFACT_AVAILABLE",
+                        "next_check_at": "2026-08-06T00:00:00Z",
+                        "resolution_deadline": "2026-08-07T00:00:00Z",
+                    },
+                }
+            )
+            for key in ("owner_thread_id", "owner_role", "owner_state", "completion_binding"):
+                objective.pop(key)
+            legacy["managed_roles"] = []
+            legacy["remote_jobs"] = []
+            data = canonical_bytes(legacy)
+            path.write_bytes(data)
+            checksum_path(path).write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {path.name}\n",
+                encoding="utf-8",
+            )
+            transitions = [{
+                "objective_id": "objective-1",
+                "new_objective_id": "objective-1",
+                "stage": "AUDIT_ACTIVE",
+                "scientific_outcome": "UNOBSERVED",
+                "next_action": "WAIT_AUDIT_TERMINAL",
+                "owner_thread_id": "audit-1",
+                "owner_role": "Audit",
+                "owner_state": "ACTIVE",
+                "owner_title": "Audit · Candidate One · ACTIVE",
+                "cursor": None,
+                "recovery_evidence_ref": "terminal://artifact-available-proof",
+                "completion_binding": completion_binding(
+                    str(Path(tmp) / "recovered-terminal.json"), "recovered"
+                ),
+            }]
+            cmd_reconcile_open(type("Args", (), {
+                "state": str(path),
+                "expected_revision": 0,
+                "transitions_json": json.dumps(transitions),
+                "remote_jobs_json": "[]",
+            })())
+            migrated = read_state(path)
+            self.assertEqual(migrated["schema_version"], 5)
+            self.assertEqual(migrated["objectives"][0]["lifecycle"], "DELEGATED")
+            self.assertEqual(migrated["objectives"][0]["owner_thread_id"], "audit-1")
 
 
 if __name__ == "__main__":

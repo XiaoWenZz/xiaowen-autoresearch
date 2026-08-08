@@ -125,6 +125,20 @@ NEW_CAUSAL_MECHANISM | OPERATION_RECOMBINATION
 This field is retrieval and cross-merge telemetry, not a novelty claim, score,
 admission gate, or contribution verdict.
 
+Record discovery provenance separately from scientific status:
+
+```text
+idea_origin: LOCAL | PRO_INDEPENDENT | PRO_EMBEDDED | MERGED
+source_verified: YES | NO
+conversion_stage: RAW_LEAD | SOURCE_VERIFIED | BRIEF | PROBE | VALID_R1 |
+  VALID_SCOUT | CLOSED
+```
+
+A Pro-origin lead remains `RAW_LEAD` until the local Explorer verifies the
+primary paper, paper-declared code and the complete preserving tuple. Compare
+conversion by origin prospectively to diagnose search quality; never lower a
+scientific or evidence gate to improve the rate.
+
 The contribution forecast must not determine problem admission. An occupied
 method kernel, failed narrow specificity, or missing paper path can challenge a
 future method contribution while the actor-level problem remains worth a cheap

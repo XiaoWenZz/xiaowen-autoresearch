@@ -1,0 +1,77 @@
+{
+  "schema_version": "xiaowen.workflow.zero-science-replay.v1",
+  "protected_science": "NONE",
+  "events": {
+    "p59_prepare_run_cli": {
+      "old_source": "experiments/p59-rank-release-clean-room-r2-v5-scoring-eligibility/src/p59_r2_scout.py",
+      "old_sha256": "948fe06b26a2ff84e2da77d7c546a7f1f7665bb8518da20b2e46c11aee6228f6",
+      "fixed_source": "experiments/p59-rank-release-clean-room-r2-v5-scoring-eligibility-attempt-003/src/p59_r2_scout.py",
+      "fixed_sha256": "989d92697005edd8b6d2566e8965c5e96c9a550301076ad8d43d6a0e93e098e2",
+      "old_failure": "KeyError('run_id')",
+      "utility_observed": false
+    },
+    "p59_release_environment": {
+      "old_source": "experiments/p59-rank-release-clean-room-r2-v5-scoring-eligibility-attempt-002/experiments/scripts/run_dual5090_r2.sh",
+      "old_sha256": "b6c11c70e155f1c09b8e11e74d77b89764c89283ca6dc89df5f9d0e3c441058a",
+      "fixed_source": "experiments/p59-rank-release-clean-room-r2-v5-scoring-eligibility-attempt-003/experiments/scripts/run_dual5090_r2.sh",
+      "fixed_sha256": "6b143e85b3c15362389fe328e2286c6250fb66ad6ca0de0f506dbec01ebc3348",
+      "old_failure": "EXPECTED_RUN_ID: unbound variable",
+      "required_project_mode": "0750",
+      "utility_observed": false
+    },
+    "smi_attempt_004": {
+      "process_check_false_positives": 4,
+      "canonical_protected_outcome": "UNOBSERVED",
+      "drifted_checker_value": false,
+      "utility_observed": false
+    },
+    "p56_future_reader": {
+      "required_stage": "BEFORE_SEALING",
+      "reader_must_be_mechanically_exercised": true,
+      "utility_observed": false
+    },
+    "tta_cuda_no_egress": {
+      "private_unix_socketpair": "PASS",
+      "ordinary_send_recv": "EPERM",
+      "cuda_get_device_count": "ERROR_304",
+      "exact_denied_syscall": "UNVERIFIED",
+      "utility_observed": false
+    },
+    "smi_attempt_007_raw_name_wrapper": {
+      "terminal_bytes": 140420,
+      "terminal_sha256": "c985f253922ea7033205d406062b9a77a3263bf206331e7b1f3e459065facb10",
+      "validator_status": "PASS",
+      "raw_name": "Jinja2",
+      "normalized_name": "jinja2",
+      "failed_operation": "EXTRA_RAW_NAME_EQUALITY",
+      "release_crossed": false,
+      "protected_access": false,
+      "utility_observed": false,
+      "unsafe_partial_state": false
+    },
+    "smi_attempt_008_json_pointer": {
+      "terminal_bytes": 17793,
+      "terminal_sha256": "d3f66ff448d9d109523af07ff212af4042dad8f7ef4a272724e6fa095274a9ee",
+      "observed_pointer": "authority_staging.receiver_program.remote_bootstrap",
+      "authority_pointer": "authority_staging.remote_bootstrap",
+      "observed_error_class": "KeyError",
+      "remote_receiver_started": false,
+      "empty_directories_preserved": 8,
+      "release_crossed": false,
+      "protected_access": false,
+      "utility_observed": false,
+      "unsafe_partial_state": true
+    },
+    "smi_attempt_009_ssh_argv": {
+      "terminal_bytes": 13405,
+      "terminal_sha256": "5e527eb091cacec063a7be2fc639a55480d90fce37ff943e505ec38a2a9ee605",
+      "failed_operation": "REMOTE_READ_ONLY_PREFLIGHT_COMMAND_ASSEMBLY_MISMATCH",
+      "required_assembly": "ONE_SHLEX_JOIN_POST_HOST_ARGUMENT",
+      "remote_files_created_or_modified": 0,
+      "release_crossed": false,
+      "protected_access": false,
+      "utility_observed": false,
+      "unsafe_partial_state": false
+    }
+  }
+}

@@ -15,8 +15,15 @@ PROGRAMS = ROOT / "references" / "research-programs.md"
 PORTFOLIO_SEARCH = ROOT / "references" / "portfolio-search.md"
 PORTFOLIO_LANES = ROOT / "references" / "portfolio-lanes.md"
 EXTERNAL_PROMPTS = ROOT / "references" / "external-opportunity-search-prompts.md"
+STATE_SCHEMA = ROOT / "references" / "state-schema.md"
 WORKSPACE_AGENTS_VALUE = os.environ.get("XAR_WORKSPACE_AGENTS")
 WORKSPACE_AGENTS = Path(WORKSPACE_AGENTS_VALUE) if WORKSPACE_AGENTS_VALUE else None
+EXPERIMENTS_AGENTS_VALUE = os.environ.get("XAR_EXPERIMENTS_AGENTS")
+EXPERIMENTS_AGENTS = (
+    Path(EXPERIMENTS_AGENTS_VALUE) if EXPERIMENTS_AGENTS_VALUE else None
+)
+CONTROL_AGENTS_VALUE = os.environ.get("XAR_CONTROL_AGENTS")
+CONTROL_AGENTS = Path(CONTROL_AGENTS_VALUE) if CONTROL_AGENTS_VALUE else None
 
 
 def flat(path: Path) -> str:
@@ -93,7 +100,7 @@ class SkillRouterTest(unittest.TestCase):
             "no duplicate task capsule",
             "at most one terminal only when durable evidence is genuinely needed",
             "Local source/literature/code/workflow audits",
-            "one-shot Pro advisory remain Lite",
+            "bounded Pro batches, and one-shot Pro closure advisory remain Lite",
             "Never retrofit Managed ceremony onto Lite work",
             "`Lite` removes coordination machinery, not section 6 hard controls",
         )
@@ -118,10 +125,10 @@ class SkillRouterTest(unittest.TestCase):
     def test_execution_plane_has_no_runtime_governance_family(self) -> None:
         router = flat(SKILL)
         self.assertIn("do not invoke or load this skill there", router)
-        self.assertIn("The contract itself is the only task capsule", router)
-        self.assertIn("Fuse deterministic checks", router)
-        self.assertIn("do not wake a model for each check", router)
-        self.assertIn("A local executor returns its final directly", router)
+        self.assertIn("The contract is the only capsule", router)
+        self.assertIn("production chain itself", router)
+        self.assertIn("READY_BEFORE_FIRST_UTILITY", router)
+        self.assertIn("one post-freeze fast path, owner/model, and final terminal", router)
         for forbidden in (
             "one pre-bound, one-shot receiver",
             "absolute ACK path",
@@ -140,13 +147,15 @@ class SkillRouterTest(unittest.TestCase):
 
         for phrase in (
             "one post-freeze fast path",
-            "read-only code/evaluation preflight",
-            "no-utility minimal sanity",
-            "one root-caused targeted patch",
-            "at most one clean reimplementation",
-            "write structured raw outputs",
-            "hand exact paths/hashes to the validator",
-            "downstream must not rederive defaults",
+            "production chain itself",
+            "READY_BEFORE_FIRST_UTILITY",
+            "zero training/update/eval/utility/protected access",
+            "Round 1 is minimal repair",
+            "round 2 is clean reimplementation",
+            "in-owner inventory, not terminal",
+            "changing no terminal/callback/Controller/owner/objective",
+            "The contract is the only capsule",
+            "freeze route, identity, exposure, cap, and claim",
             "completed -> contract-consistent -> evidence-eligible -> independently verified -> claim-accepted",
             "deterministic prechecks may reject but cannot accept scientific claims",
         ):
@@ -260,26 +269,32 @@ class SkillRouterTest(unittest.TestCase):
     def test_user_visible_local_task_closes_open_loops_without_final_ack(self) -> None:
         router = flat(SKILL)
         for phrase in (
-            "end only after one open-loop audit maps every named action to `DONE`",
-            "externally/authority `BLOCKED`",
-            "`DELEGATED` with a successful receipt",
-            "A concept explanation, status reply, or side question does not clear an active objective",
+            "end only with every action `DONE`",
+            "finite external/authority `BLOCKED`",
+            "receipt-backed `DELEGATED`",
+            "A side question or status does not clear an objective",
             "unless the user replaces/cancels it or its authority changes",
-            "Execute any safe current next decision instead of leaving it as prose",
+            "Execute any safe next decision",
             "Do not persist this audit or create Program, lease, callback, sidecar, heartbeat, `RECEIPT_ONLY`, `FINAL_ACK`, or receiver machinery",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
         self.assertIn("ACK never blocks", router)
 
-    def test_pro_is_risk_triggered_one_shot_not_sink_lifecycle(self) -> None:
+    def test_pro_is_persistent_sequential_and_nonblocking_by_default(self) -> None:
         router = flat(SKILL)
         for phrase in (
-            "For a `HIGH` closure",
-            "submit one Pro rebuttal, read once",
-            "no sink, polling, duplicate, or follow-up",
-            "Record only its trigger, disposition, decision effect, and final confidence",
-            "never hard-close from unavailability",
+            "Pro is never a lane, owner or authority",
+            "Use sequential one-shot batches",
+            "Ordinary batches are `NON_BLOCKING`",
+            "`BLOCKING_HIGH_RISK`",
+            "previously bound exact gate",
+            "locally absorbed validation",
+            "authority by agreement",
+            "complete live Skill",
+            "every applicable `AGENTS.md`",
+            "candidate diff/validation",
+            "a summary is not a substitute",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
@@ -287,14 +302,66 @@ class SkillRouterTest(unittest.TestCase):
     def test_pro_generation_is_off_critical_path_without_polling_machinery(self) -> None:
         router = flat(SKILL)
         for phrase in (
-            "Keep Pro off the critical path",
-            "submit once, continue local work",
-            "current owner make at most one state-only check after local work completes",
-            "Add no monitor, poll loop, sink, automation, lifecycle, duplicate, or follow-up",
-            "On `READY`, read once and verify",
+            "one in-flight submit/read, no queue/follow-up",
+            "no queue/follow-up/page poll, sink or duplicate",
+            "never open Pro or create a reader",
+            "deduplicate by candidate/scope hash",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
+
+    def test_pro_review_bundle_contains_complete_authority_context(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        for phrase in (
+            "one hashed review bundle",
+            "complete live Skill",
+            "every applicable `AGENTS.md`",
+            "routed direct references",
+            "candidate diff/validation",
+            "Redact only secrets and protected payloads",
+            "a summary is not a substitute",
+        ):
+            with self.subTest(source="router", phrase=phrase):
+                self.assertIn(phrase, router)
+        for phrase in (
+            "exact-hashed authority bundle, not a summary-only prompt",
+            "complete current Skill directory",
+            "every applicable parent-to-child `AGENTS.md`",
+            "candidate diff and validation",
+            "Name every exclusion and hash the files actually sent",
+            "rather than creating a packet registry or artifact family",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_pro_is_routed_through_scientific_owner_not_controller(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        prompts = flat(EXTERNAL_PROMPTS)
+        for phrase in (
+            "Controller detects and routes a Pro trigger but must not author the prompt or adjudicate the answer",
+            "Explorer owns source/neighbor/reduction/formulation",
+            "signal-versus-implementation",
+            "skip only deterministic repair with no decision ambiguity",
+        ):
+            with self.subTest(source="router", phrase=phrase):
+                self.assertIn(phrase, router)
+        for phrase in (
+            "External Pro remains inside the current scientific role rather than the Controller",
+            "Pro creates no role, task, lease, lane, pin or scientific authority",
+            "A minimal outcome-free read obligation in the Controller snapshot is the sole exception",
+            "At each material idea boundary",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
+                self.assertIn(phrase, orchestration)
+        for phrase in (
+            "Route every prompt through the scientific owner",
+            "The Controller may identify the trigger and dispatch that owner",
+            "never raw or per-unit protected evidence",
+        ):
+            with self.subTest(source="prompt", phrase=phrase):
+                self.assertIn(phrase, prompts)
 
     def test_closure_confidence_gate_separates_science_from_operational_stops(self) -> None:
         router = flat(SKILL)
@@ -415,7 +482,7 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(integrity_phrase=phrase):
                 self.assertIn(phrase, integrity)
         self.assertIn(
-            "Packet, locator, sidecar, and file checks stay inside the current owner as mechanical preflight",
+            "Packet, locator, sidecar, and file checks stay in the current owner as preflight",
             router,
         )
 
@@ -475,22 +542,79 @@ class SkillRouterTest(unittest.TestCase):
         orchestration = flat(ORCHESTRATION)
         workspace = flat(Path(os.environ["XAR_WORKSPACE_AGENTS"]))
         for phrase in (
-            "one uninterrupted Executor loop",
-            "one post-freeze fast path",
-            "No intermediate Controller callback or task/version",
-            "A new run/output identity preserves provenance",
+            "one post-freeze fast path, owner/model, and final terminal",
+            "zero training/update/eval/utility/protected access",
+            "Parent rules let that Executor use `record-startup-attempt`",
+            "without terminal, callback, Controller, owner or objective transition",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
         for phrase in (
             "one uninterrupted engineering loop",
             "without an intermediate terminal, Controller callback, contract, task, lease",
+            "A recoverable outcome-blind failure is explicitly `NON_TERMINAL`",
             "scientific identity, exposure, authority, budget, or protected-outcome state",
         ):
             with self.subTest(orchestration_phrase=phrase):
                 self.assertIn(phrase, orchestration)
-        self.assertIn("One repair authorization includes diagnosis, patch", workspace)
-        self.assertIn("Do not mint an intermediate contract, task, lease", workspace)
+        self.assertIn("One local decision-complete owner is the default", workspace)
+        self.assertIn("exact startup-chain preflight", workspace)
+        self.assertIn("engineering/carrier/access failure is never a scientific negative", workspace)
+
+    def test_executor_is_one_model_one_owner_without_default_internal_pipeline(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        for phrase in (
+            "A cross-thread successor requires an allowlisted reason",
+            "The contract is the only capsule",
+            "one post-freeze fast path, owner/model, and final terminal",
+            "Never default to `Lead -> Builder -> Acceptance`",
+            "production chain itself",
+            "two delegated objectives in one thread",
+        ):
+            with self.subTest(source="router", phrase=phrase):
+                self.assertIn(phrase, router)
+        for phrase in (
+            "one contiguous pre-release, outcome-blind Luna child segment",
+            "same Sol owner",
+            "one failure fingerprint",
+            "Do not make `Lead -> Builder -> Acceptance`",
+            "Every cross-thread successor records exactly one structured",
+            "Model switch, hash/path/schema/import or package checks",
+            "A delegated v3 owner first migrates unchanged",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_compact_controller_receipts_and_context_rollover_are_operational_only(self) -> None:
+        orchestration = flat(ORCHESTRATION)
+        state_schema = flat(STATE_SCHEMA)
+        for phrase in (
+            "Keep the Controller logically singleton while allowing physical context rollover",
+            "compact receipt fields",
+            "dispatch receipt, lease epoch, contract revision",
+            "rolling 20-event Controller input median",
+            "`physical_controller_context_epoch`",
+            "never delays terminal absorption",
+            "operational efficiency alarms, never scientific acceptance or closure gates",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
+                self.assertIn(phrase, orchestration)
+        for phrase in (
+            "The nested six-field `completion_binding` is the sole terminal identity authority",
+            "prepare-terminal-callback",
+            "final_bytes",
+            "final_sha256",
+            "`fresh_thread_reason`",
+            "`fresh_thread_evidence_ref`",
+            "`NON_BLOCKING` and `BLOCKING_HIGH_RISK`",
+            "legacy advisory shapes are invalid",
+            "`absorb-nonblocking-advisory`",
+            "generic replacement cannot seed, claim or complete response metadata",
+            "Each owner thread appears on at most one `DELEGATED` objective",
+        ):
+            with self.subTest(source="state-schema", phrase=phrase):
+                self.assertIn(phrase, state_schema)
 
     @unittest.skipUnless(
         WORKSPACE_AGENTS is not None and WORKSPACE_AGENTS.is_file(),
@@ -500,14 +624,22 @@ class SkillRouterTest(unittest.TestCase):
         router = flat(SKILL)
         lanes = flat(PORTFOLIO_LANES)
         workspace = flat(Path(os.environ["XAR_WORKSPACE_AGENTS"]))
-        for text in (router, lanes, workspace):
-            with self.subTest(source=str(text[:80])):
-                self.assertIn("per candidate/version", text)
-                self.assertIn("not a portfolio-wide mutex", text)
-                self.assertIn("every currently usable, authorized card", text)
-                self.assertIn("waits solely for capacity", text)
-                self.assertIn("Blocked", text)
-                self.assertIn("empty cards do not count", text)
+        self.assertIn("per candidate/version, never portfolio-wide", router)
+        self.assertIn("authorized usable card", router)
+        self.assertIn("launch-ready item waits solely for capacity", router)
+        self.assertIn("blocked/profile-waiting/unavailable/empty cards do not count", router)
+        for phrase in (
+            "per candidate/version",
+            "not a portfolio-wide mutex",
+            "every currently usable, authorized card",
+            "waits solely for capacity",
+            "Blocked",
+            "empty cards do not count",
+        ):
+            with self.subTest(lanes_phrase=phrase):
+                self.assertIn(phrase, lanes)
+        self.assertIn("Research workflow semantics live in the live", workspace)
+        self.assertIn("do not duplicate", workspace)
         self.assertIn("does not create a `zero_gpu` lane", lanes)
         self.assertIn("Idle capacity never authorizes filler", lanes)
 
@@ -675,6 +807,141 @@ class SkillRouterTest(unittest.TestCase):
         self.assertIn("same-action-set rule, and action-restricted mechanism deletion", integrity)
         self.assertIn("no positive label", integrity)
 
+    def test_startup_chain_has_two_round_breaker_and_exact_witness(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        state_schema = flat(STATE_SCHEMA)
+
+        for phrase in (
+            "Bind contract/prior-record digests in `startup_chain_authority`",
+            "derive its ID from state+objective",
+            "same Executor CAS-appends at most two sealed failure records",
+            "changing no terminal/callback/Controller/owner/objective",
+            "`BLOCKED`/ rebuild retain it",
+            "only Audit replaces it",
+            "IDs, paths and fingerprints cannot reset it",
+            "Round 1 is minimal repair",
+            "round 2 is clean reimplementation",
+            "in-owner inventory, not terminal",
+            "`carrier_generation` within the same scientific attempt/owner/budget",
+            "first-mismatch terminal/create-new",
+        ):
+            with self.subTest(source="router", phrase=phrase):
+                self.assertIn(phrase, router)
+
+        for phrase in (
+            "### Exact startup-chain arming and bounded repair",
+            "public CLI -> prepare_run -> actual return consumer",
+            "READY_BEFORE_FIRST_UTILITY -> controlled exit",
+            "production shell, heredoc, environment expansion",
+            "required-environment projection comes from the same launcher function as release",
+            "wrong root/write modes",
+            "unproven future reader",
+            "blocked local CUDA/IPC",
+            "The sealed contract contains one `startup_chain_binding`",
+            "binds `startup_chain_authority` in the current objective",
+            "The list length is the mechanical count",
+            "generic replacement cannot change or remove the authority",
+            "carries an omitted authority forward",
+            "may append only the next consecutive sealed record",
+            "Shrink, substitution or multi-record jumps fail before CAS",
+            "record-startup-attempt` with its objective/owner",
+            "changes only the authority record list",
+            "creates no terminal, callback, activation, new objective, owner or Controller roundtrip",
+            "A finite `BLOCKED` objective retains the authority",
+            "after revalidating every digest",
+            "Every prospective Executor terminal mirrors the exact authority or explicit `null`",
+            "`rebuild-add-objective` restores it",
+            "controller_control_state.py derive-startup-chain-id",
+            "--state <snapshot> --objective-id <objective>",
+            "accepts no contract, record list, declared ID, projection, entrypoint or barrier",
+            "re-reads exactly the authority-bound files",
+            "caller-omitted history therefore has no input channel",
+            "cannot reset repair rounds",
+            "The initial failure record authorizes round 1",
+            "The second failure record authorizes round 2",
+            "it does not inventory before round 2 runs",
+            "no terminal, callback, Controller roundtrip, create-new attempt or new owner",
+            "Failure after round 2 stops blind mechanical patching",
+            "The inventory is a diagnostic escalation, not an ownership or terminal boundary",
+            "create a clean carrier generation inside the same objective",
+            "first-mismatch terminal/no-repair/create-new behavior",
+            "Only a genuine external fact or unavailable authority may become finite `BLOCKED`",
+            "Legacy immutable attempts keep their original rules",
+            "even if its terminal is not yet observed",
+            "prospective v5 state cannot create it",
+            "is not R1, R3, scientific validity or claim authority",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+        for phrase in (
+            "`record-startup-attempt` is the sole same-objective CAS",
+            "leaving terminal identity, roles, jobs, advisories and pending/absorbed IDs unchanged",
+            "Every prospective Executor terminal mirrors the exact authority or explicit `null`",
+            "rebuild restores and revalidates the object before CAS",
+            "missing field or digest drift fails with the snapshot unchanged",
+            "including while active with no observed terminal",
+            "new v5 state cannot seed it",
+        ):
+            with self.subTest(source="state-schema", phrase=phrase):
+                self.assertIn(phrase, state_schema)
+
+    @unittest.skipUnless(
+        EXPERIMENTS_AGENTS is not None
+        and EXPERIMENTS_AGENTS.is_file()
+        and CONTROL_AGENTS is not None
+        and CONTROL_AGENTS.is_file(),
+        "set XAR_EXPERIMENTS_AGENTS and XAR_CONTROL_AGENTS for rule-chain checks",
+    )
+    def test_effective_agents_chain_delegates_only_startup_record_cas(self) -> None:
+        assert EXPERIMENTS_AGENTS is not None
+        assert CONTROL_AGENTS is not None
+        experiments = flat(EXPERIMENTS_AGENTS)
+        control = flat(CONTROL_AGENTS)
+        orchestration = flat(ORCHESTRATION)
+        router = flat(SKILL)
+        for source, phrase in (
+            (router, "Parent rules let that Executor use `record-startup-attempt`"),
+            (
+                orchestration,
+                "one parent-AGENTS-delegated non-Controller snapshot mutation",
+            ),
+            (
+                experiments,
+                "only write exception is the currently delegated Executor invoking exactly `record-startup-attempt`",
+            ),
+            (
+                experiments,
+                "grants no other state subcommand or authority",
+            ),
+            (
+                control,
+                "One narrow exception lets the currently delegated Executor invoke exactly `record-startup-attempt`",
+            ),
+            (
+                control,
+                "grants no generic replacement, lifecycle, routing, terminal, role, job, advisory or owner-transfer authority",
+            ),
+        ):
+            self.assertIn(phrase, source)
+
+    def test_removed_failure_validator_family_cannot_reenter_hot_path(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        self.assertFalse((ROOT / "scripts" / "validate_failure_terminal.py").exists())
+        self.assertFalse((ROOT / "tests" / "test_failure_terminal_validator.py").exists())
+        for forbidden in (
+            "failure-policy-binding/v1",
+            "failure-fingerprint/v1",
+            "### Pre-utility failure fingerprint and terminal gate",
+            "Shadow modules are observational only",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, router + " " + orchestration)
+        self.assertIn("Legacy immutable attempts keep their original rules", orchestration)
+        self.assertIn("New startup-chain coverage is prospective", orchestration)
+
     def test_operating_weight_vocabulary_is_only_lite_or_managed(self) -> None:
         for path in (SKILL, ORCHESTRATION, PROGRAMS):
             text = flat(path)
@@ -687,10 +954,10 @@ class SkillRouterTest(unittest.TestCase):
         router = flat(SKILL)
         orchestration = flat(ORCHESTRATION)
         for phrase in (
-            "Controller routes and accepts",
+            "Controller routes/accepts",
             "Explorer owns one complete source-to-`PROBE` loop",
             "Audit owns the whole `R0` decision in one owner/terminal",
-            "Executor enters only after a complete implementation contract is frozen",
+            "Executor enters only after a complete implementation contract freezes",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
@@ -699,20 +966,18 @@ class SkillRouterTest(unittest.TestCase):
     def test_idea_boundaries_reuse_records_and_canonical_sessions(self) -> None:
         router = flat(SKILL)
         for phrase in (
-            "reuse the existing task capsule, decision record, and terminal/closure record",
-            "Do not include the prior idea's raw transcript",
-            "use `/compact` only when decision-relevant history has become materially redundant",
-            "reuse the canonical role session only after a runtime-supported compact/reset succeeds",
-            "Record selection is not context isolation",
-            "open one fresh session, transfer the canonical role binding",
-            "close/archive the prior session so no duplicate owner remains",
+            "Reuse the idea's task capsule and durable records, never its raw transcript",
+            "Use `/compact` only after decision-relevant history becomes redundant",
+            "Reuse a canonical role across ideas only after verifiable runtime compact/reset",
+            "record selection is not isolation",
+            "transfer the role once and retire the predecessor",
             "load only the authoritative section and directly referenced evidence needed to resolve it",
             "complete record only for an unresolved decision-critical contradiction",
             "never load a prior raw transcript",
             "Never collapse `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, `CARRIER_STOP`, or `UNOBSERVED` into a scientific negative",
             "A contract change creates a new candidate/version and preserves the old records",
-            "not a new data protocol, capsule, schema, lifecycle, context-bootstrap layer, automation, or evidence substitute",
-            "They cannot change the research contract, metric, seed, budget, stop rule, or protected/outcome boundary",
+            "no data protocol, capsule, schema, lifecycle, context-bootstrap, automation or evidence substitute",
+            "cannot change the research contract, metric, seed, budget, stop rule, or protected/outcome boundary",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
@@ -732,17 +997,16 @@ class SkillRouterTest(unittest.TestCase):
         workspace = flat(WORKSPACE_AGENTS) if WORKSPACE_AGENTS is not None else ""
 
         for phrase in (
-            "Atomic terminal absorption covers",
-            "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_*`",
-            "`ENGINEERING_*`, `CONTRACT_CONFLICT`",
-            "`OPEN_WITHOUT_OWNER`",
-            "successful dispatch receipt plus matching activation snapshot",
-            "`BLOCKED` with one reopening fact/observer/trigger",
+            "Atomically absorb every actionable terminal",
+            "`PROBE`, `PASS_R*`, `PROFILE_*`",
+            "engineering/conflict/access/carrier stops",
+            "receipt-and-activation-backed `DELEGATED`",
+            "finite `BLOCKED` only on an external fact/unavailable authority with observer, trigger/check and deadline",
+            "`DONE` requires scientific `CLOSED`",
+            "`OPEN/DONE` and `OPEN_WITHOUT_OWNER` are invalid",
             "`dispatch_next` is incomplete before activation",
-            "A status reply, “Controller decides whether,”",
-            "leaves `OPEN_WITHOUT_OWNER`; route before final",
-            "Static heartbeat reads a rebuildable snapshot",
-            "fallback only, never authority/dispatch",
+            "Ordinary/heartbeat wakes recover idempotently",
+            "cannot final before safe absorb/route/activate or a finite external block",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
@@ -758,9 +1022,9 @@ class SkillRouterTest(unittest.TestCase):
             "A worker recommendation",
             "cannot discharge this Controller duty",
             "`OPEN_WITHOUT_OWNER` is an invalid lifecycle state",
-            "A heartbeat is recovery fallback",
-            "wake the Controller for lifecycle repair",
-            "it cannot choose the scientific successor",
+            "native recovery turn of the same singleton Controller thread",
+            "finish Controller-only work",
+            "must not redo Explorer/Audit/Executor semantics",
             "binds one Contribution Gate owner/action or a genuine blocker",
             "cannot leave it ownerless between Scout adjudication and the Gate",
         ):
@@ -769,22 +1033,13 @@ class SkillRouterTest(unittest.TestCase):
 
         if workspace:
             for phrase in (
-                "Use atomic terminal absorption for every actionable terminal",
-                "`PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`, `PROFILE_*`",
-                "`ENGINEERING_*`, `CONTRACT_CONFLICT`",
-                "Controller absorption is incomplete",
-                "successful dispatch receipt and matching activation snapshot",
-                "`dispatch_next` is incomplete before activation",
-                "A status reply, “Controller decides whether,”",
-                "`OPEN_WITHOUT_OWNER`",
-                "may not send a user-visible final before it is complete",
-                "recovery fallback, not normal successor dispatch",
-                "mechanically verify that candidate, strongest baseline, mechanism deletion, and guard/parent action/state signatures are distinct",
-                "fresh-owner path-only Audit with raw paths/hashes",
-                "Keep the heartbeat prompt static",
-                "checksum-bound Controller control snapshot under `experiments/control/`",
-                "compare-and-swap and atomic replace",
-                "A remote wake uses `NONE -> CLAIMED -> SENT`",
+                "Controller terminal/state recovery",
+                "For an open scientific candidate",
+                "one decision-complete owner in the same Controller transaction",
+                "finite `BLOCKED` only for a genuine external fact or unavailable authority",
+                "observer, reopening trigger/check and deadline",
+                "`DONE` requires scientifically `CLOSED`",
+                "engineering/carrier/access failure is never a scientific negative",
             ):
                 with self.subTest(workspace_phrase=phrase):
                     self.assertIn(phrase, workspace)
@@ -793,36 +1048,157 @@ class SkillRouterTest(unittest.TestCase):
         router = flat(SKILL)
         orchestration = flat(ORCHESTRATION)
         for phrase in (
-            "verify its saved Project ID, cwd/repository, candidate/version, and canonical role",
-            "A projectless or unverified worker has no scientific/shared-state authority",
-            "Pin only active Managed canonical roles that need Controller follow-up",
-            "Lite and Pro advisory tasks are never auto-pinned",
-            "At each Controller resume, activation, state transition, and terminal",
-            "use runtime APIs to reconcile pins",
+            "Before Managed reuse/create, verify Project ID, cwd/repository",
+            "grant no shared-state authority",
+            "Pin Managed roles needing follow-up",
+            "never Lite/Pro",
+            "reconcile via runtime APIs",
             "`gpt-5.6-sol max`",
             "`gpt-5.6-sol xhigh`",
             "`gpt-5.6-sol high`",
             "`gpt-5.6-luna max`",
-            "Bind the route to the active objective",
-            "Keep model and effort stable until that objective's terminal",
-            "Reclassify only a separately bounded successor",
-            "Resume the same canonical session on `gpt-5.6-luna max`",
-            "Never create another role or session solely to change model",
-            "never substitute `luna max` for `sol xhigh/max`",
+            "default for frozen deterministic implementation",
+            "choose cheapest capable; ties use Luna",
+            "file/module count alone is no trigger",
+            "dispatch named `luna_worker`",
+            "durable rollout `agent_role/model/effort/parent_thread_id/multi_agent_version`",
+            "generic override catalog cannot prove Luna unavailable",
+            "Allow one repair per fingerprint",
+            "Never route protected/scientific/authority/ambiguous decisions to Luna",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
         self.assertIn("A projectless task", orchestration)
         self.assertIn("Lite and Pro advisory tasks are never auto-pinned", orchestration)
+        self.assertIn(
+            "canonical `Audit · Workflow Evolution` session: keep it pinned",
+            orchestration,
+        )
+        self.assertIn(
+            "pin is navigation/availability only and creates no Managed",
+            orchestration,
+        )
+        self.assertIn(
+            "`Audit · Workflow Evolution` stays pinned through idle/`COMPLETE`",
+            router,
+        )
+        self.assertTrue((ROOT / "scripts" / "validate_model_route.py").is_file())
         for phrase in (
             "call `set_thread_pinned`",
-            "The route is sticky for the active objective",
-            "Do not switch model while one objective is in flight",
-            "Reclassify only after terminal absorption or an explicit redispatch",
-            "Do not create an Implementer, Runner, second owner, or new session",
+            "At each bounded runtime dispatch or continuation boundary",
+            "Pass both explicitly to the runtime create/resume call",
+            "omission or inheritance from the predecessor",
+            "against durable rollout metadata",
+            "writes no state or artifact",
+            "returns to the Sol owner before effects",
+            "Choose the cheapest capable route",
+            "Code changes, test execution, or documentation alone",
+            "Do not switch per turn or microstep",
+            "one contiguous pre-release, outcome-blind Luna child segment",
+            "exact parent",
+            "creates no owner handoff",
+            "After protected-result exposure, never downgrade to Luna",
+            "deterministic oracle which Luna cannot reinterpret",
+            "model switching a persistent pipeline",
+            "named-profile catalogs may differ",
+            "RULE_TOOLING_DRIFT",
+            "never claim Luna executed",
+            "Worker prose is never a route receipt",
         ):
             with self.subTest(orchestration_phrase=phrase):
                 self.assertIn(phrase, orchestration)
+
+        self.assertNotIn("simple outcome-invariant repair only", router)
+        self.assertNotIn("simple outcome-invariant repair only", orchestration)
+
+    def test_workflow_evolution_completion_requires_live_install(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+
+        for phrase in (
+            "Never emit `RETAIN|COMPLETE` from a candidate-only diff",
+            "live files must byte-match it",
+            "consumer/Controller receive the exact live hash plus reload instruction",
+            "Advisory may review the deployed diff later",
+        ):
+            with self.subTest(router_phrase=phrase):
+                self.assertIn(phrase, router)
+
+        for phrase in (
+            "passing scratch-copy test, advisory response, or review packet is not a completed optimization",
+            "compare each intended live preimage with the frozen baseline",
+            "run the required live replay/canary",
+            "hash the live read-back against the accepted candidate",
+            "one non-scientific completion message",
+            "Ordinary Pro review is nonblocking",
+            "not a new callback, receipt family, state field, watcher, heartbeat, registry, role, or lifecycle",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_workflow_evolution_detection_is_event_driven_shadow_and_rule_aware(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        self.assertTrue((ROOT / "scripts" / "workflow_evolution_gate.py").is_file())
+        self.assertIn("Workflow Evolution is reusable Audit scope", router)
+        for phrase in (
+            "no signal means no message, ACK or resend",
+            "30-minute heartbeat only bounds delivery/recovery latency",
+            "Every eighth absorbed terminal",
+            "BACKWARD_OUTCOME_COST",
+            "RULE_TOOLING_DRIFT",
+            "EXECUTION_NONCONFORMANCE",
+            "Valid negative/null decisions count as output",
+            "independent ARIS task",
+            "RETAIN_ELIGIBLE",
+            "route smoke proves reachability only",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_successor_activation_barrier_is_read_only_and_pre_effect(self) -> None:
+        router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
+        schema = flat(STATE_SCHEMA)
+        self.assertIn("`dispatch_next` is incomplete before activation", router)
+        for phrase in (
+            "planned post-CAS minimum revision",
+            "No repository, remote, GPU, model/data/protected read, write",
+            "without a destination ACK",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+        for phrase in (
+            "prospective read-only startup barrier",
+            "WAIT_ACTIVATION_COMMIT",
+            "genuine post-CAS exhaustion still fails closed",
+            "never retroactively rescued",
+        ):
+            with self.subTest(schema_phrase=phrase):
+                self.assertIn(phrase, schema)
+
+    def test_luna_routing_boundary_cases_are_explicit(self) -> None:
+        orchestration = flat(ORCHESTRATION)
+        workspace = flat(WORKSPACE_AGENTS) if WORKSPACE_AGENTS is not None else ""
+
+        for phrase in (
+            "exact deterministic edits spanning multiple modules -> `luna/max`",
+            "mechanical tests or documentation copied from a frozen oracle -> `luna/max`",
+            "defining or changing an oracle, threshold, test semantics, contract, claim",
+            "sealed unchanged rerun with identity/hash-only acceptance -> `luna/max`",
+            "inspecting or interpreting protected rerun output -> Audit/Controller",
+            "session_meta` plus current `turn_context",
+            "preserves objective, scientific role, cumulative budget and final terminal",
+            "After protected-result exposure, never downgrade to Luna",
+            "decision has been frozen into a deterministic oracle",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+        if workspace:
+            self.assertIn("model family/reasoning-effort routing", workspace)
+            self.assertIn("The Skill alone defines", workspace)
+            self.assertNotIn("`gpt-5.6-luna`", workspace)
 
     def test_research_role_session_titles_are_canonical_and_stateful(self) -> None:
         router = flat(SKILL)
@@ -847,12 +1223,8 @@ class SkillRouterTest(unittest.TestCase):
                 self.assertIn(phrase, orchestration)
 
         if workspace:
-            self.assertIn(
-                "`<Role> · <candidate-or-bounded-scope> · <STATE>`",
-                workspace,
-            )
-            self.assertIn("Keep the sidebar pinned set synchronized", workspace)
-            self.assertIn("`gpt-5.6-luna` with `max`", workspace)
+            self.assertIn("the four roles `Controller|Explorer|Audit|Executor`", workspace)
+            self.assertIn("The Skill alone defines", workspace)
 
     def test_controller_global_continuity_heartbeat_is_persistent_singleton(self) -> None:
         router = flat(SKILL)
@@ -861,19 +1233,25 @@ class SkillRouterTest(unittest.TestCase):
 
         for phrase in (
             "one persistent Controller-global continuity heartbeat",
-            "remains active through idle periods and worker/job completions",
+            "through idle periods and worker/job completions",
         ):
             with self.subTest(phrase=phrase):
-                self.assertIn(phrase, router)
                 self.assertIn(phrase, orchestration)
-                if workspace:
-                    self.assertIn(phrase, workspace)
 
-        self.assertIn("keep remote jobs in the snapshot", router)
-        self.assertIn("never mutate its prompt or delete it", router)
+        self.assertIn("Keep one retargeted, never duplicated Controller heartbeat", router)
+        self.assertIn("Each wake resumes that Controller", router)
+        self.assertIn("drains prebound terminal absorb/route/activate/title/pin/CAS before final", router)
+        self.assertIn("`activate-successor` CAS", orchestration)
+        self.assertIn("`advance-cursors` rejects a terminal cursor", orchestration)
         self.assertIn("never delete the global automation", orchestration)
+        self.assertIn("already user-authorized desktop singleton", orchestration)
+        self.assertIn("does not authorize installing one where none exists", orchestration)
+        self.assertIn(
+            "terminal callbacks and explicit Controller resume remain the recovery path",
+            orchestration,
+        )
         if workspace:
-            self.assertIn("never delete the global automation", workspace)
+            self.assertIn("Controller terminal/state recovery", workspace)
 
         self.assertIn("Adjust its cadence in place", orchestration)
         self.assertIn("do not create a faster or slower duplicate", orchestration)
@@ -881,14 +1259,36 @@ class SkillRouterTest(unittest.TestCase):
         for phrase in (
             "Keep that heartbeat prompt static",
             "rebuildable Controller control snapshot",
+            "prebound `completion_binding`",
+            "identity-only `pending_absorptions`",
             "compare-and-swap revision",
             "atomic replace",
             "`NONE -> CLAIMED -> SENT`",
             "calls one thread-list operation",
             "batch-waits only the named active roles",
-            "does not invent an owner, successor, terminal, job, or scientific meaning",
+            "A crash before absorption leaves the pending record",
+            "ambiguous delivery is never blindly resent",
         ):
             with self.subTest(snapshot_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+        for phrase in (
+            "Slurm checks capacity only for exact `A100_CAPACITY_AVAILABLE`",
+            "exact `A100_CAPACITY_AVAILABLE`",
+            "never redoes role semantics, interprets protected science",
+        ):
+            with self.subTest(router_a100_phrase=phrase):
+                self.assertIn(phrase, router)
+
+        for phrase in (
+            "use a queue-first A100 policy",
+            "submit it to Slurm immediately even when all cards are allocated",
+            "exact blocker trigger is `A100_CAPACITY_AVAILABLE`",
+            "One wake may run one read-only `ecnuhpc` Slurm node allocation check",
+            "Never create a capacity-only heartbeat",
+            "unbound capacity state",
+        ):
+            with self.subTest(orchestration_a100_phrase=phrase):
                 self.assertIn(phrase, orchestration)
 
     def test_recovered_funnel_denominators_are_honestly_named(self) -> None:
@@ -936,25 +1336,30 @@ class SkillRouterTest(unittest.TestCase):
         assert WORKSPACE_AGENTS is not None
         workspace = flat(WORKSPACE_AGENTS)
         router = flat(SKILL)
+        integrity = flat(INTEGRITY)
+        orchestration = flat(ORCHESTRATION)
         for phrase in (
-            "Default to `operating_weight=lite`",
+            "This file is the workspace router",
+            "do not duplicate its orchestration, model-routing, Pro, R0--R3, closure or recovery procedures here",
+            "Default to Lite by side effects and coordination",
+            "Reliability floor",
+            "protected/public-test isolation",
+            "finite `BLOCKED` only for a genuine external fact or unavailable authority",
+            "`DONE` requires scientifically `CLOSED`",
             "`public_source` is the default",
-            "`BLOCK_PRE_DISPATCH_ACCESS`; the Audit is not launched",
-            "Full license coverage, power/seed design, natural prevalence, full recipient matrix",
-            "A successful tool receipt releases the worker immediately",
-            "never waits for `RECEIPT_ONLY`, `FINAL_ACK` or a receiver ping",
-            "Reconcile only shared resources touched by the Managed event",
-            "Batch zero-delta dashboard, Curator, closed-alias and Atlas maintenance after 3--5 decision milestones",
-            "Do not trigger dashboard work for source fetches",
-            "`closure_risk=LOW|HIGH`",
-            "`PROVISIONAL_CLOSE_PENDING_REBUTTAL` or `HOLD_INFORMATION`",
-            "Pro is a standard risk-triggered advisory",
-            "`CONFIRM_SCOPED_CLOSE | NARROW_CLOSE | REOPEN_R0 | HOLD_INFORMATION`",
-            "any `UNKNOWN` is `HIGH`",
-            "a multi-source composition is never one complete witness",
+            "Enable `strict_result_blind` only for a prospectively named independence",
+            "Missing safe access blocks before an Audit sees bytes",
+            "Activity, artifact/session/terminal counts, token volume and GPU utilization are process diagnostics",
         ):
             with self.subTest(phrase=phrase):
-                self.assertIn(phrase, workspace + " " + router)
+                self.assertIn(phrase, workspace)
+
+        self.assertLess(len(WORKSPACE_AGENTS.read_bytes()), 10_000)
+        self.assertIn("Default to `operating_weight=lite`", router)
+        self.assertIn("`BLOCK_PRE_DISPATCH_ACCESS`", integrity)
+        self.assertIn("`closure_risk=LOW|HIGH`", router)
+        self.assertIn("A successful tool receipt releases the worker immediately", router)
+        self.assertIn("one ordinary top-level `send_message_to_thread`", orchestration)
 
         for conflicting in (
             "Every research terminal callback has a hard controller completion gate",
@@ -974,25 +1379,21 @@ class SkillRouterTest(unittest.TestCase):
     def test_workspace_agents_matches_real_scout_r1_r2_and_unknown_routing(self) -> None:
         assert WORKSPACE_AGENTS is not None
         workspace = flat(WORKSPACE_AGENTS)
+        router = flat(SKILL)
         integrity = flat(INTEGRITY)
 
+        self.assertIn("proportional R0--R3 readiness", workspace)
+        self.assertIn("The Skill alone defines", workspace)
         for phrase in (
-            "outcome-blind real-carrier minimal code path",
-            "no-utility real-path system profile",
-            "pure synthetic smoke has conversion value only when",
-            "claim-proportionate scientific contract",
             "`2` or `3` necessary arms",
             "`6` paired bundles",
-            "primary metric, MPE, guard comparator",
-            "Final superiority or scientific closure additionally requires complete power",
             "`UNKNOWN_TO_SYSTEM_PROFILE`",
             "`UNKNOWN_TO_CALIBRATION`",
             "`UNKNOWN_TO_SCOUT`",
             "`DEFERRED_TO_CONFIRMATION`",
         ):
             with self.subTest(phrase=phrase):
-                self.assertIn(phrase, workspace)
-                self.assertIn(phrase, workspace + " " + integrity)
+                self.assertIn(phrase, router + " " + integrity)
 
         for stale in (
             "`R1`: run one outcome-blind implementation/profile smoke",
@@ -1029,6 +1430,33 @@ class SkillRouterTest(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
+
+    def test_resource_forecast_is_not_the_hard_gpu_ceiling(self) -> None:
+        orchestration = flat(ORCHESTRATION)
+        integrity = flat(INTEGRITY)
+        for phrase in (
+            "planning_estimate",
+            "hard_safety_ceiling",
+            "exceeding it is a forecast miss, not an automatic invalid terminal",
+            "not a predicate Audit or new scientific version",
+            "not predicted result sign",
+            "lower-bound heuristics, not target caps",
+            "outcome-blind checkpoints",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
+                self.assertIn(phrase, orchestration)
+        for phrase in (
+            "outer exploratory safety ceiling",
+            "A forecast miss below the ceiling is not by itself `ENGINEERING_INVALID`",
+            "Queue by surviving novelty, problem importance, causal depth and expected decision information",
+        ):
+            with self.subTest(source="integrity", phrase=phrase):
+                self.assertIn(phrase, integrity)
+        if WORKSPACE_AGENTS is not None:
+            workspace = flat(WORKSPACE_AGENTS)
+            self.assertIn("hard resource ceilings", workspace)
+            self.assertIn("The Skill alone defines", workspace)
+            self.assertNotIn("planning_estimate", workspace)
 
     def test_knowledge_handoff_is_conditional_not_default_lite_schema(self) -> None:
         router = flat(SKILL)
