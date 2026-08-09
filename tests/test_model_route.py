@@ -178,16 +178,63 @@ class ModelRouteTest(unittest.TestCase):
             with self.subTest(receipt=receipt), self.assertRaises(ValueError):
                 validate_receipt(receipt, expected_parent_thread_id="parent-1")
 
-    def test_luna_requires_named_durable_role_parent_and_v1(self) -> None:
+    def test_luna_requires_named_durable_role_parent_and_supported_version(self) -> None:
         cases = (
             (self.luna_receipt(receipt_source="direct"), "durable rollout"),
             (self.luna_receipt(agent_role="default"), "agent_role=luna_worker"),
-            (self.luna_receipt(multi_agent_version="v2"), "multi_agent_version=v1"),
+            (
+                self.luna_receipt(multi_agent_version="v3"),
+                "multi_agent_version=v1 or v2",
+            ),
             (self.luna_receipt(parent_thread_id="other"), "parent binding mismatch"),
         )
         for receipt, message in cases:
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 validate_receipt(receipt, expected_parent_thread_id="parent-1")
+
+    def test_luna_named_child_accepts_v2_with_same_identity(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_rollout(Path(raw), multi_agent_version="v2")
+            receipt = load_rollout_receipt(
+                path,
+                action_class="frozen_deterministic",
+                context_eligible=True,
+                protected_exposed=False,
+                decision_ambiguity=False,
+            )
+            self.assertEqual(receipt.multi_agent_version, "v2")
+            self.assertEqual(receipt.agent_role, "luna_worker")
+            self.assertEqual(receipt.model, "gpt-5.6-luna")
+            self.assertEqual(receipt.effort, "max")
+            self.assertEqual(
+                validate_receipt(receipt, expected_parent_thread_id="parent-1"),
+                ("gpt-5.6-luna", "max"),
+            )
+
+    def test_luna_v2_named_child_rejects_wrong_role_model_and_parent(self) -> None:
+        cases = (
+            ({"agent_role": "default"}, "agent_role=luna_worker"),
+            ({"model": "gpt-5.6-sol"}, "runtime route mismatch"),
+            ({"parent_thread_id": "other"}, "parent binding mismatch"),
+        )
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            for overrides, message in cases:
+                with self.subTest(message=message):
+                    path = self.write_rollout(
+                        root, multi_agent_version="v2", **overrides
+                    )
+                    receipt = load_rollout_receipt(
+                        path,
+                        action_class="frozen_deterministic",
+                        context_eligible=True,
+                        protected_exposed=False,
+                        decision_ambiguity=False,
+                    )
+                    with self.assertRaisesRegex(ValueError, message):
+                        validate_receipt(
+                            receipt, expected_parent_thread_id="parent-1"
+                        )
 
     def test_same_thread_luna_binds_current_thread_and_exact_dispatch(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:

@@ -160,7 +160,7 @@ Never default to
   sealed reruns, and repairs.
 
 Choose cheapest capable; ties use Luna; role alone never selects effort. Freeze
-edits, acceptance, evidence/exposure, budget and stop. Prefer no-history V1
+edits, acceptance, evidence/exposure, budget and stop. Prefer named no-history
 `agent_type=luna_worker`. If absent but an existing-thread model override exists,
 use one contiguous `luna/max` turn with capsule and unique
 `LUNA_ROUTE_DISPATCH_ID=<id>`. Before effects validate named-child parent or
@@ -194,9 +194,9 @@ Luna.
   Search and ordinary public-source `R0` may read public primary methods,
   results, appendices, and official-code documentation; those public results
   are not the candidate's protected outcomes. Enable strict blindness only for
-  one prospectively named independence or anti-anchoring decision. Its safe
-  tree/result-stripped packet must pass deterministic pre-dispatch validation;
-  otherwise block dispatch before an Audit sees source bytes. See
+  one prospectively named independence or anti-anchoring decision. Every fresh
+  strict-blind owner uses only validated capsule locators; external paths are
+  provenance, and a missing identity blocks before bytes. See
   [research-integrity.md](references/research-integrity.md).
 - Bind evidence-bearing runs to code, config, data, environment, seed, and run
   identity. Preserve raw outputs, failures, anomalies, and deviations before

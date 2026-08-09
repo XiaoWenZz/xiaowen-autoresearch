@@ -519,6 +519,16 @@ already frozen hard/outer ceiling at recorded outcome-blind checkpoints,
 without another Audit or scientific version. Effect sign, utility, score and
 protected-result content cannot enter that dynamic decision.
 
+When the user has prospectively authorized the outer envelope, one insufficient
+pre-release substage GPU/wall cap may be corrected directly inside that
+envelope before utility or protected access. Set it from the pessimistic
+decision-complete path plus affordable failure headroom, preserve exact
+cumulative debit and the hard ceiling, and continue the same
+owner/objective/scientific attempt without an Audit, terminal or callback.
+Outcome sign is never an input. A second correction, accelerator change,
+outer-ceiling expansion or post-outcome change crosses the normal escalation
+gate.
+
 GPU admission ranks surviving novelty, problem importance, causal depth and
 expected decision information per affordable cost, not predicted result sign.
 A material-signal probability may affect portfolio priority, but negative/null
@@ -563,11 +573,12 @@ At each bounded runtime dispatch or continuation boundary, derive model family a
 reasoning effort from the remaining action and currently visible context. Pass
 both explicitly for Sol routes; omission or inheritance from the predecessor,
 candidate, role or reusable session fails admission. A role name never selects
-an effort tier by itself. Prefer frozen deterministic work through V1 named-agent
-`agent_type=luna_worker` with `fork_context=false` (or the runtime's exact
-no-history equivalent) and no direct model or effort override. A full-history
-fork inherits the parent agent type; V2 `task_name` labels do not load the custom
-profile. When the dispatcher lacks the V1 `agent_type` field but exposes an
+an effort tier by itself. Prefer frozen deterministic work through named-agent
+`agent_type=luna_worker` with a no-history fork and no direct model or effort
+override. Durable receipts may report `multi_agent_version=v1` or `v2`; the
+identity checks below are unchanged. A full-history fork inherits the parent
+agent type, and `task_name` alone does not load the custom profile. When the
+dispatcher lacks the `agent_type` field but exposes an
 explicit existing-thread model override, the Sol owner may instead dispatch one
 contiguous same-thread `gpt-5.6-luna/max` turn. That prompt must contain the
 complete frozen capsule and exactly one unique line
@@ -604,7 +615,7 @@ protected-result interpretation.
 The Luna receipt authority is durable rollout metadata, never worker prose. A
 named child requires `session_meta` plus current `turn_context` with
 `agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact
-`parent_thread_id`, and `multi_agent_version=v1`. A same-thread fallback requires
+`parent_thread_id`, and `multi_agent_version=v1|v2`. A same-thread fallback requires
 the exact `session_meta.id`, latest `turn_context` model/effort/turn ID, and
 exactly one matching `LUNA_ROUTE_DISPATCH_ID` user message whose durable message
 metadata carries that same turn ID. Do not infer turn ownership from file order:
@@ -705,12 +716,15 @@ For Scout:
    Terminal only when the bounded inventory cannot identify a local fix, an
    external fact is required, or scientific identity, exposure, authority,
    budget, or protected-outcome state would change;
-   this is a parent workflow invariant. A child `AGENTS.md`, attempt contract,
-   manifest, path policy, or first-mismatch action table may preserve unsafe
-   bytes and prohibit their reuse, but may not convert an otherwise recoverable
-   pre-release outcome-blind defect into terminal, create-new scientific
-   attempt, Controller/Audit handoff, or fresh owner. Reject that conflict
-   before Executor dispatch;
+   this is a parent workflow invariant. Before Executor dispatch, project each
+   child `AGENTS.md`, attempt contract, manifest, path policy and action table
+   onto it. Preserve the original bytes and unsafe-state prohibitions, but do
+   not dispatch conflicting first-mismatch terminal/create-new clauses, exact
+   runtime bindings that R1 is meant to resolve, or local attempt/service/check
+   counts used as authority or budget gates. If scientific identity, exposure
+   and the approved outer ceiling remain unchanged, return the corrected
+   capsule to the same owner in the same Controller transaction—no predicate
+   Audit, terminal, callback, new attempt or fresh owner;
 5. implement only controls that can change the witness decision;
 6. if governance-only effort exceeds scientific implementation, remove
    nonessential controls and execute the direct bounded witness under the same
@@ -813,6 +827,13 @@ a diagnostic escalation, not an ownership or terminal boundary. If it
 identifies an outcome-invariant local fix, repair in place; if partial state is
 unsafe, create a clean carrier generation inside the same objective; then rerun
 the full witness with cumulative debit unchanged.
+
+The two-record authority is only an immutable diagnostic prefix: it is not a
+global repair, attempt, permission or resource counter. Do not append a third
+record. Give one blind mechanical patch to a given fingerprint; after the
+in-owner inventory, a supported local fix or a distinct local defect may still
+be repaired and revalidated in place under the same hard projection and
+cumulative ledger.
 
 Terminalize or return to Controller/Audit only for: a scientific identity,
 estimand, data/split, exposure, metric/threshold, baseline, seed/schedule,

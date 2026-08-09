@@ -453,6 +453,25 @@ class SkillRouterTest(unittest.TestCase):
         self.assertIn("If it fails, the Audit is not dispatchable", integrity)
         self.assertIn("Do not launch an Audit to discover that its access tree is missing", integrity)
 
+    def test_strict_blind_capsule_and_r1_profile_stay_same_owner(self) -> None:
+        integrity = flat(INTEGRITY)
+        for phrase in (
+            "any fresh strict-blind owner",
+            "traverse only locators inside the validated capsule/safe tree",
+            "outside that tree is provenance only",
+            "required identity is absent from the capsule",
+            "do not add a packet or validator",
+            "exact interpreter",
+            "dependency, driver/CUDA, GPU UUID",
+            "pessimistic complete-path estimate",
+            "not a separate Audit",
+            "closed safe-output schema",
+            "keeps the same `scientific_attempt`/owner/objective",
+            "clean `carrier_generation`, never a new attempt identity",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, integrity)
+
     def test_strict_blind_contaminated_session_is_never_reused(self) -> None:
         router = flat(SKILL)
         integrity = flat(INTEGRITY)
@@ -530,8 +549,10 @@ class SkillRouterTest(unittest.TestCase):
         integrity = flat(INTEGRITY)
         for text in (problem, integrity):
             self.assertIn("one active outcome-blind", text)
-            self.assertIn("rerun under a new attempt identity within the existing cap", text)
+            self.assertIn("clean `carrier_generation`", text)
             self.assertIn("returns to prospective adjudication", text)
+        self.assertIn("same scientific attempt/owner/objective", problem)
+        self.assertIn("same `scientific_attempt`/owner/objective", integrity)
 
     @unittest.skipUnless(
         WORKSPACE_AGENTS is not None and WORKSPACE_AGENTS.is_file(),
@@ -1061,7 +1082,7 @@ class SkillRouterTest(unittest.TestCase):
             "Choose cheapest capable; ties use Luna",
             "file/module count is no trigger",
             "role alone never selects effort",
-            "no-history V1 `agent_type=luna_worker`",
+            "named no-history `agent_type=luna_worker`",
             "existing-thread model override",
             "`LUNA_ROUTE_DISPATCH_ID=<id>`",
             "named-child parent or same-thread thread/turn/dispatch",
@@ -1106,7 +1127,8 @@ class SkillRouterTest(unittest.TestCase):
             "RULE_TOOLING_DRIFT",
             "never claim Luna executed",
             "never worker prose",
-            "`fork_context=false`",
+            "with a no-history fork",
+            "`multi_agent_version=v1` or `v2`",
             "A full-history fork inherits the parent agent type",
             "absence of `agent_type` makes only the named profile unavailable",
             "Do not substitute `task_name`",
