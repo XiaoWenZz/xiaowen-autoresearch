@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import stat
 import sys
 from datetime import datetime, timezone
@@ -47,6 +48,15 @@ SAFE_TEXT_EXTENSIONS = {
     ".txt",
     ".yaml",
     ".yml",
+}
+OPERATIONAL_ACCESS_KEY = "operational_access"
+SHELL_META_RE = re.compile(r"[\x00\r\n;&|<>$`\\*?]")
+SENSITIVE_CODEX_DIRECTORIES = {
+    "archived_sessions",
+    "memories",
+    "rollout_history",
+    "rollout_summaries",
+    "sessions",
 }
 
 
@@ -257,6 +267,207 @@ def re_full_sha256(value: str) -> bool:
     return len(value) == 64 and all(character in "0123456789abcdefABCDEF" for character in value)
 
 
+def _canonical_absolute_path(raw_path: Any, context: str) -> Path:
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ValidationError(f"{context} requires a non-empty absolute path")
+    path = Path(raw_path)
+    if (
+        not path.is_absolute()
+        or path.as_posix() != raw_path
+        or "." in path.parts
+        or ".." in path.parts
+    ):
+        raise ValidationError(f"{context} must be canonical and absolute: {raw_path}")
+    try:
+        mode = path.lstat().st_mode
+    except OSError as exc:
+        raise ValidationError(f"{context} cannot inspect path {raw_path}: {exc}") from exc
+    if stat.S_ISLNK(mode):
+        raise ValidationError(f"{context} must be a regular non-symlink file: {raw_path}")
+    if not stat.S_ISREG(mode):
+        raise ValidationError(f"{context} must be a regular file, not a directory or special file: {raw_path}")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ValidationError(f"{context} cannot resolve path {raw_path}: {exc}") from exc
+    if resolved.as_posix() != raw_path:
+        raise ValidationError(f"{context} must be canonical and absolute: {raw_path}")
+    parts = tuple(part.casefold() for part in path.parts)
+    if ".codex" in parts:
+        codex_index = parts.index(".codex")
+        if any(part in SENSITIVE_CODEX_DIRECTORIES for part in parts[codex_index + 1 :]):
+            raise ValidationError(f"{context} targets a sensitive .codex history/state path: {raw_path}")
+        filename = parts[-1]
+        if (
+            filename in {"state.sqlite", "state.sqlite3", "state.db"}
+            or (filename.startswith("state_") and filename.endswith((".sqlite", ".sqlite3", ".db")))
+        ):
+            raise ValidationError(f"{context} targets a sensitive .codex history/state path: {raw_path}")
+    return path
+
+
+def _canonical_locator_path(raw_path: Any, context: str) -> str:
+    """Validate a locator identity without touching the referenced path."""
+    if not isinstance(raw_path, str) or not raw_path:
+        raise ValidationError(f"{context} requires a non-empty absolute path")
+    path = Path(raw_path)
+    if (
+        not path.is_absolute()
+        or path.as_posix() != raw_path
+        or "." in path.parts
+        or ".." in path.parts
+    ):
+        raise ValidationError(f"{context} must be canonical and absolute: {raw_path}")
+    return raw_path
+
+
+def validate_operational_access(
+    frame: Any,
+    safe_source_root: Path,
+    entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate exact pre-bound files and activation argv for strict blindness."""
+    if not isinstance(frame, dict):
+        raise ValidationError(
+            f"strict_result_blind requires top-level {OPERATIONAL_ACCESS_KEY} object"
+        )
+    expected_keys = {
+        "authority_readable_paths",
+        "helper_paths",
+        "locator_only_paths",
+        "activation_argv",
+    }
+    if set(frame) != expected_keys:
+        raise ValidationError(
+            f"{OPERATIONAL_ACCESS_KEY} must contain exactly authority_readable_paths, helper_paths, locator_only_paths, activation_argv"
+        )
+
+    def path_list(
+        key: str,
+        *,
+        allow_empty: bool = False,
+        locator_only: bool = False,
+    ) -> tuple[list[str], set[str]]:
+        raw_values = frame.get(key)
+        if not isinstance(raw_values, list) or (not allow_empty and not raw_values):
+            qualifier = "array" if allow_empty else "non-empty array"
+            raise ValidationError(f"{OPERATIONAL_ACCESS_KEY}.{key} requires an {qualifier}")
+        values: list[str] = []
+        seen: set[str] = set()
+        for position, raw_value in enumerate(raw_values, start=1):
+            context = f"{OPERATIONAL_ACCESS_KEY}.{key}[{position}]"
+            value = (
+                _canonical_locator_path(raw_value, context)
+                if locator_only
+                else _canonical_absolute_path(raw_value, context).as_posix()
+            )
+            if value in seen:
+                raise ValidationError(f"{context} duplicates path: {value}")
+            seen.add(value)
+            values.append(value)
+        return values, seen
+
+    authority_paths, authority_set = path_list("authority_readable_paths")
+    raw_helpers = frame.get("helper_paths")
+    if not isinstance(raw_helpers, list) or not raw_helpers:
+        raise ValidationError(
+            f"{OPERATIONAL_ACCESS_KEY}.helper_paths requires a non-empty array"
+        )
+    helper_paths: list[str] = []
+    helper_set: set[str] = set()
+    for position, raw_helper in enumerate(raw_helpers, start=1):
+        context = f"{OPERATIONAL_ACCESS_KEY}.helper_paths[{position}]"
+        if not isinstance(raw_helper, dict) or set(raw_helper) != {"path", "sha256"}:
+            raise ValidationError(f"{context} must be an object with path and sha256")
+        helper_path = _canonical_absolute_path(raw_helper["path"], f"{context}.path")
+        helper_value = helper_path.as_posix()
+        if helper_value in helper_set:
+            raise ValidationError(f"{context}.path duplicates path: {helper_value}")
+        digest = raw_helper["sha256"]
+        if not isinstance(digest, str) or not re_full_sha256(digest):
+            raise ValidationError(f"{context}.sha256 requires canonical sha256")
+        try:
+            helper_digest = hashlib.sha256(helper_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ValidationError(f"{context}.path cannot read helper: {helper_value}: {exc}") from exc
+        if helper_digest != digest.lower():
+            raise ValidationError(f"{context}.sha256 mismatch: {helper_value}")
+        helper_set.add(helper_value)
+        helper_paths.append(helper_value)
+    locator_paths, locator_set = path_list("locator_only_paths", allow_empty=True, locator_only=True)
+    overlap = sorted(authority_set & locator_set)
+    if overlap:
+        raise ValidationError(
+            "locator_only_paths must be disjoint from authority_readable_paths: "
+            + ", ".join(overlap)
+        )
+    if not helper_set <= authority_set:
+        missing = sorted(helper_set - authority_set)
+        raise ValidationError(
+            "operational helper path is not in authority_readable_paths: "
+            + ", ".join(missing)
+        )
+
+    activation_argv = frame.get("activation_argv")
+    if (
+        not isinstance(activation_argv, list)
+        or not activation_argv
+        or any(not isinstance(value, str) or not value for value in activation_argv)
+    ):
+        raise ValidationError(
+            f"{OPERATIONAL_ACCESS_KEY}.activation_argv must be a non-empty JSON string array"
+        )
+    for position, value in enumerate(activation_argv, start=1):
+        if SHELL_META_RE.search(value):
+            raise ValidationError(
+                f"{OPERATIONAL_ACCESS_KEY}.activation_argv[{position}] contains shell metacharacters"
+            )
+        if Path(value).is_absolute():
+            _canonical_locator_path(
+                value, f"{OPERATIONAL_ACCESS_KEY}.activation_argv[{position}]"
+            )
+            if value not in authority_set | locator_set:
+                raise ValidationError(
+                    f"{OPERATIONAL_ACCESS_KEY}.activation_argv[{position}] absolute path is not in the bound readable/locator set: {value}"
+                )
+    referenced_helpers = helper_set.intersection(activation_argv)
+    if not referenced_helpers:
+        raise ValidationError(
+            f"{OPERATIONAL_ACCESS_KEY}.activation_argv must reference a bound helper path"
+        )
+
+    try:
+        safe_root = safe_source_root.resolve(strict=True)
+    except OSError as exc:
+        raise ValidationError(f"cannot resolve safe source root for operational access: {exc}") from exc
+    if not safe_root.is_dir():
+        raise ValidationError("safe source root for operational access must be a directory")
+    for position, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise ValidationError(f"manifest entry {position} requires a safe-tree path")
+        relative = Path(entry["path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValidationError(f"manifest entry {position} safe-tree path is not canonical")
+        try:
+            safe_file = (safe_root / relative).resolve(strict=True)
+        except OSError as exc:
+            raise ValidationError(
+                f"manifest entry {position} safe-tree path cannot resolve: {entry['path']}"
+            ) from exc
+        if safe_file.as_posix() not in authority_set:
+            raise ValidationError(
+                "safe-tree file is not in authority_readable_paths: " + safe_file.as_posix()
+            )
+
+    return {
+        "status": "PASS_OPERATIONAL_ACCESS_FRAME",
+        "authority_readable_path_count": len(authority_paths),
+        "helper_path_count": len(helper_paths),
+        "locator_only_path_count": len(locator_paths),
+        "activation_argv_length": len(activation_argv),
+    }
+
+
 def validate(
     manifest_path: Path,
     ledger_path: Path,
@@ -433,6 +644,10 @@ def validate(
         "status": "NOT_APPLICABLE",
         "reason": "strict_result_blind mode was not selected",
     }
+    operational_access_validation: dict[str, Any] = {
+        "status": "NOT_APPLICABLE",
+        "reason": "strict_result_blind mode was not selected",
+    }
     safe_source_invalid = False
     if effective_access_mode == "strict_result_blind":
         if safe_source_root is None:
@@ -454,6 +669,19 @@ def validate(
                     "status": "BLOCK_PRE_DISPATCH_ACCESS",
                     "reason": str(exc),
                 }
+            if not safe_source_invalid:
+                try:
+                    operational_access_validation = validate_operational_access(
+                        manifest.get(OPERATIONAL_ACCESS_KEY),
+                        safe_source_root,
+                        entries,
+                    )
+                except ValidationError as exc:
+                    safe_source_invalid = True
+                    operational_access_validation = {
+                        "status": "BLOCK_PRE_DISPATCH_ACCESS",
+                        "reason": str(exc),
+                    }
 
     status = "PASS_FRESHNESS_LEDGER"
     if mode_invalid:
@@ -499,6 +727,7 @@ def validate(
         "mismatches": mismatches,
         "access_chronology": access_chronology,
         "safe_source_validation": safe_source_validation,
+        "operational_access_validation": operational_access_validation,
         "entries": sorted(derived_entries, key=lambda item: item["artifact_id"]),
     }
 

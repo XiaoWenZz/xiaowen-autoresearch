@@ -453,6 +453,27 @@ class SkillRouterTest(unittest.TestCase):
         self.assertIn("If it fails, the Audit is not dispatchable", integrity)
         self.assertIn("Do not launch an Audit to discover that its access tree is missing", integrity)
 
+    def test_strict_blind_operational_access_frame_is_prebound_and_exact(self) -> None:
+        integrity = flat(INTEGRITY)
+        router = flat(SKILL)
+        for phrase in (
+            "`operational_access`",
+            "`authority_readable_paths`",
+            "`helper_paths`",
+            "`locator_only_paths`",
+            "`activation_argv`",
+            "canonical exact absolute regular non-symlink files",
+            "exact `{path, sha256}` binding",
+            "are not stat'ed or opened",
+            "no runtime helper/path discovery",
+            "recursive or parent-root search",
+            "$CODEX_HOME",
+            "shell metacharacters",
+            "BLOCK_PRE_DISPATCH_ACCESS",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, integrity + " " + router)
+
     def test_strict_blind_capsule_and_r1_profile_stay_same_owner(self) -> None:
         integrity = flat(INTEGRITY)
         for phrase in (
