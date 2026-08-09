@@ -129,8 +129,9 @@ def _user_message_text(event: dict[str, Any]) -> str:
 
 
 def _has_exact_route_dispatch(text: str, route_dispatch_id: str) -> bool:
+    marker = rf"LUNA_ROUTE_DISPATCH_ID={re.escape(route_dispatch_id)}"
     return re.search(
-        rf"(?m)^LUNA_ROUTE_DISPATCH_ID={re.escape(route_dispatch_id)}$", text
+        rf"(?m)^(?:{marker}|[ \t]*<input>{marker})$", text
     ) is not None
 
 
