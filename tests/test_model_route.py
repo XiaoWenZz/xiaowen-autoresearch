@@ -75,6 +75,7 @@ class ModelRouteTest(unittest.TestCase):
         model: str = "gpt-5.6-luna",
         effort: str = "max",
         name: str = "same-thread-rollout.jsonl",
+        marker_text: str | None = None,
     ) -> Path:
         marker = {
             "type": "response_item",
@@ -89,7 +90,11 @@ class ModelRouteTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "input_text",
-                        "text": f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}",
+                        "text": (
+                            marker_text
+                            if marker_text is not None
+                            else f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}"
+                        ),
                     }
                 ],
             },
@@ -119,6 +124,17 @@ class ModelRouteTest(unittest.TestCase):
             "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
         )
         return path
+
+    def observed_codex_delegation_envelope(self, route_dispatch_id: str) -> str:
+        return (
+            "<codex_delegation>\n"
+            "  <source_thread_id>019fdcaf-75b6-7603-9519-31f49789ee29</source_thread_id>\n"
+            f"  <input>LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n"
+            "ACTION_CLASS=frozen_deterministic\n"
+            "MODE=Lite same-thread route canary\n"
+            "</input>\n"
+            "</codex_delegation>"
+        )
 
     def test_frozen_deterministic_route_requires_luna_max(self) -> None:
         self.assertEqual(
@@ -212,6 +228,42 @@ class ModelRouteTest(unittest.TestCase):
                 expected_route_dispatch_id="luna-route-1",
             )
             self.assertEqual(receipt.turn_id, "turn-1")
+
+    def test_same_thread_luna_accepts_codex_delegation_envelope(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            route_dispatch_id = "XAR-PR3-LIVE-CANARY-20260809-001"
+            path = self.write_same_thread_rollout(
+                Path(raw),
+                route_dispatch_id=route_dispatch_id,
+                marker_text=self.observed_codex_delegation_envelope(route_dispatch_id),
+            )
+            receipt = load_rollout_receipt(
+                path,
+                action_class="frozen_deterministic",
+                context_eligible=True,
+                protected_exposed=False,
+                decision_ambiguity=False,
+                route_mode="same_thread",
+                expected_route_dispatch_id=route_dispatch_id,
+            )
+            self.assertEqual(receipt.route_dispatch_id, route_dispatch_id)
+
+    def test_same_thread_luna_rejects_arbitrary_prose_prefix(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_same_thread_rollout(
+                Path(raw),
+                marker_text="Prompt: LUNA_ROUTE_DISPATCH_ID=luna-route-1",
+            )
+            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                load_rollout_receipt(
+                    path,
+                    action_class="frozen_deterministic",
+                    context_eligible=True,
+                    protected_exposed=False,
+                    decision_ambiguity=False,
+                    route_mode="same_thread",
+                    expected_route_dispatch_id="luna-route-1",
+                )
 
     def test_same_thread_luna_rejects_wrong_thread_and_dispatch(self) -> None:
         receipt = self.luna_receipt(
