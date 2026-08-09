@@ -9,6 +9,7 @@ from pathlib import Path
 
 from scripts.validate_model_route import (
     RouteReceipt,
+    SAME_THREAD_PROMPT_PREAMBLE,
     build_same_thread_prompt,
     build_same_thread_prompt_bytes,
     load_rollout_receipt,
@@ -160,16 +161,17 @@ class ModelRouteTest(unittest.TestCase):
         )
         route_dispatch_id = "DISPATCH-PR8-SAME-THREAD-20260810-001"
         marker = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n".encode("utf-8")
+        preamble = SAME_THREAD_PROMPT_PREAMBLE.encode("utf-8")
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
             for name, capsule in capsules:
                 with self.subTest(name=name):
                     path, capsule_bytes = self.write_capsule(root, name, capsule)
                     built_bytes = build_same_thread_prompt_bytes(route_dispatch_id, path)
-                    self.assertEqual(built_bytes, marker + capsule_bytes)
+                    self.assertEqual(built_bytes, marker + preamble + capsule_bytes)
                     self.assertEqual(
                         build_same_thread_prompt(route_dispatch_id, path),
-                        (marker + capsule_bytes).decode("utf-8"),
+                        (marker + preamble + capsule_bytes).decode("utf-8"),
                     )
                     validate_same_thread_prompt(built_bytes, route_dispatch_id)
                     self.assertEqual(
@@ -185,6 +187,11 @@ class ModelRouteTest(unittest.TestCase):
             "wrong id": "LUNA_ROUTE_DISPATCH_ID=other-route\ncapsule body",
             "hidden": f"{marker}\ncapsule body hides LUNA_ROUTE_DISPATCH_ID=other-route",
             "not first": f"capsule body\n{marker}\n",
+            "missing preamble": f"{marker}\ncapsule body",
+            "wrong preamble": (
+                f"{marker}\nPASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
+                "await-successor-activation\ncapsule body"
+            ),
         }
         for name, prompt in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
@@ -259,7 +266,10 @@ class ModelRouteTest(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr.decode())
-            expected = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n".encode()
+            expected = (
+                f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n"
+                f"{SAME_THREAD_PROMPT_PREAMBLE}"
+            ).encode()
             self.assertEqual(result.stdout, expected + capsule_bytes)
             self.assertEqual(result.stderr, b"")
             self.assertEqual(path.read_bytes(), before)

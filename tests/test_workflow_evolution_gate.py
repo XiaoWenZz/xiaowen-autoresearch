@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.validate_model_route import build_same_thread_prompt_bytes
 from scripts.workflow_evolution_gate import (
     CONTEXT_MEDIAN_ROLLOVER,
     CONTEXT_MIN_ROLLOVER_SAMPLES,
@@ -23,6 +24,7 @@ from scripts.workflow_evolution_gate import (
     model_route_scorecard,
     relative_soft_threshold,
     scan_controller_context_window,
+    scan_token_window,
     token_decision,
     validate_rule_chain_terminal,
 )
@@ -218,6 +220,56 @@ class TokenDetectorTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn("missing or ambiguous", json.loads(result.stdout)["error"])
+
+    def test_model_route_builder_replays_one_activation_and_ignores_later_echo(self) -> None:
+        route_dispatch_id = "DISPATCH-PR8-CROSS-MODULE-20260810-001"
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            capsule = root / "capsule.txt"
+            capsule.write_bytes(b"P59/SMI capsule bytes\r\n")
+            built = build_same_thread_prompt_bytes(route_dispatch_id, capsule)
+            controller_prompt = {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": built.decode("utf-8")}
+                    ],
+                },
+            }
+            later_echo = {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": built.decode("utf-8")}
+                    ],
+                },
+            }
+            rollout = root / "rollout.jsonl"
+            rollout.write_text(
+                "".join(
+                    json.dumps(event) + "\n"
+                    for event in (
+                        token_event(99_000_000),
+                        controller_prompt,
+                        token_event(12_500_000),
+                        later_echo,
+                        {"type": "event_msg", "payload": {"dispatch_id": route_dispatch_id}},
+                        token_event(12_500_000),
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            token_total, token_turns, activation_line = scan_token_window(
+                rollout, route_dispatch_id
+            )
+            self.assertEqual(token_total, 25_000_000)
+            self.assertEqual(token_turns, 2)
+            self.assertEqual(activation_line, 2)
 
     def test_cli_rejects_aris_and_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:

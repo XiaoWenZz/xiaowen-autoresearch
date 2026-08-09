@@ -24,6 +24,10 @@ ROUTES = {
 
 ROUTE_DISPATCH_MARKER = "LUNA_ROUTE_DISPATCH_ID="
 _ROUTE_DISPATCH_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
+SAME_THREAD_PROMPT_PREAMBLE = (
+    "PASS_MODEL_ROUTE: gpt-5.6-luna/max\n"
+    "await-successor-activation\n"
+)
 
 
 @dataclass(frozen=True)
@@ -187,6 +191,11 @@ def validate_same_thread_prompt(
         raise ValueError(
             "same-thread prompt marker must be the first standalone line"
         )
+    canonical_prefix = marker + "\n" + SAME_THREAD_PROMPT_PREAMBLE
+    if not prompt.startswith(canonical_prefix):
+        raise ValueError(
+            "same-thread prompt observability preamble is missing or non-canonical"
+        )
 
 
 def _read_capsule(capsule_path: str | Path) -> tuple[bytes, str]:
@@ -226,7 +235,7 @@ def build_same_thread_prompt_bytes(
         raise ValueError("capsule already contains a route dispatch marker")
 
     marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
-    prompt_bytes = marker + capsule_bytes
+    prompt_bytes = marker + SAME_THREAD_PROMPT_PREAMBLE.encode("utf-8") + capsule_bytes
     validate_same_thread_prompt(prompt_bytes, route_dispatch_id)
     return prompt_bytes
 
