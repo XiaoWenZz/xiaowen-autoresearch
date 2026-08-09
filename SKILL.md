@@ -149,26 +149,26 @@ Never default to
 
 ## 5. Route model and reasoning effort
 
-- `gpt-5.6-sol max`: formulation/contracts/Audit/scientific
-  interpretation/routes/closure/adjudication.
+- `gpt-5.6-sol max`: formulation, material authority/claim choices,
+  scientific/protected interpretation and adjudication.
 - `gpt-5.6-sol xhigh`: real-carrier Scout, remote integration/debugging,
   evidence execution.
-- `gpt-5.6-sol high`: within-contract reasoning beyond mechanical acceptance;
-  file/module count alone is no trigger.
+- `gpt-5.6-sol high`: outcome-blind diagnosis or frozen-oracle conformance;
+  file/module count is no trigger.
 - `gpt-5.6-luna max`: default for frozen deterministic implementation/
   integration, tests/docs from frozen oracles, package/sync/rehash,
   sealed reruns, and repairs.
 
-At each boundary choose cheapest capable; ties use Luna. For frozen deterministic
-work use V1 `agent_type=luna_worker`, no history fork or model override; V2
-`task_name` is not that profile. Before effects verify durable rollout
-`agent_role/model/effort/parent_thread_id/multi_agent_version` with
-`scripts/validate_model_route.py`. Freeze edits, acceptance, evidence/exposure,
-budget and stop.
-The child preserves Sol owner, objective, cumulative budget and final terminal;
-it gains no science role or authority. Allow one repair per fingerprint, then
-return evidence to Sol. Never route protected/scientific/authority/ambiguous
-decisions to Luna.
+Choose cheapest capable; ties use Luna; role alone never selects effort. Freeze
+edits, acceptance, evidence/exposure, budget and stop. Prefer no-history V1
+`agent_type=luna_worker`. If absent but an existing-thread model override exists,
+use one contiguous `luna/max` turn with capsule and unique
+`LUNA_ROUTE_DISPATCH_ID=<id>`. Before effects validate named-child parent or
+same-thread thread/dispatch binding via
+`scripts/validate_model_route.py`; `task_name` is neither. Both preserve
+owner/objective/role/budget/terminal; no authority. One repair per
+fingerprint. Never route protected/scientific/authority/ambiguous decisions to
+Luna.
 
 ## 6. Preserve scientific hard controls
 

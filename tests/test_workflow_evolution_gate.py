@@ -51,6 +51,27 @@ def token_event(total: int) -> dict:
     }
 
 
+def dispatch_event(dispatch_id: str = "dispatch-1") -> dict:
+    return {
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": (
+                        "PASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
+                        "python3 controller_control_state.py "
+                        "await-successor-activation\n"
+                        f"dispatch_id={dispatch_id}"
+                    ),
+                }
+            ],
+        },
+    }
+
+
 class TokenDetectorTest(unittest.TestCase):
     def test_soft_threshold_requires_two_token_bearing_turns(self) -> None:
         self.assertEqual(decision(token_turns=1)["trigger"], "NONE")
@@ -91,7 +112,18 @@ class TokenDetectorTest(unittest.TestCase):
             rollout = root / "rollout.jsonl"
             events = [
                 token_event(99_000_000),
-                {"type": "response_item", "payload": {"dispatch_id": "dispatch-1"}},
+                dispatch_event(),
+                {"type": "event_msg", "payload": {"dispatch_id": "dispatch-1"}},
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": "dispatch-1 echoed"}
+                        ],
+                    },
+                },
                 token_event(12_500_000),
                 token_event(12_500_000),
             ]
@@ -136,6 +168,51 @@ class TokenDetectorTest(unittest.TestCase):
             self.assertEqual(payload["token_total"], SOFT_TOKEN_THRESHOLD)
             self.assertEqual(payload["token_turns"], 2)
             self.assertEqual(payload["trigger"], "SOFT")
+
+    def test_cli_rejects_two_canonical_dispatch_markers(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            rollout = root / "rollout.jsonl"
+            rollout.write_text(
+                "".join(
+                    json.dumps(event) + "\n"
+                    for event in (dispatch_event(), token_event(1), dispatch_event())
+                ),
+                encoding="utf-8",
+            )
+            database = root / "state.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO threads VALUES (?, ?, ?)",
+                ("thread-1", str(rollout), str(WORKSPACE)),
+            )
+            connection.commit()
+            connection.close()
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOL),
+                    "token-window",
+                    "--state-db",
+                    str(database),
+                    "--workspace-root",
+                    str(WORKSPACE),
+                    "--thread-id",
+                    "thread-1",
+                    "--dispatch-id",
+                    "dispatch-1",
+                    "--decision-output-count",
+                    "0",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("missing or ambiguous", json.loads(result.stdout)["error"])
 
     def test_cli_rejects_aris_and_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:

@@ -238,19 +238,35 @@ def _thread_record(db_path: Path, thread_id: str) -> tuple[Path, Path]:
     return Path(rows[0][0]), Path(rows[0][1])
 
 
-def _contains_dispatch(value: Any, dispatch_id: str) -> bool:
-    if isinstance(value, dict):
-        if value.get("dispatch_id") == dispatch_id:
-            return True
-        return any(_contains_dispatch(item, dispatch_id) for item in value.values())
-    if isinstance(value, list):
-        return any(_contains_dispatch(item, dispatch_id) for item in value)
-    if isinstance(value, str):
-        boundary = r"[A-Za-z0-9_.:-]"
-        return re.search(
-            rf"(?<!{boundary}){re.escape(dispatch_id)}(?!{boundary})", value
-        ) is not None
-    return False
+def _canonical_dispatch_marker(event: dict[str, Any], dispatch_id: str) -> bool:
+    """Match only the Controller-to-owner activation message, never later echoes."""
+
+    if event.get("type") != "response_item":
+        return False
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("type") != "message" or payload.get("role") != "user":
+        return False
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return False
+    text = "\n".join(
+        item["text"]
+        for item in content
+        if isinstance(item, dict)
+        and item.get("type") in {"input_text", "text"}
+        and isinstance(item.get("text"), str)
+    )
+    boundary = r"[A-Za-z0-9_.:-]"
+    exact_dispatch = re.search(
+        rf"(?<!{boundary}){re.escape(dispatch_id)}(?!{boundary})", text
+    )
+    return (
+        exact_dispatch is not None
+        and "PASS_MODEL_ROUTE:" in text
+        and "await-successor-activation" in text
+    )
 
 
 def _token_usage(event: dict[str, Any]) -> int | None:
@@ -282,7 +298,7 @@ def scan_token_window(rollout_path: Path, dispatch_id: str) -> tuple[int, int, i
                 event = json.loads(raw)
             except json.JSONDecodeError as exc:
                 raise GateError(f"invalid rollout JSON at line {line_number}") from exc
-            if dispatch_id in raw and _contains_dispatch(event, dispatch_id):
+            if dispatch_id in raw and _canonical_dispatch_marker(event, dispatch_id):
                 activation_lines.append(line_number)
             token_usage = _token_usage(event)
             if token_usage is not None:
