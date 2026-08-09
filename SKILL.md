@@ -190,13 +190,13 @@ Luna.
 - Enforce protected/public-test exposure isolation. Outcome-blind repair stays
   inside the unchanged contract and budget; after protected outcome access,
   apply the frozen stop and no-rescue rules.
-- Distinguish public-source review from strict result blindness. Opportunity
-  Search and ordinary public-source `R0` may read public primary methods,
-  results, appendices, and official-code documentation; those public results
-  are not the candidate's protected outcomes. Enable strict blindness only for
-  one prospectively named independence or anti-anchoring decision. Every fresh
-  strict-blind owner uses only validated capsule locators; external paths are
-  provenance, and a missing identity blocks before bytes. See
+- Distinguish public-source review from strict blindness. Opportunity Search and
+  ordinary `R0` may read public primary methods, results, appendices, and
+  official-code documentation; those public results are not candidate-protected.
+  Use strict blindness only for one prospective independence decision. Before
+  dispatch its fresh owner passes manifest `operational_access`, opens only
+  bound files, and runs exact helper/argv: no path discovery or parent/history
+  search. Missing identity blocks before bytes. See
   [research-integrity.md](references/research-integrity.md).
 - Bind evidence-bearing runs to code, config, data, environment, seed, and run
   identity. Preserve raw outputs, failures, anomalies, and deviations before

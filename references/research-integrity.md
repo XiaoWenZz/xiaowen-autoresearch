@@ -87,6 +87,23 @@ terminal, or separate research role. If it fails, the Audit is not dispatchable
 and no fresh owner is either. Do not launch an Audit to discover that its
 access tree is missing.
 
+The existing strict-result-blind manifest also carries exactly one compact
+`operational_access` object with `authority_readable_paths`, `helper_paths`,
+`locator_only_paths`, and `activation_argv`. Readable paths are canonical exact
+absolute regular non-symlink files; each helper is an exact `{path, sha256}`
+binding, is readable, and is a subset of that set. Locator-only identities are
+canonical absolute, unique, disjoint from readable paths, and are not stat'ed or
+opened. `activation_argv` is a non-empty JSON string array whose first token is
+a canonical absolute readable executable; it has no shell metacharacters,
+references a bound helper, and may contain other absolute paths only from the
+readable/locator union. Reject relative, duplicate, noncanonical,
+directory, special, symlink, missing-helper, hash-mismatch, or unbound paths
+before dispatch. Sensitive `.codex` memories, sessions, archived sessions,
+rollout history, and state databases are never readable; a prebound locator-only
+identity remains non-readable. The owner opens only these exact files: no
+runtime helper/path discovery, recursive or parent-root search, `$CODEX_HOME`,
+or old session/history traversal.
+
 The dispatch instruction may traverse only locators inside the validated
 capsule/safe tree. A path embedded in a readable document but outside that tree
 is provenance only and must not be followed; if a required identity is absent

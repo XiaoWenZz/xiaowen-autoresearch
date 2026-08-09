@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -481,6 +483,8 @@ class BoundaryValidatorsTest(unittest.TestCase):
                 safe_root.mkdir(parents=True)
             source = safe_root / "paper.md"
             source.write_text("method-only safe source\n", encoding="utf-8")
+            helper = case_root / "helper.py"
+            helper.write_text("print('safe helper')\n", encoding="utf-8")
             manifest = case_root / "manifest.json"
             ledger = case_root / "ledger.jsonl"
             ledger.write_text("", encoding="utf-8")
@@ -512,7 +516,29 @@ class BoundaryValidatorsTest(unittest.TestCase):
             elif case == "forbidden":
                 source.write_text("method-only SECRET result\n", encoding="utf-8")
                 entries[0]["sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
-            manifest.write_text(json.dumps({"entries": entries}) + "\n", encoding="utf-8")
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "entries": entries,
+                        "operational_access": {
+                            "authority_readable_paths": [
+                                str(source.resolve()),
+                                str(helper.resolve()),
+                            ],
+                            "helper_paths": [
+                                {
+                                    "path": str(helper.resolve()),
+                                    "sha256": hashlib.sha256(helper.read_bytes()).hexdigest(),
+                                }
+                            ],
+                            "locator_only_paths": [str((case_root / "future-output.json").resolve())],
+                            "activation_argv": [str(helper.resolve()), "--safe"],
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             return run(
                 FRAME_VALIDATOR,
                 "--manifest",
@@ -556,6 +582,217 @@ class BoundaryValidatorsTest(unittest.TestCase):
                     payload = json.loads(result.stdout)
                     self.assertEqual(payload["status"], "BLOCK_PRE_DISPATCH_ACCESS")
                     self.assertIn(expected, payload["safe_source_validation"]["reason"])
+
+    def test_strict_result_blind_operational_access_frame_is_exact_and_fail_closed(self) -> None:
+        def setup_case() -> tuple[Path, dict[str, object], Path, Path, Path, Path]:
+            case_root = Path(tempfile.mkdtemp())
+            self.addCleanup(shutil.rmtree, case_root, ignore_errors=True)
+            safe_root = case_root / "safe"
+            safe_root.mkdir()
+            source = safe_root / "paper.md"
+            source.write_text("method-only safe source\n", encoding="utf-8")
+            helper = case_root / "helper.py"
+            helper.write_text("print('safe helper')\n", encoding="utf-8")
+            ledger = case_root / "ledger.jsonl"
+            ledger.write_text("", encoding="utf-8")
+            source_path = str(source.resolve())
+            helper_path = str(helper.resolve())
+            payload: dict[str, object] = {
+                "entries": [
+                    {
+                        "paper_id": "P1",
+                        "confirmation_tier": "P",
+                        "path": "paper.md",
+                        "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                    }
+                ],
+                "operational_access": {
+                    "authority_readable_paths": [source_path, helper_path],
+                    "helper_paths": [
+                        {
+                            "path": helper_path,
+                            "sha256": hashlib.sha256(helper.read_bytes()).hexdigest(),
+                        }
+                    ],
+                    "locator_only_paths": [
+                        str((case_root / "future-output.json").resolve()),
+                        str((case_root / ".codex" / "state_5.sqlite").resolve()),
+                    ],
+                    "activation_argv": [helper_path, "--safe"],
+                },
+            }
+            manifest = case_root / "manifest.json"
+            return case_root, payload, manifest, ledger, safe_root, helper
+
+        def invoke(payload: dict[str, object], manifest: Path, ledger: Path, safe_root: Path) -> subprocess.CompletedProcess[str]:
+            manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            return run(
+                FRAME_VALIDATOR,
+                "--manifest",
+                manifest,
+                "--exposure-ledger",
+                ledger,
+                "--freeze-at",
+                "2026-07-21T00:00:00Z",
+                "--access-mode",
+                "strict_result_blind",
+                "--trusted-access-ledger",
+                ledger,
+                "--plan-frozen-at",
+                "2026-07-20T00:00:00Z",
+                "--safe-source-root",
+                safe_root,
+            )
+
+        case_root, payload, manifest, ledger, safe_root, helper = setup_case()
+        passing = invoke(payload, manifest, ledger, safe_root)
+        self.assertEqual(passing.returncode, 0, passing.stdout + passing.stderr)
+        passing_payload = json.loads(passing.stdout)
+        self.assertEqual(
+            passing_payload["operational_access_validation"]["status"],
+            "PASS_OPERATIONAL_ACCESS_FRAME",
+        )
+        self.assertEqual(
+            passing_payload["operational_access_validation"]["locator_only_path_count"],
+            2,
+        )
+
+        def expect_block(label: str, expected: str, mutate: object) -> None:
+            with self.subTest(case=label):
+                mutated = json.loads(json.dumps(payload))
+                mutate(mutated)
+                result = invoke(mutated, manifest, ledger, safe_root)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                body = json.loads(result.stdout)
+                self.assertEqual(body["status"], "BLOCK_PRE_DISPATCH_ACCESS")
+                self.assertIn(expected, body["operational_access_validation"]["reason"])
+
+        expect_block(
+            "missing operational frame",
+            "requires top-level operational_access object",
+            lambda body: body.pop("operational_access"),
+        )
+        other_helper = case_root / "other-helper.py"
+        other_helper.write_text("print('other')\n", encoding="utf-8")
+        expect_block(
+            "helper not readable",
+            "not in authority_readable_paths",
+            lambda body: body["operational_access"]["helper_paths"].__setitem__(
+                0,
+                {
+                    "path": str(other_helper.resolve()),
+                    "sha256": hashlib.sha256(other_helper.read_bytes()).hexdigest(),
+                },
+            ),
+        )
+        expect_block(
+            "safe source not readable",
+            "safe-tree file is not in authority_readable_paths",
+            lambda body: body["operational_access"]["authority_readable_paths"].remove(
+                str((safe_root / "paper.md").resolve())
+            ),
+        )
+        expect_block(
+            "directory broad parent",
+            "regular file, not a directory or special file",
+            lambda body: body["operational_access"]["authority_readable_paths"].__setitem__(
+                0, str(case_root.resolve())
+            ),
+        )
+        for sensitive_kind, sensitive_path in (
+            ("memories", case_root / ".codex" / "memories" / "record.md"),
+            ("state db", case_root / ".codex" / "state_5.sqlite"),
+        ):
+            sensitive_path.parent.mkdir(parents=True, exist_ok=True)
+            sensitive_path.write_text("history\n", encoding="utf-8")
+            expect_block(
+                f"sensitive {sensitive_kind}",
+                "sensitive .codex history/state path",
+                lambda body, path=sensitive_path: body["operational_access"]["authority_readable_paths"].__setitem__(
+                    0, str(path.resolve())
+                ),
+            )
+        symlink = case_root / "helper-alias.py"
+        symlink.symlink_to(helper)
+        expect_block(
+            "symlink",
+            "regular non-symlink file",
+            lambda body: body["operational_access"]["authority_readable_paths"].__setitem__(
+                0, str(symlink)
+            ),
+        )
+        special = case_root / "helper.pipe"
+        os.mkfifo(special)
+        expect_block(
+            "special file",
+            "regular file, not a directory or special file",
+            lambda body: body["operational_access"]["authority_readable_paths"].__setitem__(
+                0, str(special.resolve())
+            ),
+        )
+        expect_block(
+            "relative path",
+            "canonical and absolute",
+            lambda body: body["operational_access"]["authority_readable_paths"].__setitem__(
+                0, "paper.md"
+            ),
+        )
+        expect_block(
+            "noncanonical path",
+            "canonical and absolute",
+            lambda body: body["operational_access"]["authority_readable_paths"].__setitem__(
+                0, str(safe_root.resolve()) + "/./paper.md"
+            ),
+        )
+        source_path = str((safe_root / "paper.md").resolve())
+        expect_block(
+            "duplicate path",
+            "duplicates path",
+            lambda body: body["operational_access"]["authority_readable_paths"].__setitem__(
+                1, source_path
+            ),
+        )
+        expect_block(
+            "locator overlap",
+            "locator_only_paths must be disjoint",
+            lambda body: body["operational_access"]["locator_only_paths"].__setitem__(
+                0, source_path
+            ),
+        )
+        expect_block(
+            "helper hash mismatch",
+            "sha256 mismatch",
+            lambda body: body["operational_access"]["helper_paths"][0].__setitem__(
+                "sha256", "0" * 64
+            ),
+        )
+        expect_block(
+            "absolute argv unbound",
+            "absolute path is not in the bound readable/locator set",
+            lambda body: body["operational_access"]["activation_argv"].append(
+                str((case_root / "unbound.txt").resolve())
+            ),
+        )
+        expect_block(
+            "bare executable",
+            "executable must be a canonical absolute authority_readable_path",
+            lambda body: body["operational_access"]["activation_argv"].__setitem__(
+                0, "python3"
+            ),
+        )
+        locator_executable = payload["operational_access"]["locator_only_paths"][0]
+        expect_block(
+            "locator-only executable",
+            "executable must be a canonical absolute authority_readable_path",
+            lambda body: body["operational_access"]["activation_argv"].__setitem__(
+                0, locator_executable
+            ),
+        )
+        expect_block(
+            "activation shell metacharacter",
+            "shell metacharacters",
+            lambda body: body["operational_access"]["activation_argv"].append("--flag;echo"),
+        )
 
 
 if __name__ == "__main__":
