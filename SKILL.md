@@ -164,7 +164,7 @@ edits, acceptance, evidence/exposure, budget and stop. Prefer no-history V1
 `agent_type=luna_worker`. If absent but an existing-thread model override exists,
 use one contiguous `luna/max` turn with capsule and unique
 `LUNA_ROUTE_DISPATCH_ID=<id>`. Before effects validate named-child parent or
-same-thread thread/dispatch binding via
+same-thread thread/turn/dispatch via
 `scripts/validate_model_route.py`; `task_name` is neither. Both preserve
 owner/objective/role/budget/terminal; no authority. One repair per
 fingerprint. Never route protected/scientific/authority/ambiguous decisions to

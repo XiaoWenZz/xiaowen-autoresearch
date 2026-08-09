@@ -1064,7 +1064,7 @@ class SkillRouterTest(unittest.TestCase):
             "no-history V1 `agent_type=luna_worker`",
             "existing-thread model override",
             "`LUNA_ROUTE_DISPATCH_ID=<id>`",
-            "named-child parent or same-thread thread/dispatch binding",
+            "named-child parent or same-thread thread/turn/dispatch",
             "One repair per fingerprint",
             "Never route protected/scientific/authority/ambiguous decisions to Luna",
         ):
@@ -1196,6 +1196,7 @@ class SkillRouterTest(unittest.TestCase):
             "session_meta` plus current `turn_context",
             "same-thread fallback",
             "exact `session_meta.id`, latest `turn_context` model/effort",
+            "durable message metadata carries that same turn ID",
             "preserves objective, scientific role, cumulative budget and final terminal",
             "After protected-result exposure, never downgrade to Luna",
             "decision has been frozen into a deterministic oracle",

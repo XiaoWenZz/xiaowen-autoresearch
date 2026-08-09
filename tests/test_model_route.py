@@ -70,6 +70,8 @@ class ModelRouteTest(unittest.TestCase):
         route_dispatch_id: str = "luna-route-1",
         duplicate_marker: bool = False,
         stale_marker: bool = False,
+        marker_before_context: bool = False,
+        omit_marker_turn_id: bool = False,
         model: str = "gpt-5.6-luna",
         effort: str = "max",
         name: str = "same-thread-rollout.jsonl",
@@ -79,6 +81,11 @@ class ModelRouteTest(unittest.TestCase):
             "payload": {
                 "type": "message",
                 "role": "user",
+                "internal_chat_message_metadata_passthrough": (
+                    {} if omit_marker_turn_id else {
+                        "turn_id": "old-turn" if stale_marker else "turn-1"
+                    }
+                ),
                 "content": [
                     {
                         "type": "input_text",
@@ -90,7 +97,7 @@ class ModelRouteTest(unittest.TestCase):
         events = [
             {"type": "session_meta", "payload": {"id": thread_id}},
         ]
-        if stale_marker:
+        if stale_marker or marker_before_context:
             events.append(marker)
         events.append(
             {
@@ -99,10 +106,11 @@ class ModelRouteTest(unittest.TestCase):
                     "model": model,
                     "effort": effort,
                     "multi_agent_version": "v2",
+                    "turn_id": "turn-1",
                 },
             }
         )
-        if not stale_marker:
+        if not stale_marker and not marker_before_context:
             events.append(marker)
             if duplicate_marker:
                 events.append(marker)
@@ -186,7 +194,24 @@ class ModelRouteTest(unittest.TestCase):
                 ("gpt-5.6-luna", "max"),
             )
             self.assertEqual(receipt.thread_id, "executor-1")
+            self.assertEqual(receipt.turn_id, "turn-1")
             self.assertIsNone(receipt.agent_role)
+
+    def test_same_thread_luna_accepts_marker_before_context_in_same_turn(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_same_thread_rollout(
+                Path(raw), marker_before_context=True
+            )
+            receipt = load_rollout_receipt(
+                path,
+                action_class="frozen_deterministic",
+                context_eligible=True,
+                protected_exposed=False,
+                decision_ambiguity=False,
+                route_mode="same_thread",
+                expected_route_dispatch_id="luna-route-1",
+            )
+            self.assertEqual(receipt.turn_id, "turn-1")
 
     def test_same_thread_luna_rejects_wrong_thread_and_dispatch(self) -> None:
         receipt = self.luna_receipt(
@@ -195,6 +220,7 @@ class ModelRouteTest(unittest.TestCase):
             parent_thread_id=None,
             multi_agent_version="v2",
             thread_id="executor-1",
+            turn_id="turn-1",
             route_dispatch_id="luna-route-1",
         )
         with self.assertRaisesRegex(ValueError, "thread binding mismatch"):
@@ -228,6 +254,15 @@ class ModelRouteTest(unittest.TestCase):
                         name="duplicate.jsonl",
                     ),
                     "luna-route-2",
+                ),
+                (
+                    self.write_same_thread_rollout(
+                        root,
+                        route_dispatch_id="luna-route-3",
+                        omit_marker_turn_id=True,
+                        name="missing-turn-id.jsonl",
+                    ),
+                    "luna-route-3",
                 ),
             ):
                 with self.subTest(path=path), self.assertRaisesRegex(

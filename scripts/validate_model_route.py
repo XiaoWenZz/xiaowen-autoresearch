@@ -33,6 +33,7 @@ class RouteReceipt:
     parent_thread_id: str | None = None
     multi_agent_version: str | None = None
     thread_id: str | None = None
+    turn_id: str | None = None
     route_dispatch_id: str | None = None
 
 
@@ -87,6 +88,8 @@ def validate_receipt(
                     "Luna thread binding mismatch: "
                     f"expected={expected_thread_id} actual={receipt.thread_id}"
                 )
+            if not receipt.turn_id:
+                raise ValueError("Luna same-thread route is missing durable turn identity")
             if not expected_route_dispatch_id:
                 raise ValueError("Luna same-thread route requires an expected route dispatch")
             if receipt.route_dispatch_id != expected_route_dispatch_id:
@@ -145,13 +148,18 @@ def load_rollout_receipt(
 
     session_meta: dict[str, Any] | None = None
     turn_context: dict[str, Any] | None = None
-    turn_context_line: int | None = None
-    user_messages: list[tuple[int, str]] = []
+    user_messages: list[tuple[int, str, str | None]] = []
     with rollout_path.open("r", encoding="utf-8") as handle:
         for line_number, raw in enumerate(handle, start=1):
             if not any(
                 marker in raw
                 for marker in ('"session_meta"', '"turn_context"', '"response_item"')
+            ):
+                continue
+            if '"response_item"' in raw and (
+                route_mode != "same_thread"
+                or not expected_route_dispatch_id
+                or expected_route_dispatch_id not in raw
             ):
                 continue
             try:
@@ -168,16 +176,20 @@ def load_rollout_receipt(
                 session_meta = payload
             elif event.get("type") == "turn_context":
                 turn_context = payload
-                turn_context_line = line_number
             elif event.get("type") == "response_item":
                 text = _user_message_text(event)
                 if text:
-                    user_messages.append((line_number, text))
+                    metadata = payload.get("internal_chat_message_metadata_passthrough")
+                    message_turn_id = (
+                        metadata.get("turn_id") if isinstance(metadata, dict) else None
+                    )
+                    user_messages.append((line_number, text, message_turn_id))
     if session_meta is None or turn_context is None:
         raise ValueError("rollout is missing session_meta or turn_context routing metadata")
 
     model = turn_context.get("model")
     effort = turn_context.get("effort")
+    turn_id = turn_context.get("turn_id")
     if not isinstance(model, str) or not model:
         raise ValueError("turn_context.model is missing")
     if not isinstance(effort, str) or not effort:
@@ -186,11 +198,12 @@ def load_rollout_receipt(
     if route_mode == "same_thread":
         if not expected_route_dispatch_id:
             raise ValueError("same-thread rollout load requires an expected route dispatch")
-        assert turn_context_line is not None
+        if not isinstance(turn_id, str) or not turn_id:
+            raise ValueError("same-thread turn_context.turn_id is missing")
         matches = [
             line_number
-            for line_number, text in user_messages
-            if line_number > turn_context_line
+            for line_number, text, message_turn_id in user_messages
+            if message_turn_id == turn_id
             and _has_exact_route_dispatch(text, expected_route_dispatch_id)
         ]
         if len(matches) != 1:
@@ -209,6 +222,7 @@ def load_rollout_receipt(
         parent_thread_id=session_meta.get("parent_thread_id"),
         multi_agent_version=session_meta.get("multi_agent_version"),
         thread_id=session_meta.get("id"),
+        turn_id=turn_id if isinstance(turn_id, str) else None,
         route_dispatch_id=route_dispatch_id,
     )
 
@@ -272,6 +286,7 @@ def main() -> int:
         suffix = (
             " route_mode=same_thread"
             f" thread_id={receipt.thread_id}"
+            f" turn_id={receipt.turn_id}"
             f" route_dispatch_id={receipt.route_dispatch_id}"
         )
     elif receipt.agent_role is not None:

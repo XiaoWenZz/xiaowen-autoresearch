@@ -605,8 +605,10 @@ The Luna receipt authority is durable rollout metadata, never worker prose. A
 named child requires `session_meta` plus current `turn_context` with
 `agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact
 `parent_thread_id`, and `multi_agent_version=v1`. A same-thread fallback requires
-the exact `session_meta.id`, latest `turn_context` model/effort, and exactly one
-matching `LUNA_ROUTE_DISPATCH_ID` user message after that context. Inspect the
+the exact `session_meta.id`, latest `turn_context` model/effort/turn ID, and
+exactly one matching `LUNA_ROUTE_DISPATCH_ID` user message whose durable message
+metadata carries that same turn ID. Do not infer turn ownership from file order:
+queued user input may be serialized before a same-turn context record. Inspect the
 dispatcher before spending a spawn: absence of `agent_type` makes only the named
 profile unavailable, not a separately exposed existing-thread Luna route. Do not
 substitute `task_name` or create a user-visible task merely to change models. A
