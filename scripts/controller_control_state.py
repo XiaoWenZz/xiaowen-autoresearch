@@ -24,6 +24,7 @@ SCHEMA_VERSION = 5
 LIFECYCLES = {"DELEGATED", "BLOCKED", "DONE"}
 CANDIDATE_STATES = {"OPEN", "BLOCKED", "CLOSED"}
 BLOCKER_KINDS = {"EXTERNAL_FACT", "UNAVAILABLE_AUTHORITY"}
+EXECUTOR_CONTINUATION_KINDS = {"CARRIER", "ZERO_UTILITY_IMPLEMENTATION"}
 CLOSURE_BASES = {
     "VALID_SCIENTIFIC_NEGATIVE",
     "PROSPECTIVE_SCOPED_MPE_FAILURE",
@@ -191,6 +192,65 @@ def _sha256(value: Any, where: str) -> str:
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
         raise StateError(f"{where} must be a lowercase SHA-256")
     return value
+
+
+def _validate_blocker_attestation(
+    blocker: dict[str, Any],
+    where: str,
+) -> tuple[str, str] | None:
+    """Validate the optional v5 external blocker attestation shape.
+
+    Existing BLOCKED snapshots may omit both attestation fields.  Once either
+    field is present, however, both are required and the reason/path/digest
+    tuple is closed to the external-impossibility allowlist and immutable-path
+    grammar.  Reading and digest verification are deliberately performed by
+    the cold absorption command after the pending terminal is bound.
+    """
+    has_reason = "reason_code" in blocker
+    has_evidence = "evidence_ref" in blocker
+    if has_reason != has_evidence:
+        raise StateError(
+            f"{where}.reason_code and evidence_ref must be provided together"
+        )
+    if not has_reason:
+        return None
+    reason_code = blocker["reason_code"]
+    if not isinstance(reason_code, str) or reason_code not in EXTERNAL_IMPOSSIBILITY_REASONS:
+        raise StateError(
+            f"{where}.reason_code must be one of {sorted(EXTERNAL_IMPOSSIBILITY_REASONS)}"
+        )
+    evidence_ref = blocker["evidence_ref"]
+    if not isinstance(evidence_ref, str):
+        raise StateError(f"{where}.evidence_ref must be an immutable path#sha256 reference")
+    match = re.fullmatch(r"(.+)#sha256=([0-9a-f]{64})", evidence_ref)
+    if match is None:
+        raise StateError(
+            f"{where}.evidence_ref must match <absolute-path>#sha256=<64 lowercase hex>"
+        )
+    normalized_path = _terminal_path(match.group(1), f"{where}.evidence_ref path")
+    return str(normalized_path), match.group(2)
+
+
+def _verify_blocker_attestation(
+    blocker: dict[str, Any],
+    *,
+    pending_terminal_path: str,
+    where: str,
+) -> None:
+    """Read and hash a new external blocker witness before the absorption CAS."""
+    parsed = _validate_blocker_attestation(blocker, where)
+    if parsed is None:
+        raise StateError(f"{where} requires reason_code and evidence_ref")
+    evidence_path, expected_digest = parsed
+    pending_path = str(_terminal_path(pending_terminal_path, "pending terminal_path"))
+    if evidence_path == pending_path:
+        raise StateError(
+            f"{where}.evidence_ref must not reference the absorbed worker terminal"
+        )
+    data = _read_immutable_terminal(Path(evidence_path))
+    actual_digest = hashlib.sha256(data).hexdigest()
+    if actual_digest != expected_digest:
+        raise StateError(f"{where}.evidence_ref digest does not match immutable evidence")
 
 
 def _terminal_path(value: Any, where: str) -> PurePosixPath:
@@ -787,6 +847,67 @@ def _validate_owner_transition(
         raise StateError("WRITE_OWNERSHIP_TRANSFER requires a canonical role change")
 
 
+def _validate_executor_continuation(
+    *,
+    continuation_kind: Any,
+    old_owner_thread_id: str,
+    new_owner_thread_id: str,
+    old_owner_role: str,
+    new_owner_role: str,
+    new_candidate_state: str,
+    new_scientific_outcome: str,
+    new_remote_job: dict[str, Any] | None,
+    previous_startup_authority: Any,
+    resulting_startup_authority: dict[str, Any] | None,
+) -> None:
+    """Enforce the non-persistent Executor successor continuation gate."""
+    if new_owner_role != "Executor":
+        if continuation_kind is not None:
+            raise StateError(
+                "executor-continuation-kind is allowed only for an Executor successor"
+            )
+        return
+    if continuation_kind not in EXECUTOR_CONTINUATION_KINDS:
+        raise StateError(
+            "Executor successor requires --executor-continuation-kind CARRIER or "
+            "ZERO_UTILITY_IMPLEMENTATION"
+        )
+    if continuation_kind == "CARRIER":
+        if resulting_startup_authority is None:
+            raise StateError("CARRIER Executor successor requires startup_chain_authority")
+        return
+
+    if (
+        new_owner_thread_id != old_owner_thread_id
+        or old_owner_role != "Executor"
+        or new_owner_role != "Executor"
+    ):
+        raise StateError(
+            "ZERO_UTILITY_IMPLEMENTATION requires the same Executor owner thread and role"
+        )
+    if new_candidate_state != "OPEN":
+        raise StateError(
+            "ZERO_UTILITY_IMPLEMENTATION requires candidate_state OPEN"
+        )
+    if new_scientific_outcome != "UNOBSERVED":
+        raise StateError(
+            "ZERO_UTILITY_IMPLEMENTATION requires scientific_outcome UNOBSERVED"
+        )
+    if new_remote_job is not None:
+        raise StateError(
+            "ZERO_UTILITY_IMPLEMENTATION cannot bind a new remote job"
+        )
+    if previous_startup_authority is None:
+        if resulting_startup_authority is not None:
+            raise StateError(
+                "ZERO_UTILITY_IMPLEMENTATION cannot introduce startup_chain_authority"
+            )
+    elif resulting_startup_authority != previous_startup_authority:
+        raise StateError(
+            "ZERO_UTILITY_IMPLEMENTATION may only retain the existing startup_chain_authority"
+        )
+
+
 def validate_state(state: Any) -> dict[str, Any]:
     if not isinstance(state, dict):
         raise StateError("state must be a JSON object")
@@ -942,6 +1063,7 @@ def validate_state(state: Any) -> dict[str, Any]:
             deadline = _timestamp(blocker["resolution_deadline"], f"{where}.blocker.resolution_deadline")
             if has_check and _timestamp(blocker["next_check_at"], f"{where}.blocker.next_check_at") > deadline:
                 raise StateError(f"{where}.blocker.next_check_at must not exceed resolution_deadline")
+            _validate_blocker_attestation(blocker, f"{where}.blocker")
         else:
             if "completion_binding" in objective:
                 raise StateError(f"{where} completed objective cannot retain completion_binding")
@@ -1538,6 +1660,7 @@ def _objective_guard_signature(objective: dict[str, Any]) -> tuple[Any, ...]:
         objective.get("completion_binding"),
         objective.get("startup_chain_authority"),
         objective.get("legacy_terminal_schema"),
+        hashlib.sha256(canonical_bytes(objective.get("blocker"))).hexdigest(),
     )
 
 
@@ -2488,9 +2611,57 @@ def cmd_validate(args: argparse.Namespace) -> None:
     print(json.dumps({"status": "PASS", "revision": state["revision"]}, sort_keys=True))
 
 
+def active_state_projection(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the routine Controller view without replay-only history bodies."""
+    active_objectives = [
+        copy.deepcopy(item)
+        for item in state["objectives"]
+        if item["lifecycle"] != "DONE"
+    ]
+    closed_objective_ids = [
+        item["objective_id"]
+        for item in state["objectives"]
+        if item["lifecycle"] == "DONE"
+    ]
+    absorbed_events = state["absorbed_terminal_event_ids"]
+    absorbed_advisories = state["absorbed_advisory_scopes"]
+    return {
+        "projection": "active",
+        "schema_version": state["schema_version"],
+        "revision": state["revision"],
+        "updated_at": state["updated_at"],
+        "canonical_state_sha256": hashlib.sha256(canonical_bytes(state)).hexdigest(),
+        "controller": copy.deepcopy(state["controller"]),
+        "objectives": active_objectives,
+        "managed_roles": copy.deepcopy(state["managed_roles"]),
+        "remote_jobs": copy.deepcopy(state["remote_jobs"]),
+        "advisory_reads": copy.deepcopy(state["advisory_reads"]),
+        "pending_absorptions": copy.deepcopy(state["pending_absorptions"]),
+        "history_summary": {
+            "closed_objectives": {
+                "count": len(closed_objective_ids),
+                "ids_sha256": hashlib.sha256(
+                    canonical_bytes(closed_objective_ids)
+                ).hexdigest(),
+            },
+            "absorbed_terminal_event_ids": {
+                "count": len(absorbed_events),
+                "sha256": hashlib.sha256(canonical_bytes(absorbed_events)).hexdigest(),
+            },
+            "absorbed_advisory_scopes": {
+                "count": len(absorbed_advisories),
+                "sha256": hashlib.sha256(
+                    canonical_bytes(absorbed_advisories)
+                ).hexdigest(),
+            },
+        },
+    }
+
+
 def cmd_show(args: argparse.Namespace) -> None:
     state = read_state(Path(args.state))
-    print(canonical_bytes(state).decode("utf-8"), end="")
+    output = state if args.projection == "full" else active_state_projection(state)
+    print(canonical_bytes(output).decode("utf-8"), end="")
 
 
 def _validate_committed_successor(
@@ -3212,6 +3383,11 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         raise StateError(
             "new completion terminal_event_id is already pending or absorbed"
         )
+    executor_continuation_kind = getattr(args, "executor_continuation_kind", None)
+    if args.new_owner_role != "Executor" and executor_continuation_kind is not None:
+        raise StateError(
+            "executor-continuation-kind is allowed only for an Executor successor"
+        )
     startup_authority_json = getattr(args, "new_startup_chain_authority_json", None)
     requested_startup_authority = None
     if startup_authority_json is not None:
@@ -3281,6 +3457,18 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         fresh_thread_reason=fresh_thread_reason,
         fresh_thread_evidence_ref=fresh_thread_evidence_ref,
         controller_thread_id=state["controller"]["thread_id"],
+    )
+    _validate_executor_continuation(
+        continuation_kind=executor_continuation_kind,
+        old_owner_thread_id=args.old_owner_thread_id,
+        new_owner_thread_id=args.new_owner_thread_id,
+        old_owner_role=old_roles[0]["role"],
+        new_owner_role=args.new_owner_role,
+        new_candidate_state=args.new_candidate_state,
+        new_scientific_outcome=args.new_scientific_outcome,
+        new_remote_job=new_remote_job,
+        previous_startup_authority=objective.get("startup_chain_authority"),
+        resulting_startup_authority=startup_authority,
     )
     if uses_fresh_thread and any(
         role["thread_id"] == args.new_owner_thread_id for role in roles
@@ -3492,15 +3680,22 @@ def cmd_absorb_and_block(args: argparse.Namespace) -> None:
         raise StateError("old owner does not match delegated objective")
     if args.terminal_event_id in state["absorbed_terminal_event_ids"]:
         raise StateError("terminal_event_id is already absorbed")
+    blocker = json.loads(args.blocker_json)
+    if not isinstance(blocker, dict):
+        raise StateError("blocker_json must be an object")
+    if _validate_blocker_attestation(blocker, "blocker") is None:
+        raise StateError("blocker requires reason_code and evidence_ref")
     pending = _require_absorbable_pending(
         state,
         objective=objective,
         terminal_event_id=args.terminal_event_id,
         old_owner_thread_id=args.old_owner_thread_id,
     )
-    blocker = json.loads(args.blocker_json)
-    if not isinstance(blocker, dict):
-        raise StateError("blocker_json must be an object")
+    _verify_blocker_attestation(
+        blocker,
+        pending_terminal_path=pending["terminal_path"],
+        where="blocker",
+    )
     if objective.get("advisory_blocking_gate") is not None:
         raise StateError("external blocking cannot bypass a high-risk advisory gate")
     _clear_owned_jobs(
@@ -3553,10 +3748,15 @@ def cmd_absorb_and_block(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name, handler in (("validate", cmd_validate), ("show", cmd_show)):
-        sub = subparsers.add_parser(name)
-        sub.add_argument("--state", required=True)
-        sub.set_defaults(handler=handler)
+    validate = subparsers.add_parser("validate")
+    validate.add_argument("--state", required=True)
+    validate.set_defaults(handler=cmd_validate)
+    show = subparsers.add_parser("show")
+    show.add_argument("--state", required=True)
+    show.add_argument(
+        "--projection", choices=("active", "full"), default="active"
+    )
+    show.set_defaults(handler=cmd_show)
     await_activation = subparsers.add_parser("await-successor-activation")
     await_activation.add_argument("--state", required=True)
     await_activation.add_argument("--minimum-revision", type=int, required=True)
@@ -3700,6 +3900,10 @@ def build_parser() -> argparse.ArgumentParser:
     activate.add_argument("--fresh-thread-reason", choices=sorted(FRESH_THREAD_REASONS))
     activate.add_argument("--fresh-thread-evidence-ref")
     activate.add_argument("--new-owner-role", choices=sorted(MANAGED_ROLE_KINDS), required=True)
+    activate.add_argument(
+        "--executor-continuation-kind",
+        choices=sorted(EXECUTOR_CONTINUATION_KINDS),
+    )
     activate.add_argument("--new-owner-state", choices=sorted(ROLE_STATES), required=True)
     activate.add_argument("--new-owner-title", required=True)
     activate.add_argument("--new-cursor")

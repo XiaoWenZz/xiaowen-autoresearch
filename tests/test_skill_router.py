@@ -16,6 +16,9 @@ PORTFOLIO_SEARCH = ROOT / "references" / "portfolio-search.md"
 PORTFOLIO_LANES = ROOT / "references" / "portfolio-lanes.md"
 EXTERNAL_PROMPTS = ROOT / "references" / "external-opportunity-search-prompts.md"
 STATE_SCHEMA = ROOT / "references" / "state-schema.md"
+REMOTE_EXECUTION_OVERLAY = (
+    ROOT.parent / "workspace-overlay" / "experiments" / "scripts" / "REMOTE_EXECUTION.md"
+)
 WORKSPACE_AGENTS_VALUE = os.environ.get("XAR_WORKSPACE_AGENTS")
 WORKSPACE_AGENTS = Path(WORKSPACE_AGENTS_VALUE) if WORKSPACE_AGENTS_VALUE else None
 EXPERIMENTS_AGENTS_VALUE = os.environ.get("XAR_EXPERIMENTS_AGENTS")
@@ -101,7 +104,7 @@ class SkillRouterTest(unittest.TestCase):
             "at most one terminal only when durable evidence is genuinely needed",
             "Local source/literature/code/workflow audits",
             "bounded Pro batches, and one-shot Pro closure advisory remain Lite",
-            "Never retrofit Managed ceremony onto Lite work",
+            "never retrofit Managed ceremony onto Lite work",
             "`Lite` removes coordination machinery, not section 6 hard controls",
         )
         for phrase in required:
@@ -291,6 +294,7 @@ class SkillRouterTest(unittest.TestCase):
             "previously bound exact gate",
             "locally absorbed validation",
             "authority by agreement",
+            "one hashed review bundle",
             "complete live Skill",
             "every applicable `AGENTS.md`",
             "candidate diff/validation",
@@ -325,10 +329,13 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(source="router", phrase=phrase):
                 self.assertIn(phrase, router)
         for phrase in (
-            "exact-hashed authority bundle, not a summary-only prompt",
+            "exact-hashed full authority bundle",
             "complete current Skill directory",
             "every applicable parent-to-child `AGENTS.md`",
-            "candidate diff and validation",
+            "candidate diff/validation",
+            "prior full bundle hash",
+            "every applicable authority hash are unchanged",
+            "Package only Git-tracked Skill files",
             "Name every exclusion and hash the files actually sent",
             "rather than creating a packet registry or artifact family",
         ):
@@ -343,7 +350,7 @@ class SkillRouterTest(unittest.TestCase):
             "Controller detects and routes a Pro trigger but must not author the prompt or adjudicate the answer",
             "Explorer owns source/neighbor/reduction/formulation",
             "signal-versus-implementation",
-            "skip only deterministic repair with no decision ambiguity",
+            "Use Pro only for one named unresolved decision-critical uncertainty",
         ):
             with self.subTest(source="router", phrase=phrase):
                 self.assertIn(phrase, router)
@@ -369,7 +376,7 @@ class SkillRouterTest(unittest.TestCase):
         for phrase in (
             "freeze one closure packet in the existing decision record",
             "`closure_risk=LOW|HIGH`",
-            "Do not create a new artifact family",
+            "do not create a new artifact family",
             "`ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, carrier/access failure, search exhaustion, missing sources, and incomplete neighbor work are not scientific closures",
         ):
             with self.subTest(router_phrase=phrase):
@@ -544,7 +551,7 @@ class SkillRouterTest(unittest.TestCase):
         for phrase in (
             "baseline identity/fairness/constructability",
             "`R1` makes the real carrier and baseline runnable without utility",
-            "A first descriptive `R2` freezes exact identity/exposure",
+            "a first descriptive `R2` freezes exact identity/exposure",
             "Confirmatory, superiority, powered-negative, or closure claims additionally require complete power",
         ):
             with self.subTest(router_phrase=phrase):
@@ -635,7 +642,10 @@ class SkillRouterTest(unittest.TestCase):
             "Keep the Controller logically singleton while allowing physical context rollover",
             "compact receipt fields",
             "dispatch receipt, lease epoch, contract revision",
-            "rolling 20-event Controller input median",
+            "at least 8 samples have median above 96000",
+            "show --projection active",
+            "without paying the full reload cost",
+            "show --projection full",
             "`physical_controller_context_epoch`",
             "never delays terminal absorption",
             "operational efficiency alarms, never scientific acceptance or closure gates",
@@ -1017,7 +1027,7 @@ class SkillRouterTest(unittest.TestCase):
             "complete record only for an unresolved decision-critical contradiction",
             "never load a prior raw transcript",
             "Never collapse `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`, `CARRIER_STOP`, or `UNOBSERVED` into a scientific negative",
-            "A contract change creates a new candidate/version and preserves the old records",
+            "A contract change creates a new candidate/version and preserves old records",
             "no data protocol, capsule, schema, lifecycle, context-bootstrap, automation or evidence substitute",
             "cannot change the research contract, metric, seed, budget, stop rule, or protected/outcome boundary",
         ):
@@ -1105,7 +1115,7 @@ class SkillRouterTest(unittest.TestCase):
             "role alone never selects effort",
             "named no-history `agent_type=luna_worker`",
             "existing-thread model override",
-            "`LUNA_ROUTE_DISPATCH_ID=<id>`",
+            "--route-dispatch-id <id>",
             "named-child parent or same-thread thread/turn/dispatch",
             "One repair per fingerprint",
             "Never route protected/scientific/authority/ambiguous decisions to Luna",
@@ -1160,6 +1170,56 @@ class SkillRouterTest(unittest.TestCase):
         self.assertNotIn("simple outcome-invariant repair only", router)
         self.assertNotIn("simple outcome-invariant repair only", orchestration)
 
+    def test_same_thread_luna_prompt_uses_canonical_builder_before_delivery(self) -> None:
+        orchestration = flat(ORCHESTRATION)
+        for phrase in (
+            "existing canonical `scripts/validate_model_route.py` builder CLI",
+            "--build-same-thread-prompt --route-dispatch-id <id> --capsule-path <path>",
+            "using the existing capsule",
+            "send its stdout verbatim",
+            "exactly one marker",
+            "missing or duplicate builder/marker fails before delivery",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_readiness_replay_keeps_whole_chain_and_byte_digest_boundaries(self) -> None:
+        router = flat(SKILL)
+        for phrase in (
+            "`IMPLEMENTATION_READY`/whole-chain readiness",
+            "production entrypoint -> productive carrier -> protected sealing -> analysis -> action routing",
+            "construction/bundle digests from actual bytes",
+            "dispatch capsule",
+            "Synthetic KAT is prefix-only diagnostic",
+            "never complete carrier readiness",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, router)
+
+    def test_remote_overlay_selects_one_host_and_launcher_before_utility(self) -> None:
+        if not REMOTE_EXECUTION_OVERLAY.is_file():
+            self.skipTest(f"overlay not present: {REMOTE_EXECUTION_OVERLAY}")
+        text = " ".join(REMOTE_EXECUTION_OVERLAY.read_text(encoding="utf-8").split())
+        for phrase in (
+            "select exactly one feasible host and one launcher",
+            "most recent valid facts",
+            "hardware, compatibility, deadline and",
+            "frozen-ceiling constraints",
+            "Prepare exactly one launch path",
+            "named external/capability failure before utility",
+            "scientific identity",
+            "commit/config",
+            "seed",
+            "ceiling",
+            "metric",
+            "baseline",
+            "stop rules",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, text)
+        self.assertNotIn("evaluate both", text)
+        self.assertNotIn("Prepare two launch paths", text)
+
     def test_workflow_evolution_completion_requires_live_install(self) -> None:
         router = flat(SKILL)
         orchestration = flat(ORCHESTRATION)
@@ -1183,6 +1243,16 @@ class SkillRouterTest(unittest.TestCase):
             "not a new callback, receipt family, state field, watcher, heartbeat, registry, role, or lifecycle",
         ):
             with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_internal_portfolio_ordering_cannot_be_parked_as_blocked(self) -> None:
+        orchestration = flat(ORCHESTRATION)
+        for phrase in (
+            "Internal portfolio sequencing is never a blocker authority",
+            "does not satisfy `EXTERNAL_FACT` or `UNAVAILABLE_AUTHORITY`",
+            "do not park it as `BLOCKED`",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
                 self.assertIn(phrase, orchestration)
 
     def test_workflow_evolution_detection_is_event_driven_shadow_and_rule_aware(self) -> None:
@@ -1482,7 +1552,7 @@ class SkillRouterTest(unittest.TestCase):
             "Confirmatory, superiority, powered-negative, or closure claims additionally require complete power",
             "Outcome-blind repair stays inside the unchanged contract and budget",
             "after protected outcome access",
-            "Before scientific `R3`, `R2` freezes",
+            "before scientific `R3`, `R2` freezes",
             "public primary methods, results, appendices, and official-code documentation",
             "one verified complete witness",
             "Pro and same-model review are advisory",
@@ -1559,7 +1629,7 @@ class SkillRouterTest(unittest.TestCase):
 
     def test_documented_helpers_exist_and_exclude_capsule_helper(self) -> None:
         text = SKILL.read_text(encoding="utf-8")
-        helpers = set(re.findall(r"python3 (scripts/[^ ]+\.py) --help", text))
+        helpers = set(re.findall(r"scripts/[A-Za-z0-9_]+\.py", text))
         self.assertGreater(len(helpers), 0)
         self.assertNotIn("scripts/context_capsule.py", helpers)
         for relative in helpers:

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from scripts.controller_control_state import (
     StateError,
+    active_state_projection,
     cmd_absorb_and_block,
     cmd_absorb_nonblocking_advisory,
     canonical_bytes,
@@ -132,6 +133,51 @@ def base_state(terminal_path: str = "/private/tmp/TERM-AUTHORITY-1.json") -> dic
     }
 
 
+class ActiveProjectionTest(unittest.TestCase):
+    def test_active_projection_omits_replay_history_bodies(self) -> None:
+        state = base_state()
+        state["absorbed_terminal_event_ids"] = [
+            f"TERM-ABSORBED-{index:04d}" for index in range(330)
+        ]
+        state["objectives"].append(
+            {
+                "objective_id": "objective-closed",
+                "candidate_id": "candidate-closed",
+                "candidate_state": "CLOSED",
+                "stage": "SCOPED_CLOSE",
+                "scientific_outcome": "PRESERVED_IN_CANONICAL_STATE_ONLY",
+                "lifecycle": "DONE",
+                "next_action": "NONE",
+                "owner_thread_id": None,
+                "owner_role": None,
+                "owner_state": None,
+                "completion_binding": None,
+                "blocker": None,
+            }
+        )
+
+        projection = active_state_projection(state)
+
+        self.assertEqual(projection["projection"], "active")
+        self.assertEqual(
+            [item["objective_id"] for item in projection["objectives"]],
+            ["objective-1"],
+        )
+        self.assertNotIn("absorbed_terminal_event_ids", projection)
+        self.assertNotIn("absorbed_advisory_scopes", projection)
+        self.assertEqual(
+            projection["history_summary"]["absorbed_terminal_event_ids"]["count"],
+            330,
+        )
+        self.assertEqual(
+            projection["history_summary"]["closed_objectives"]["count"], 1
+        )
+        self.assertLess(
+            len(canonical_bytes(projection)),
+            len(canonical_bytes(state)) // 2,
+        )
+
+
 def observe_and_verify(path: Path, revision: int, objective_id: str = "objective-1") -> int:
     state = read_state(path)
     objective = next(item for item in state["objectives"] if item["objective_id"] == objective_id)
@@ -202,6 +248,7 @@ def successor_args(**overrides: object) -> object:
         "fresh_thread_reason": None,
         "fresh_thread_evidence_ref": None,
         "new_owner_role": "Executor",
+        "executor_continuation_kind": "ZERO_UTILITY_IMPLEMENTATION",
         "new_owner_state": "ACTIVE",
         "new_owner_title": "Executor · Candidate Two · ACTIVE",
         "new_cursor": "cursor:activation",
@@ -1535,12 +1582,17 @@ class ControllerControlStateTest(unittest.TestCase):
     def test_activate_successor_atomically_prebinds_one_remote_job(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
-            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            state = base_state()
+            state["objectives"][0]["startup_chain_authority"] = sealed_startup_authority(
+                Path(tmp), suffix="remote-job"
+            )
+            revision = write_and_verify(path, state, "TERM-AUTHORITY-1")
             job = remote_job()
             cmd_activate_successor(
                 successor_args(
                     state=str(path),
                     expected_revision=revision,
+                    executor_continuation_kind="CARRIER",
                     new_remote_job_json=json.dumps(job),
                 )
             )
@@ -1549,13 +1601,18 @@ class ControllerControlStateTest(unittest.TestCase):
     def test_activate_successor_rejects_remote_job_for_wrong_owner(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
-            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            state = base_state()
+            state["objectives"][0]["startup_chain_authority"] = sealed_startup_authority(
+                Path(tmp), suffix="wrong-owner"
+            )
+            revision = write_and_verify(path, state, "TERM-AUTHORITY-1")
             job = remote_job(owner_thread_id="wrong-owner")
             with self.assertRaisesRegex(StateError, "remote job owner_thread_id mismatch"):
                 cmd_activate_successor(
                     successor_args(
                         state=str(path),
                         expected_revision=revision,
+                        executor_continuation_kind="CARRIER",
                         new_remote_job_json=json.dumps(job),
                     )
                 )
@@ -1632,6 +1689,7 @@ class ControllerControlStateTest(unittest.TestCase):
                         expected_revision=revision,
                         new_owner_thread_id="worker-2",
                         new_owner_role="Audit",
+                        executor_continuation_kind=None,
                         new_owner_title="Audit · Candidate Two · ACTIVE",
                         fresh_thread_reason="VERIFIED_CONTEXT_ISOLATION_REQUIRED",
                         fresh_thread_evidence_ref="terminal://context-rollover",
@@ -1645,6 +1703,7 @@ class ControllerControlStateTest(unittest.TestCase):
                         new_owner_thread_id="worker-1",
                         fresh_thread_reason=None,
                         new_owner_role="Audit",
+                        executor_continuation_kind=None,
                         new_owner_title="Audit · Candidate Two · ACTIVE",
                     )
                 )
@@ -1652,12 +1711,17 @@ class ControllerControlStateTest(unittest.TestCase):
     def test_activate_successor_allows_evidenced_same_role_context_rollover(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
-            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            state = base_state()
+            state["objectives"][0]["startup_chain_authority"] = sealed_startup_authority(
+                Path(tmp), suffix="context-rollover"
+            )
+            revision = write_and_verify(path, state, "TERM-AUTHORITY-1")
             cmd_activate_successor(
                 successor_args(
                     state=str(path),
                     expected_revision=revision,
                     new_owner_thread_id="worker-2",
+                    executor_continuation_kind="CARRIER",
                     fresh_thread_reason="VERIFIED_CONTEXT_ISOLATION_REQUIRED",
                     fresh_thread_evidence_ref="terminal://context-epoch-2",
                 )
@@ -1784,6 +1848,7 @@ class ControllerControlStateTest(unittest.TestCase):
                     state=str(path),
                     expected_revision=revision,
                     terminal_event_id="TERM-STARTUP-AUTHORITY",
+                    executor_continuation_kind="CARRIER",
                     new_startup_chain_authority_json=json.dumps(authority),
                 )
             )
@@ -2138,6 +2203,7 @@ class ControllerControlStateTest(unittest.TestCase):
                         state=str(path),
                         expected_revision=revision,
                         terminal_event_id="TERM-STARTUP-MONOTONIC",
+                        executor_continuation_kind="CARRIER",
                         new_startup_chain_authority_json=json.dumps(shrunk),
                     )
                 )
@@ -2153,6 +2219,7 @@ class ControllerControlStateTest(unittest.TestCase):
                         state=str(path),
                         expected_revision=revision,
                         terminal_event_id="TERM-STARTUP-MONOTONIC",
+                        executor_continuation_kind="CARRIER",
                         new_startup_chain_authority_json=json.dumps(replacement),
                     )
                 )
@@ -2174,6 +2241,7 @@ class ControllerControlStateTest(unittest.TestCase):
                     state=str(path),
                     expected_revision=revision,
                     terminal_event_id="TERM-STARTUP-MONOTONIC",
+                    executor_continuation_kind="CARRIER",
                     new_startup_chain_authority_json=None,
                 )
             )
@@ -2202,6 +2270,7 @@ class ControllerControlStateTest(unittest.TestCase):
                     state=str(path),
                     expected_revision=revision,
                     terminal_event_id="TERM-STARTUP-APPEND",
+                    executor_continuation_kind="CARRIER",
                     new_startup_chain_authority_json=json.dumps(full_authority),
                 )
             )
@@ -2226,6 +2295,10 @@ class ControllerControlStateTest(unittest.TestCase):
                 "trigger": "EXTERNAL_LAUNCH_AUTHORITY_AVAILABLE",
                 "next_check_at": None,
                 "resolution_deadline": "2026-08-09T00:00:00Z",
+                "reason_code": "REQUIRED_AUTHORITY_UNAVAILABLE",
+                "evidence_ref": (
+                    f"{authority['contract_path']}#sha256={authority['contract_sha256']}"
+                ),
             }
             cmd_absorb_and_block(
                 type(
@@ -2327,6 +2400,165 @@ class ControllerControlStateTest(unittest.TestCase):
                 derived["on_full_witness_failure"],
                 "BOUNDED_ROOT_CAUSE_INVENTORY",
             )
+
+    def test_smi_internal_grant_handler_blocker_rejected_before_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-SMI-GRANT-HANDLER")
+            before = read_state(path)
+            blocker = {
+                "kind": "EXTERNAL_FACT",
+                "reopening_fact": "Grant handler implementation is repaired.",
+                "observer": "Controller",
+                "trigger": "GRANT_HANDLER_REPAIRED",
+                "next_check_at": None,
+                "resolution_deadline": "2026-08-10T00:00:00Z",
+                "reason_code": "INTERNAL_GRANT_HANDLER",
+                "evidence_ref": "/private/tmp/not-used.json#sha256=" + "0" * 64,
+            }
+            with self.assertRaisesRegex(StateError, "blocker.reason_code"):
+                cmd_absorb_and_block(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": revision,
+                            "objective_id": "objective-1",
+                            "terminal_event_id": "TERM-SMI-GRANT-HANDLER",
+                            "old_owner_thread_id": "worker-1",
+                            "new_stage": "R2_SCOUT",
+                            "new_scientific_outcome": "UNOBSERVED",
+                            "new_next_action": "REPAIR_GRANT_HANDLER",
+                            "blocker_json": json.dumps(blocker),
+                            "clear_remote_job_id": ["job-1"],
+                            "clear_advisory_id": [],
+                        },
+                    )()
+                )
+            after = read_state(path)
+            self.assertEqual(after["revision"], before["revision"])
+            self.assertEqual(after["pending_absorptions"], before["pending_absorptions"])
+            self.assertEqual(after["objectives"][0]["owner_thread_id"], "worker-1")
+
+    def test_tta_throughput_parking_blocker_rejected_before_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-TTA-THROUGHPUT-PARKING")
+            before = read_state(path)
+            blocker = {
+                "kind": "EXTERNAL_FACT",
+                "reopening_fact": "Throughput parking is removed by implementation work.",
+                "observer": "Controller",
+                "trigger": "THROUGHPUT_PARKING_REMOVED",
+                "next_check_at": None,
+                "resolution_deadline": "2026-08-10T00:00:00Z",
+                "reason_code": "THROUGHPUT_PARKING",
+                "evidence_ref": "/private/tmp/not-used.json#sha256=" + "1" * 64,
+            }
+            with self.assertRaisesRegex(StateError, "blocker.reason_code"):
+                cmd_absorb_and_block(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": revision,
+                            "objective_id": "objective-1",
+                            "terminal_event_id": "TERM-TTA-THROUGHPUT-PARKING",
+                            "old_owner_thread_id": "worker-1",
+                            "new_stage": "R2_SCOUT",
+                            "new_scientific_outcome": "UNOBSERVED",
+                            "new_next_action": "REPAIR_THROUGHPUT_PATH",
+                            "blocker_json": json.dumps(blocker),
+                            "clear_remote_job_id": ["job-1"],
+                            "clear_advisory_id": [],
+                        },
+                    )()
+                )
+            after = read_state(path)
+            self.assertEqual(after["revision"], before["revision"])
+            self.assertEqual(after["pending_absorptions"], before["pending_absorptions"])
+            self.assertEqual(after["objectives"][0]["owner_thread_id"], "worker-1")
+
+    def test_p59_absent_runner_hold_blocker_rejected_before_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-P59-ABSENT-RUNNER-HOLD")
+            before = read_state(path)
+            blocker = {
+                "kind": "EXTERNAL_FACT",
+                "reopening_fact": "A runner is provisioned after the HOLD.",
+                "observer": "Controller",
+                "trigger": "RUNNER_PROVISIONED",
+                "next_check_at": None,
+                "resolution_deadline": "2026-08-10T00:00:00Z",
+                "reason_code": "ABSENT_RUNNER_HOLD",
+                "evidence_ref": "/private/tmp/not-used.json#sha256=" + "2" * 64,
+            }
+            with self.assertRaisesRegex(StateError, "blocker.reason_code"):
+                cmd_absorb_and_block(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(path),
+                            "expected_revision": revision,
+                            "objective_id": "objective-1",
+                            "terminal_event_id": "TERM-P59-ABSENT-RUNNER-HOLD",
+                            "old_owner_thread_id": "worker-1",
+                            "new_stage": "R2_SCOUT",
+                            "new_scientific_outcome": "UNOBSERVED",
+                            "new_next_action": "WAIT_FOR_RUNNER_PROVISIONING",
+                            "blocker_json": json.dumps(blocker),
+                            "clear_remote_job_id": ["job-1"],
+                            "clear_advisory_id": [],
+                        },
+                    )()
+                )
+            after = read_state(path)
+            self.assertEqual(after["revision"], before["revision"])
+            self.assertEqual(after["pending_absorptions"], before["pending_absorptions"])
+            self.assertEqual(after["objectives"][0]["owner_thread_id"], "worker-1")
+
+    def test_p59_carrier_without_authority_rejected_before_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-P59-CARRIER-NO-AUTHORITY")
+            before = read_state(path)
+            with self.assertRaisesRegex(StateError, "CARRIER.*startup_chain_authority"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        terminal_event_id="TERM-P59-CARRIER-NO-AUTHORITY",
+                        executor_continuation_kind="CARRIER",
+                    )
+                )
+            after = read_state(path)
+            self.assertEqual(after["revision"], before["revision"])
+            self.assertEqual(after["pending_absorptions"], before["pending_absorptions"])
+            self.assertEqual(after["objectives"][0]["owner_thread_id"], "worker-1")
+
+    def test_same_owner_zero_utility_implementation_continuation_succeeds(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-ZERO-UTILITY-CONTINUATION")
+            cmd_activate_successor(
+                successor_args(
+                    state=str(path),
+                    expected_revision=revision,
+                    terminal_event_id="TERM-ZERO-UTILITY-CONTINUATION",
+                    executor_continuation_kind="ZERO_UTILITY_IMPLEMENTATION",
+                )
+            )
+            after = read_state(path)
+            self.assertEqual(after["revision"], revision + 1)
+            self.assertEqual(after["objectives"][0]["owner_thread_id"], "worker-1")
+            self.assertEqual(after["objectives"][0]["owner_role"], "Executor")
+            self.assertEqual(after["objectives"][0]["candidate_state"], "OPEN")
+            self.assertEqual(after["objectives"][0]["scientific_outcome"], "UNOBSERVED")
+            self.assertNotIn("executor_continuation_kind", after["objectives"][0])
 
     def test_close_objective_atomically_absorbs_and_releases_owner(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:

@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import stat
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +20,14 @@ ROUTES = {
     "real_carrier": ("gpt-5.6-sol", "xhigh"),
     "scientific_decision": ("gpt-5.6-sol", "max"),
 }
+
+
+ROUTE_DISPATCH_MARKER = "LUNA_ROUTE_DISPATCH_ID="
+_ROUTE_DISPATCH_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
+SAME_THREAD_PROMPT_PREAMBLE = (
+    "PASS_MODEL_ROUTE: gpt-5.6-luna/max\n"
+    "await-successor-activation\n"
+)
 
 
 @dataclass(frozen=True)
@@ -137,6 +148,108 @@ def _has_exact_route_dispatch(text: str, route_dispatch_id: str) -> bool:
     ) is not None
 
 
+def validate_route_dispatch_id(route_dispatch_id: str) -> str:
+    """Validate the opaque ASCII token used to bind a same-thread dispatch."""
+
+    if not isinstance(route_dispatch_id, str) or not _ROUTE_DISPATCH_ID_PATTERN.fullmatch(
+        route_dispatch_id
+    ):
+        raise ValueError(
+            "route dispatch id must be a non-empty ASCII token "
+            "([A-Za-z0-9][A-Za-z0-9._:-]*)"
+        )
+    return route_dispatch_id
+
+
+def validate_same_thread_prompt(
+    prompt: str | bytes, route_dispatch_id: str
+) -> None:
+    """Fail closed unless *prompt* has one canonical first-line dispatch marker.
+
+    This is intentionally a pure check.  It does not read or write files and
+    does not accept a marker buried in prose or in a capsule body.
+    """
+
+    route_dispatch_id = validate_route_dispatch_id(route_dispatch_id)
+    if isinstance(prompt, bytes):
+        try:
+            prompt = prompt.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("same-thread prompt is not valid UTF-8") from exc
+    if not isinstance(prompt, str):
+        raise ValueError("same-thread prompt must be text or UTF-8 bytes")
+
+    marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}"
+    marker_count = prompt.count(ROUTE_DISPATCH_MARKER)
+    if marker_count == 0:
+        raise ValueError("same-thread prompt marker is absent")
+    if marker_count > 1:
+        raise ValueError("same-thread prompt marker is duplicated")
+    if marker not in prompt:
+        raise ValueError("same-thread prompt marker has the wrong route dispatch id")
+    if not prompt.startswith(marker + "\n"):
+        raise ValueError(
+            "same-thread prompt marker must be the first standalone line"
+        )
+    canonical_prefix = marker + "\n" + SAME_THREAD_PROMPT_PREAMBLE
+    if not prompt.startswith(canonical_prefix):
+        raise ValueError(
+            "same-thread prompt observability preamble is missing or non-canonical"
+        )
+
+
+def _read_capsule(capsule_path: str | Path) -> tuple[bytes, str]:
+    """Read one existing, real regular UTF-8 capsule without transforming it."""
+
+    try:
+        path = Path(capsule_path)
+    except TypeError as exc:
+        raise ValueError("capsule path must identify a regular file") from exc
+    try:
+        mode = path.lstat().st_mode
+    except OSError as exc:
+        raise ValueError(f"capsule path cannot be inspected: {path}") from exc
+    if not stat.S_ISREG(mode):
+        raise ValueError("capsule path must be a regular, non-symlink file")
+    if mode & 0o444 == 0 or not os.access(path, os.R_OK):
+        raise ValueError("capsule file is not readable")
+    try:
+        capsule_bytes = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"capsule file is not readable: {path}") from exc
+    try:
+        capsule_text = capsule_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("capsule file is not valid UTF-8") from exc
+    return capsule_bytes, capsule_text
+
+
+def build_same_thread_prompt_bytes(
+    route_dispatch_id: str, capsule_path: str | Path
+) -> bytes:
+    """Build the canonical stdout payload for one same-thread Luna turn."""
+
+    route_dispatch_id = validate_route_dispatch_id(route_dispatch_id)
+    capsule_bytes, capsule_text = _read_capsule(capsule_path)
+    if ROUTE_DISPATCH_MARKER in capsule_text:
+        raise ValueError("capsule already contains a route dispatch marker")
+
+    marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
+    prompt_bytes = marker + SAME_THREAD_PROMPT_PREAMBLE.encode("utf-8") + capsule_bytes
+    validate_same_thread_prompt(prompt_bytes, route_dispatch_id)
+    return prompt_bytes
+
+
+def build_same_thread_prompt(
+    route_dispatch_id: str, capsule_path: str | Path
+) -> str:
+    """Build the canonical same-thread prompt while preserving capsule text."""
+
+    return build_same_thread_prompt_bytes(route_dispatch_id, capsule_path).decode(
+        "utf-8"
+    )
+
+
 def load_rollout_receipt(
     rollout_path: Path,
     *,
@@ -232,10 +345,26 @@ def load_rollout_receipt(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--action-class", required=True, choices=tuple(ROUTES))
+    parser.add_argument("--action-class", choices=tuple(ROUTES))
     parser.add_argument("--model")
     parser.add_argument("--effort")
     parser.add_argument("--rollout-path")
+    parser.add_argument(
+        "--build-same-thread-prompt",
+        dest="build_same_thread_prompt",
+        action="store_true",
+        help="write the canonical same-thread prompt to stdout",
+    )
+    parser.add_argument(
+        "--route-dispatch-id",
+        dest="route_dispatch_id",
+        help="opaque ID for --build-same-thread-prompt",
+    )
+    parser.add_argument(
+        "--capsule-path",
+        dest="capsule_path",
+        help="existing UTF-8 capsule file for --build-same-thread-prompt",
+    )
     parser.add_argument(
         "--route-mode", choices=("named_child", "same_thread"), default="named_child"
     )
@@ -251,6 +380,32 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        if args.build_same_thread_prompt:
+            if args.action_class is not None or args.model is not None or args.effort is not None:
+                raise ValueError(
+                    "same-thread prompt mode cannot be combined with receipt arguments"
+                )
+            if args.rollout_path is not None:
+                raise ValueError(
+                    "same-thread prompt mode cannot be combined with --rollout-path"
+                )
+            if args.route_dispatch_id is None:
+                raise ValueError(
+                    "same-thread prompt mode requires --route-dispatch-id"
+                )
+            if args.capsule_path is None:
+                raise ValueError("same-thread prompt mode requires --capsule-path")
+            prompt_bytes = build_same_thread_prompt_bytes(
+                args.route_dispatch_id, args.capsule_path
+            )
+            sys.stdout.buffer.write(prompt_bytes)
+            return 0
+        if args.action_class is None:
+            raise ValueError("--action-class is required for receipt validation")
+        if args.route_dispatch_id is not None or args.capsule_path is not None:
+            raise ValueError(
+                "--route-dispatch-id and --capsule-path require same-thread prompt mode"
+            )
         if args.rollout_path:
             if args.model is not None or args.effort is not None:
                 raise ValueError("rollout metadata and direct model/effort are mutually exclusive")

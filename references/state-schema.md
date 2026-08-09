@@ -212,6 +212,17 @@ normal, migration and recovery writer exclusively locks it, rereads the
 revision/checksum under that lock, validates the transition, and commits both
 files before unlock; exactly one competing Controller/Executor CAS can succeed.
 
+The cold `absorb-and-block` route requires a new blocker to carry both
+`reason_code` and `evidence_ref`. The reason must be one of the existing
+`EXTERNAL_IMPOSSIBILITY_REASONS`; the evidence reference is exactly
+`<allowlisted-absolute-immutable-path>#sha256=<64 lowercase hex>`. The command
+opens the evidence with the same no-symlink immutable reader, verifies its
+digest, and rejects a reference to the worker terminal being absorbed before
+the CAS. A legacy `BLOCKED` snapshot with both attestation fields absent
+remains readable and valid; supplying only one field is invalid. The blocker
+digest is covered by the objective guard, so generic replacement cannot migrate
+or rewrite it around this gate.
+
 `await-successor-activation` is a prospective read-only startup barrier, not a
 state transition. Controller places the planned `activate-successor` revision,
 successor objective/owner/role, exact six-field completion binding, absorbed
@@ -305,6 +316,15 @@ cannot silently reset a consumed budget. `derive-startup-chain-id` accepts only
 the snapshot and objective ID, re-verifies the same bytes, and has no caller
 channel for a replacement contract or omitted history.
 
+Every `activate-successor` whose `new_owner_role` is `Executor` also requires
+the non-persistent CLI enum `--executor-continuation-kind`: `CARRIER` requires a
+non-null resolved `startup_chain_authority`; `ZERO_UTILITY_IMPLEMENTATION`
+requires the same owner thread and role, an `OPEN` candidate,
+`scientific_outcome=UNOBSERVED`, and no new remote job, while retaining or
+leaving null any existing authority. Non-Executor successors may not pass this
+enum. The enum is never stored as a state field, lifecycle, artifact, role, or
+additional budget.
+
 The delegated Executor alone may invoke this one matching-objective/owner
 `record-startup-attempt` CAS under the parent AGENTS chain. Every generic,
 lifecycle, routing, terminal, role, job, advisory and owner-transfer state write
@@ -323,16 +343,25 @@ Controller context-window alarms are read-only and scoped to one
 `workflow_evolution_gate.py controller-context-window` against the existing
 SQLite thread pointer. After the latest top-level `compacted` or
 `event_msg/context_compacted`, use at most the latest 20
-`last_token_usage.input_tokens`: fewer than 20 is `ALLOW`; 20 consecutive
-values above 128000 is `PAUSE_NEW_OBJECTIVE_ADMISSION`; otherwise median above
-96000 is `REQUIRE_ROLLOVER`; all other windows are `ALLOW`. Median 64000 and
-p95 96000 are diagnostic targets only. The JSON gate emits no state or
-artifact, returns nonzero only for the two blocking decisions, and parser
-failure is distinct from an executed decision. An atomic rollover increments
-the epoch, resets its rolling window and consecutive counter, and occurs at
-most once per epoch. The alarm may pause only new-objective admission;
-terminal absorption, safety, existing-owner continuity and blocker recovery
-remain nonblocking.
+`last_token_usage.input_tokens`: 20 consecutive values above 128000 is
+`PAUSE_NEW_OBJECTIVE_ADMISSION`; with at least 8 samples, median above 96000 is
+`REQUIRE_ROLLOVER`; all other windows are `ALLOW`. Eight observations are the
+minimum soft sample, not a scientific or throughput score. Median 64000 and p95
+96000 are diagnostic targets only. The JSON gate emits no state or artifact,
+returns nonzero only for the two blocking decisions, and parser failure is
+distinct from an executed decision. An atomic rollover increments the epoch,
+resets its rolling window and consecutive counter, and occurs at most once per
+epoch. The alarm may pause only new-objective admission; terminal absorption,
+safety, existing-owner continuity and blocker recovery remain nonblocking.
+
+`controller_control_state.py show` defaults to the read-only `active`
+projection: controller identity, non-`DONE` objectives, current roles/jobs/
+advisories/pending absorptions, canonical-state digest and count/digest-only
+history summaries. It omits closed-objective bodies and absorbed-ID lists.
+Use `show --projection full` only for migration, contradiction, rebuild or
+replay. Mutation commands always read and validate the full canonical snapshot;
+the active projection is neither an input nor an authority and creates no new
+state or artifact.
 
 Normal successor activation reuses the canonical thread and canonical role.
 When `new_owner_thread_id != old_owner_thread_id`, `activate-successor` requires
@@ -369,6 +398,11 @@ thread across open objectives creates a terminal path that cannot close atomical
 Internal repair, constructability, contract, source/code/algebra,
 estimand/identification, weak-signal, or contribution work is never a durable
 blocker or inactive archive.
+
+In particular, source/runner/config/validator/grant-handler/host wrapper
+failures, constructability gaps, and portfolio parking are not blocker
+attestations. They remain owned engineering or carrier work until a genuine
+allowlisted external impossibility is independently attested.
 
 Every v4 Pro obligation uses explicit batch semantics; legacy advisory shapes
 are invalid for validation, replacement, migration and wake delivery. An
