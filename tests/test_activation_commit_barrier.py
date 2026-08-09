@@ -236,6 +236,13 @@ class ActivationCommitBarrierTest(unittest.TestCase):
             self.assertEqual(payload["status"], "PASS")
             self.assertEqual(payload["revision"], 655)
             self.assertEqual(payload["objective_id"], "successor-objective")
+            self.assertEqual(
+                payload["terminal_identity_projection"],
+                {
+                    "completion_binding": NEW_BINDING,
+                    "startup_chain_authority": None,
+                },
+            )
 
     def test_revision_655_exact_successor_remote_job_binding_passes(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:

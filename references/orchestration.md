@@ -229,6 +229,16 @@ real blocker, its observer, event/absolute-check trigger, and next evidence
 action in existing task state; it does not create a backlog or lane merely to
 certify the hold.
 
+On PASS, `await-successor-activation` returns one machine-derived
+`terminal_identity_projection`. The producer starts its terminal object from
+that projection instead of reconstructing identity fields: every role copies
+the exact nested six-field `completion_binding`, and an Executor also copies
+the returned `startup_chain_authority`, including explicit JSON `null`. This
+fuses prospective terminal identity into the existing activation barrier; it
+creates no generator, sidecar, validator or extra roundtrip. Independent body
+fields remain the producer's responsibility, and callback preparation still
+reparses the immutable file and fails closed on any projection drift.
+
 Treat `ENGINEERING_*`, `CONTRACT_CONFLICT`, `HOLD_ACCESS_CHANNEL`, and
 `CARRIER_STOP` as worker-local terminals, never Controller route decisions. When the candidate
 remains open or `UNTESTED`, terminal absorption is incomplete until the
@@ -381,6 +391,18 @@ Only `claim-advisory-wake` may perform `AWAITING_RESPONSE/NONE ->
 RESPONSE_OBSERVED/CLAIMED`, and only `complete-advisory-wake` may perform
 `CLAIMED -> SENT`; generic replacement and initial snapshot creation may not
 seed or advance those observations.
+
+An interactive authentication, credential, or approval boundary with its
+existing UI or PTY still live is not a completed Executor turn. Show the exact
+user action in commentary and keep the same task, turn, session, objective,
+terminal binding, and PTY `IN_PROGRESS`; do not emit final, close the PTY,
+invent a remote job, poll, or create a replacement owner while awaiting the
+user. Continue in that same turn after the user acts. If the runtime cannot
+preserve an in-progress turn, seal the prebound terminal with the genuine
+external-authority block and an exact reopen trigger; never substitute
+`FINAL + NON_TERMINAL`. If such a malformed final is nevertheless observed,
+Controller keeps the cursor before it and sends only the existing same-owner
+recovery wake.
 An observed `NON_BLOCKING` batch may use the standalone
 `absorb-nonblocking-advisory` CAS so its local terminal is absorbed without
 changing objective lifecycle. `BLOCKING_HIGH_RISK` may never use that command.
@@ -743,7 +765,8 @@ other state, lifecycle, routing, terminal and ownership transition remains
 Controller-only. A finite `BLOCKED`
 objective retains the authority; `reconcile-open` reopens it only to an Executor
 after revalidating every digest. Every prospective Executor terminal mirrors the
-exact authority or explicit `null`, and `rebuild-add-objective` restores it
+exact authority or explicit `null` from the activation barrier's
+`terminal_identity_projection`, and `rebuild-add-objective` restores it
 before normal terminal absorption. Scientific close removes it. Run
 `controller_control_state.py
 derive-startup-chain-id --state <snapshot> --objective-id <objective>`; the CLI

@@ -1248,6 +1248,12 @@ class SkillRouterTest(unittest.TestCase):
         self.assertIn("drains prebound terminal absorb/route/activate/title/pin/CAS before final", router)
         self.assertIn("`activate-successor` CAS", orchestration)
         self.assertIn("source_turn_state=IN_PROGRESS|FINAL", orchestration)
+        self.assertIn(
+            "An interactive authentication, credential, or approval boundary",
+            orchestration,
+        )
+        self.assertIn("keep the same task, turn, session", orchestration)
+        self.assertIn("never substitute `FINAL + NON_TERMINAL`", orchestration)
         self.assertIn("atomically prebinding the prospective job", orchestration)
         self.assertIn("same-owner recovery wake", orchestration)
         self.assertIn("never delete the global automation", orchestration)
