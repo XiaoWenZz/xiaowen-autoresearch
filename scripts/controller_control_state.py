@@ -71,6 +71,7 @@ AUDIT_FRESH_THREAD_REASONS = {
     "INDEPENDENT_VERIFICATION_OR_ADJUDICATION",
 }
 CURSOR_OBSERVATION_KINDS = {"NON_TERMINAL", "TERMINAL"}
+CURSOR_SOURCE_TURN_STATES = {"IN_PROGRESS", "FINAL"}
 TITLE_RE = re.compile(
     r"^(Controller|Explorer|Audit|Executor) · .+ · "
     r"(ACTIVE|WAITING_EXTERNAL|HOLD|BLOCKED|TERMINAL_PENDING_ABSORPTION)$"
@@ -2477,6 +2478,7 @@ def _validate_committed_successor(
     owner_role: str,
     completion_binding: dict[str, Any],
     absorbed_terminal_event_id: str,
+    expected_remote_job: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
     """Return the activated objective, or None while the Controller CAS is pending."""
     if state["revision"] < minimum_revision:
@@ -2510,6 +2512,17 @@ def _validate_committed_successor(
         raise StateError("committed successor managed role mismatch")
     if role.get("state") != objective.get("owner_state"):
         raise StateError("committed successor managed-role state mismatch")
+    successor_jobs = [
+        job
+        for job in state["remote_jobs"]
+        if job.get("objective_id") == objective_id
+        or job.get("owner_thread_id") == owner_thread_id
+    ]
+    if expected_remote_job is None:
+        if successor_jobs:
+            raise StateError("committed successor has unexpected remote job binding")
+    elif successor_jobs != [expected_remote_job]:
+        raise StateError("committed successor remote job binding mismatch")
     return objective
 
 
@@ -2530,6 +2543,16 @@ def cmd_await_successor_activation(args: argparse.Namespace) -> None:
     _validate_completion_binding(completion_binding, "completion_binding")
     if not _nonempty(args.absorbed_terminal_event_id):
         raise StateError("absorbed_terminal_event_id must be non-empty")
+    expected_remote_job = None
+    if args.remote_job_json is not None:
+        expected_remote_job = _strict_json_document(
+            args.remote_job_json.encode("utf-8"),
+            "remote_job_json",
+        )
+        if not isinstance(expected_remote_job, dict):
+            raise StateError("remote_job_json must be an object")
+        if args.owner_role != "Executor":
+            raise StateError("only an Executor successor may bind a remote job")
 
     deadline = time.monotonic() + args.timeout_ms / 1000
     while True:
@@ -2542,6 +2565,7 @@ def cmd_await_successor_activation(args: argparse.Namespace) -> None:
             owner_role=args.owner_role,
             completion_binding=completion_binding,
             absorbed_terminal_event_id=args.absorbed_terminal_event_id,
+            expected_remote_job=expected_remote_job,
         )
         if objective is not None:
             print(
@@ -2554,6 +2578,9 @@ def cmd_await_successor_activation(args: argparse.Namespace) -> None:
                         "completion_binding_sha256": completion_binding_sha256(
                             completion_binding
                         ),
+                        "remote_job_id": None
+                        if expected_remote_job is None
+                        else expected_remote_job.get("job_id"),
                     },
                     sort_keys=True,
                 )
@@ -2977,7 +3004,17 @@ def cmd_advance_cursors(args: argparse.Namespace) -> None:
         where = f"cursor_updates[{index}]"
         if not isinstance(update, dict):
             raise StateError(f"{where} must be an object")
-        _require(update, ("thread_id", "expected_cursor", "new_cursor", "observation_kind"), where)
+        _require(
+            update,
+            (
+                "thread_id",
+                "expected_cursor",
+                "new_cursor",
+                "observation_kind",
+                "source_turn_state",
+            ),
+            where,
+        )
         thread_id = update["thread_id"]
         if not _nonempty(thread_id) or thread_id in seen:
             raise StateError(f"{where}.thread_id is invalid or duplicate")
@@ -2992,6 +3029,9 @@ def cmd_advance_cursors(args: argparse.Namespace) -> None:
         observation_kind = update["observation_kind"]
         if observation_kind not in CURSOR_OBSERVATION_KINDS:
             raise StateError(f"{where}.observation_kind is invalid")
+        source_turn_state = update["source_turn_state"]
+        if source_turn_state not in CURSOR_SOURCE_TURN_STATES:
+            raise StateError(f"{where}.source_turn_state is invalid")
         terminal_event_id = update.get("terminal_event_id")
         if observation_kind == "TERMINAL":
             if not _nonempty(terminal_event_id):
@@ -3000,6 +3040,35 @@ def cmd_advance_cursors(args: argparse.Namespace) -> None:
                 raise StateError(f"{where}.terminal_event_id is not absorbed; cursor must not cross terminal")
         elif terminal_event_id is not None:
             raise StateError(f"{where}.terminal_event_id is only valid for TERMINAL")
+        if (
+            source_turn_state == "FINAL"
+            and observation_kind == "NON_TERMINAL"
+            and role["role"] == "Executor"
+        ):
+            owned_objectives = [
+                objective
+                for objective in state["objectives"]
+                if objective.get("lifecycle") == "DELEGATED"
+                and objective.get("owner_thread_id") == thread_id
+            ]
+            if len(owned_objectives) != 1:
+                raise StateError(
+                    f"{where} FINAL NON_TERMINAL Executor lacks one delegated objective"
+                )
+            objective = owned_objectives[0]
+            active_jobs = [
+                job
+                for job in state["remote_jobs"]
+                if job.get("objective_id") == objective["objective_id"]
+                and job.get("owner_thread_id") == thread_id
+                and job.get("monitor_state") == "ACTIVE"
+                and job.get("wake_delivery")
+                == {"state": "NONE", "claim_token": None, "observation_id": None}
+            ]
+            if len(active_jobs) != 1:
+                raise StateError(
+                    f"{where} FINAL NON_TERMINAL Executor requires exactly one active registered remote job"
+                )
         role["cursor"] = update["new_cursor"]
     result = write_state(path, state, args.expected_revision)
     print(json.dumps({"status": "PASS", "revision": result["revision"], "advanced": len(updates)}, sort_keys=True))
@@ -3099,6 +3168,17 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         requested_startup_authority,
         new_owner_role=args.new_owner_role,
     )
+    new_remote_job_json = getattr(args, "new_remote_job_json", None)
+    new_remote_job = None
+    if new_remote_job_json is not None:
+        new_remote_job = _strict_json_document(
+            new_remote_job_json.encode("utf-8"),
+            "new_remote_job_json",
+        )
+        if not isinstance(new_remote_job, dict):
+            raise StateError("new_remote_job_json must be an object")
+        if args.new_owner_role != "Executor":
+            raise StateError("only an Executor successor may bind a remote job")
 
     clear_job_ids = set(args.clear_remote_job_id)
     if len(clear_job_ids) != len(args.clear_remote_job_id):
@@ -3200,6 +3280,22 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
     state["managed_roles"] = [
         new_role if role["thread_id"] == args.old_owner_thread_id else role for role in roles
     ]
+    if new_remote_job is not None:
+        if new_remote_job.get("objective_id") != new_objective_id:
+            raise StateError("remote job objective_id mismatch")
+        if new_remote_job.get("owner_thread_id") != args.new_owner_thread_id:
+            raise StateError("remote job owner_thread_id mismatch")
+        if new_remote_job.get("monitor_state") != "ACTIVE":
+            raise StateError("new remote job must start ACTIVE")
+        if new_remote_job.get("wake_delivery") != {
+            "state": "NONE",
+            "claim_token": None,
+            "observation_id": None,
+        }:
+            raise StateError("new remote job must start with NONE wake delivery")
+        if any(job.get("job_id") == new_remote_job.get("job_id") for job in state["remote_jobs"]):
+            raise StateError("new remote job_id is already registered")
+        state["remote_jobs"].append(new_remote_job)
     state["pending_absorptions"] = [
         item for item in state["pending_absorptions"] if item is not pending
     ]
@@ -3415,6 +3511,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     await_activation.add_argument("--completion-binding-json", required=True)
     await_activation.add_argument("--absorbed-terminal-event-id", required=True)
+    remote_job_expectation = await_activation.add_mutually_exclusive_group(required=True)
+    remote_job_expectation.add_argument("--remote-job-json")
+    remote_job_expectation.add_argument("--no-remote-job", action="store_true")
     await_activation.add_argument("--timeout-ms", type=int, default=30_000)
     await_activation.add_argument("--poll-ms", type=int, default=100)
     await_activation.set_defaults(handler=cmd_await_successor_activation)
@@ -3554,6 +3653,7 @@ def build_parser() -> argparse.ArgumentParser:
     activate.add_argument("--new-next-action", required=True)
     activate.add_argument("--new-completion-binding-json", required=True)
     activate.add_argument("--new-startup-chain-authority-json")
+    activate.add_argument("--new-remote-job-json")
     activate.add_argument("--clear-remote-job-id", action="append", default=[])
     activate.add_argument("--clear-advisory-id", action="append", default=[])
     activate.set_defaults(handler=cmd_activate_successor)

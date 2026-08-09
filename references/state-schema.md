@@ -209,14 +209,32 @@ files before unlock; exactly one competing Controller/Executor CAS can succeed.
 
 `await-successor-activation` is a prospective read-only startup barrier, not a
 state transition. Controller places the planned `activate-successor` revision,
-successor objective/owner/role, exact six-field completion binding and absorbed
-predecessor event in the activation prompt. The destination shared-lock polls
-for at most 30 seconds. Revision below the floor returns bounded
-`WAIT_ACTIVATION_COMMIT`; at or above it the full tuple, absorbed-event set,
-absence from pending, and managed-role match are mandatory. It never writes the
-snapshot, checksum, terminal or another artifact. Timeout cannot terminalize,
-finalize, mutate or reinterpret the objective; Controller recovery reconciles
-the original dispatch ID without blind resend.
+successor objective/owner/role, exact six-field completion binding, absorbed
+predecessor event, and either one exact remote-job projection or an explicit
+no-remote-job assertion in the activation prompt. When present,
+`activate-successor --new-remote-job-json` appends that one `ACTIVE/NONE` job in
+the same Controller CAS that activates its matching Executor objective and
+owner. The destination shared-lock polls for at most 30 seconds. Revision below
+the floor returns bounded `WAIT_ACTIVATION_COMMIT`; at or above it the full
+tuple, absorbed-event set, absence from pending, managed-role match, and exact
+job expectation are mandatory. It never writes the snapshot, checksum,
+terminal or another artifact. Timeout cannot terminalize, finalize, mutate or
+reinterpret the objective; Controller recovery reconciles the original
+dispatch ID without blind resend.
+
+The prebound `ACTIVE/NONE` job is an obligation to monitor, not proof that the
+remote submit already succeeded. An absent unit and absent expected files before
+`late_threshold` have zero effect; the threshold wakes the same owner for launch
+identity reconciliation without inventing a job or scientific outcome.
+
+Every `advance-cursors` update includes
+`source_turn_state=IN_PROGRESS|FINAL`. A `FINAL + NON_TERMINAL` Executor update
+is accepted only when exactly one matching `ACTIVE` remote job with `NONE` wake
+delivery already exists. Otherwise the CAS rejects without moving the cursor,
+preserving the prebound terminal and same-owner recovery path. This does not
+prevent a runtime from rendering a malformed final; it prevents Controller
+continuity from accepting that final as ordinary progress. Terminal cursors
+retain the separate absorbed-event barrier.
 
 For prospective budgets, the already-debited predecessor and governance cost
 remain cumulative. Only elapsed execution after durable successor activation

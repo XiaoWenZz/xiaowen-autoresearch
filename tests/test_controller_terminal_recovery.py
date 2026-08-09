@@ -538,6 +538,7 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
                                     "expected_cursor": "cursor:before",
                                     "new_cursor": "cursor:after",
                                     "observation_kind": "TERMINAL",
+                                    "source_turn_state": "FINAL",
                                     "terminal_event_id": "TERM-1",
                                 }
                             ]

@@ -210,16 +210,19 @@ absence of an ACK.
 `dispatch_next` additionally requires the successful dispatch receipt and
 matching task-bound activation/callback lease evidence. Before that one send,
 Controller derives the planned post-CAS minimum revision and includes it with
-the exact successor objective, owner/role, six-field completion binding and
-predecessor terminal event. The destination first emits `PASS_MODEL_ROUTE`, then
-uses the read-only `await-successor-activation` command. A lower revision is a
-bounded transient wait; at or above the floor, objective, owner, role, binding,
-absorbed event and managed role must all match or fail closed. No repository,
-remote, GPU, model/data/protected read, write, terminal, final or objective
-decision precedes PASS. Controller performs `activate-successor` immediately
-after the sole dispatch receipt, without a destination ACK, so there is no
-read-before-CAS finalization and no extra handoff roundtrip. The Controller may
-not send a user-visible status/final before that activation exists. A boilerplate
+the exact successor objective, owner/role, six-field completion binding,
+predecessor terminal event, and either one exact prospective remote-job
+projection or an explicit no-remote-job assertion. The destination first emits
+`PASS_MODEL_ROUTE`, then uses the read-only `await-successor-activation` command
+with that same job expectation. A lower revision is a bounded transient wait;
+at or above the floor, objective, owner, role, binding, absorbed event, managed
+role and job expectation must all match or fail closed. No repository, remote,
+GPU, model/data/protected read, write, terminal, final or objective decision
+precedes PASS. Controller performs `activate-successor` immediately after the
+sole dispatch receipt, atomically prebinding the prospective job when present,
+without a destination ACK, so there is no read-before-CAS finalization and no
+extra handoff roundtrip. The Controller may not send a user-visible status/final
+before that activation exists. A boilerplate
 “Controller decides whether” is not `owner_approval_required` when standing
 delegation already covers the frozen bounded action. `explicit_hold` names one
 real blocker, its observer, event/absolute-check trigger, and next evidence
@@ -288,6 +291,21 @@ question, or unrelated user-visible final does not cancel pending Controller
 work; the next native heartbeat resumes it idempotently within the configured
 cadence.
 
+For a Managed Executor authorized to submit one unattended remote job, bind the
+complete existing `remote_jobs` record in the same `activate-successor` CAS and
+make the destination activation barrier verify that exact projection before
+launch. The record begins `monitor_state=ACTIVE` and
+`wake_delivery={state:NONE, claim_token:null, observation_id:null}`. A successor
+with no planned job verifies the explicit no-job case. Do not defer registration
+until after submission or reconstruct it after completion as the normal route;
+generic Controller replacement remains only bounded legacy recovery. This is
+one existing state projection and one CAS, not a new receipt, callback, owner or
+handoff. A prospectively bound `ACTIVE/NONE` record is a monitoring obligation,
+not evidence that submission already occurred: before its `late_threshold`, an
+absent unit and absent expected files alone create zero terminal or wake effect.
+At the threshold, wake the same owner to reconcile launch identity rather than
+inventing a scientific or job outcome.
+
 Keep that heartbeat prompt static. Store only operational pointers in the
 rebuildable Controller control snapshot: revision/checksum, active objectives,
 canonical role threads and cursors, lifecycle/next action, prebound
@@ -333,10 +351,17 @@ the same verified pending identity. Never represent a handoff as separate
 cursor, terminal and owner updates. The heartbeat reads
 the snapshot first, calls one thread-list operation, batch-waits only the named
 active roles, and labels every cursor update `NON_TERMINAL` or `TERMINAL`.
-`advance-cursors` rejects a terminal cursor unless its exact
-`terminal_event_id` is already in `absorbed_terminal_event_ids`; an unseen,
-unidentified, or unabsorbed final stays before the cursor while that same
-Controller completes the full lifecycle transaction. A crash before absorption
+Every `advance-cursors` update carries `source_turn_state=IN_PROGRESS|FINAL`.
+It rejects a terminal cursor unless its exact `terminal_event_id` is already in
+`absorbed_terminal_event_ids`; an unseen, unidentified, or unabsorbed final
+stays before the cursor while that same Controller completes the full lifecycle
+transaction. It also rejects `FINAL + NON_TERMINAL` from an Executor unless
+exactly one same-objective/same-owner `ACTIVE/NONE` remote job is already in
+`remote_jobs`. The Controller then keeps the cursor before that final and sends
+one same-owner recovery wake to seal the prebound terminal; it does not wait for
+the user, invent a job after completion as the normal path, or create a new
+Executor. A legitimate long-job return advances only against its prospectively
+registered job. A crash before absorption
 leaves the pending record and cursor barrier for the next heartbeat. A crash
 around successor dispatch is reconciled from the bound dispatch ID, runtime
 receipt and matching activation before any retry; ambiguous delivery is never

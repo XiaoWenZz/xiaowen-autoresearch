@@ -48,6 +48,31 @@ def completion_binding(
     }
 
 
+def remote_job(
+    *,
+    job_id: str = "job-2",
+    objective_id: str = "objective-2",
+    owner_thread_id: str = "worker-1",
+) -> dict:
+    return {
+        "job_id": job_id,
+        "objective_id": objective_id,
+        "owner_thread_id": owner_thread_id,
+        "host": "dual5090",
+        "unit": f"{job_id}.service",
+        "output_path": f"/home/xiaowen/runs/{job_id}",
+        "expected_files": ["terminal.json"],
+        "eta": "2026-08-09T12:00:00Z",
+        "late_threshold": "2026-08-09T13:00:00Z",
+        "monitor_state": "ACTIVE",
+        "wake_delivery": {
+            "state": "NONE",
+            "claim_token": None,
+            "observation_id": None,
+        },
+    }
+
+
 def base_state(terminal_path: str = "/private/tmp/TERM-AUTHORITY-1.json") -> dict:
     return {
         "schema_version": 5,
@@ -187,6 +212,7 @@ def successor_args(**overrides: object) -> object:
         "new_completion_binding_json": json.dumps(
             completion_binding("/private/tmp/TERM-AUTHORITY-2.json", "2")
         ),
+        "new_remote_job_json": None,
         "clear_remote_job_id": ["job-1"],
         "clear_advisory_id": [],
     }
@@ -1362,6 +1388,7 @@ class ControllerControlStateTest(unittest.TestCase):
                         "expected_cursor": None,
                         "new_cursor": "cursor:1",
                         "observation_kind": "NON_TERMINAL",
+                        "source_turn_state": "IN_PROGRESS",
                     }
                 ]),
             })()
@@ -1377,6 +1404,7 @@ class ControllerControlStateTest(unittest.TestCase):
                         "expected_cursor": None,
                         "new_cursor": "cursor:2",
                         "observation_kind": "NON_TERMINAL",
+                        "source_turn_state": "IN_PROGRESS",
                     }
                 ]),
             })()
@@ -1395,6 +1423,7 @@ class ControllerControlStateTest(unittest.TestCase):
                     "expected_cursor": None,
                     "new_cursor": "cursor:terminal",
                     "observation_kind": "TERMINAL",
+                    "source_turn_state": "FINAL",
                     "terminal_event_id": "TERM-1",
                 }]),
             })()
@@ -1416,11 +1445,62 @@ class ControllerControlStateTest(unittest.TestCase):
                     "expected_cursor": None,
                     "new_cursor": "cursor:terminal",
                     "observation_kind": "TERMINAL",
+                    "source_turn_state": "FINAL",
                     "terminal_event_id": "TERM-1",
                 }]),
             })()
             cmd_advance_cursors(args)
             self.assertEqual(read_state(path)["managed_roles"][0]["cursor"], "cursor:terminal")
+
+    def test_user_rescue_trace_rejects_executor_final_without_registered_job(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            state = base_state()
+            state["objectives"][0]["owner_state"] = "ACTIVE"
+            state["managed_roles"][0].update(
+                {
+                    "state": "ACTIVE",
+                    "title": "Executor · Candidate One · ACTIVE",
+                }
+            )
+            state["remote_jobs"] = []
+            write_state(path, state, -1)
+            args = type("Args", (), {
+                "state": str(path),
+                "expected_revision": 0,
+                "updates_json": json.dumps([{
+                    "thread_id": "worker-1",
+                    "expected_cursor": None,
+                    "new_cursor": "cursor:nonterminal-final",
+                    "observation_kind": "NON_TERMINAL",
+                    "source_turn_state": "FINAL",
+                }]),
+            })()
+            with self.assertRaisesRegex(
+                StateError, "FINAL NON_TERMINAL Executor requires exactly one active registered remote job"
+            ):
+                cmd_advance_cursors(args)
+            self.assertIsNone(read_state(path)["managed_roles"][0]["cursor"])
+
+    def test_executor_final_may_wait_on_one_registered_active_remote_job(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            write_state(path, base_state(), -1)
+            args = type("Args", (), {
+                "state": str(path),
+                "expected_revision": 0,
+                "updates_json": json.dumps([{
+                    "thread_id": "worker-1",
+                    "expected_cursor": None,
+                    "new_cursor": "cursor:waiting-job",
+                    "observation_kind": "NON_TERMINAL",
+                    "source_turn_state": "FINAL",
+                }]),
+            })()
+            cmd_advance_cursors(args)
+            self.assertEqual(
+                read_state(path)["managed_roles"][0]["cursor"], "cursor:waiting-job"
+            )
 
     def test_activate_successor_atomically_absorbs_and_reuses_owner(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
@@ -1436,6 +1516,35 @@ class ControllerControlStateTest(unittest.TestCase):
             self.assertEqual(state["remote_jobs"], [])
             self.assertNotIn("fresh_thread_reason", state["objectives"][0])
             self.assertIn("TERM-AUTHORITY-1", state["absorbed_terminal_event_ids"])
+
+    def test_activate_successor_atomically_prebinds_one_remote_job(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            job = remote_job()
+            cmd_activate_successor(
+                successor_args(
+                    state=str(path),
+                    expected_revision=revision,
+                    new_remote_job_json=json.dumps(job),
+                )
+            )
+            self.assertEqual(read_state(path)["remote_jobs"], [job])
+
+    def test_activate_successor_rejects_remote_job_for_wrong_owner(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            path = Path(tmp) / "controller-state.json"
+            revision = write_and_verify(path, base_state(), "TERM-AUTHORITY-1")
+            job = remote_job(owner_thread_id="wrong-owner")
+            with self.assertRaisesRegex(StateError, "remote job owner_thread_id mismatch"):
+                cmd_activate_successor(
+                    successor_args(
+                        state=str(path),
+                        expected_revision=revision,
+                        new_remote_job_json=json.dumps(job),
+                    )
+                )
+            self.assertEqual(read_state(path)["revision"], revision)
 
     def test_activate_successor_reuses_same_executor_without_fork_reason(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:

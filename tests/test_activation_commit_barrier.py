@@ -26,9 +26,24 @@ NEW_BINDING = {
     "terminal_event_id": "TERM-RACE-SUCCESSOR",
     "terminal_path": "/private/tmp/TERM-RACE-SUCCESSOR.json",
 }
+NEW_REMOTE_JOB = {
+    "job_id": "job-successor",
+    "objective_id": "successor-objective",
+    "owner_thread_id": "worker-successor",
+    "host": "dual5090",
+    "unit": "job-successor.service",
+    "output_path": "/home/xiaowen/runs/job-successor",
+    "expected_files": ["terminal.json"],
+    "eta": "2026-08-09T12:00:00Z",
+    "late_threshold": "2026-08-09T13:00:00Z",
+    "monitor_state": "ACTIVE",
+    "wake_delivery": {"state": "NONE", "claim_token": None, "observation_id": None},
+}
 
 
-def state_at_revision(revision: int, *, activated: bool) -> dict:
+def state_at_revision(
+    revision: int, *, activated: bool, remote_job: dict | None = None
+) -> dict:
     if activated:
         objective = {
             "objective_id": "successor-objective",
@@ -116,7 +131,7 @@ def state_at_revision(revision: int, *, activated: bool) -> dict:
         },
         "objectives": [objective],
         "managed_roles": [managed_role],
-        "remote_jobs": [],
+        "remote_jobs": [remote_job] if remote_job is not None else [],
         "advisory_reads": [],
         "absorbed_advisory_scopes": [],
         "pending_absorptions": pending,
@@ -147,7 +162,8 @@ def barrier_command(state_path: Path, **overrides: str) -> list[str]:
         "poll_ms": "1",
     }
     values.update(overrides)
-    return [
+    remote_job_json = values.pop("remote_job_json", None)
+    command = [
         sys.executable,
         str(TOOL),
         "await-successor-activation",
@@ -170,6 +186,11 @@ def barrier_command(state_path: Path, **overrides: str) -> list[str]:
         "--poll-ms",
         values["poll_ms"],
     ]
+    if remote_job_json is None:
+        command.append("--no-remote-job")
+    else:
+        command.extend(["--remote-job-json", remote_job_json])
+    return command
 
 
 class ActivationCommitBarrierTest(unittest.TestCase):
@@ -215,6 +236,60 @@ class ActivationCommitBarrierTest(unittest.TestCase):
             self.assertEqual(payload["status"], "PASS")
             self.assertEqual(payload["revision"], 655)
             self.assertEqual(payload["objective_id"], "successor-objective")
+
+    def test_revision_655_exact_successor_remote_job_binding_passes(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            state_path = Path(raw) / "controller-state.json"
+            write_state_fixture(
+                state_path,
+                state_at_revision(655, activated=True, remote_job=NEW_REMOTE_JOB),
+            )
+
+            result = subprocess.run(
+                barrier_command(
+                    state_path,
+                    remote_job_json=json.dumps(NEW_REMOTE_JOB, sort_keys=True),
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout)["remote_job_id"], "job-successor")
+
+    def test_successor_remote_job_expectation_fails_when_registration_is_absent(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            state_path = Path(raw) / "controller-state.json"
+            write_state_fixture(state_path, state_at_revision(655, activated=True))
+
+            result = subprocess.run(
+                barrier_command(
+                    state_path,
+                    remote_job_json=json.dumps(NEW_REMOTE_JOB, sort_keys=True),
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("remote job binding mismatch", json.loads(result.stdout)["error"])
+
+    def test_successor_no_remote_job_expectation_rejects_an_unplanned_job(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            state_path = Path(raw) / "controller-state.json"
+            write_state_fixture(
+                state_path,
+                state_at_revision(655, activated=True, remote_job=NEW_REMOTE_JOB),
+            )
+
+            result = subprocess.run(
+                barrier_command(state_path), capture_output=True, text=True, check=False
+            )
+
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("unexpected remote job binding", json.loads(result.stdout)["error"])
 
     def test_committed_revision_with_binding_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
