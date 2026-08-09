@@ -1253,9 +1253,56 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
                 self.assertIs(
                     compatibility["allow_missing_startup_authority_mirror"], True
                 )
+                self.assertIs(
+                    compatibility[
+                        "missing_startup_authority_requires_unbound_objective"
+                    ],
+                    True,
+                )
                 self.assertNotIn(
                     "allow_unbound_startup_authority_mirror", compatibility
                 )
+
+    def test_missing_null_authority_compatibility_rejects_bound_objective(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            terminal = Path(tmp) / "missing-null-authority.json"
+            expected = binding(terminal)
+            body = {"completion_binding": expected}
+            data = canonical_bytes(body)
+            terminal.write_bytes(data)
+            terminal.chmod(0o444)
+            compatibility = {
+                str(terminal): {
+                    "bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "missing_from_binding": frozenset(),
+                    "allow_missing_startup_authority_mirror": True,
+                    "missing_startup_authority_requires_unbound_objective": True,
+                }
+            }
+            with mock.patch.dict(
+                controller_state.LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS,
+                compatibility,
+            ):
+                with self.assertRaisesRegex(
+                    StateError,
+                    "compatible only with an unbound objective",
+                ):
+                    controller_state._read_bound_terminal(
+                        terminal,
+                        expected,
+                        {"unexpected": "bound"},
+                        require_startup_authority_mirror=True,
+                    )
+
+                observed_data, observed_body = controller_state._read_bound_terminal(
+                    terminal,
+                    expected,
+                    None,
+                    require_startup_authority_mirror=True,
+                )
+            self.assertEqual(observed_data, data)
+            self.assertEqual(observed_body, body)
 
     def test_digest_pinned_audit_terminal_may_carry_successor_startup_authority(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:

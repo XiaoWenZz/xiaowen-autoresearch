@@ -130,12 +130,14 @@ LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS = {
         "sha256": "104fed10aa4758532ffa7473914dc9c54e09639bb3f861220a9c3b9aa6478440",
         "missing_from_binding": frozenset(),
         "allow_missing_startup_authority_mirror": True,
+        "missing_startup_authority_requires_unbound_objective": True,
     },
     "/private/tmp/TERM-FPA-DP1-INTERNAL-PRESERVING-WITNESS-R1-EXECUTOR-20260809-001.json": {
         "bytes": 5088,
         "sha256": "6ece649999d5fde20df870e062723f68866abacfc0773cd4dea95bac9c1aefe7",
         "missing_from_binding": frozenset(),
         "allow_missing_startup_authority_mirror": True,
+        "missing_startup_authority_requires_unbound_objective": True,
     },
 }
 
@@ -551,6 +553,16 @@ def _read_bound_terminal(
     if expected_startup_authority is not _STARTUP_AUTHORITY_UNSPECIFIED:
         body_has_authority = "startup_chain_authority" in terminal_body
         body_authority = terminal_body.get("startup_chain_authority")
+        if (
+            not body_has_authority
+            and compatibility_projection.get(
+                "missing_startup_authority_requires_unbound_objective", False
+            )
+            and expected_startup_authority is not None
+        ):
+            raise StateError(
+                "legacy terminal missing startup_chain_authority is compatible only with an unbound objective"
+            )
         if expected_startup_authority is None:
             if (
                 require_startup_authority_mirror
