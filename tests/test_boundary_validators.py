@@ -774,6 +774,21 @@ class BoundaryValidatorsTest(unittest.TestCase):
             ),
         )
         expect_block(
+            "bare executable",
+            "executable must be a canonical absolute authority_readable_path",
+            lambda body: body["operational_access"]["activation_argv"].__setitem__(
+                0, "python3"
+            ),
+        )
+        locator_executable = payload["operational_access"]["locator_only_paths"][0]
+        expect_block(
+            "locator-only executable",
+            "executable must be a canonical absolute authority_readable_path",
+            lambda body: body["operational_access"]["activation_argv"].__setitem__(
+                0, locator_executable
+            ),
+        )
+        expect_block(
             "activation shell metacharacter",
             "shell metacharacters",
             lambda body: body["operational_access"]["activation_argv"].append("--flag;echo"),

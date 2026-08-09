@@ -417,6 +417,11 @@ def validate_operational_access(
         raise ValidationError(
             f"{OPERATIONAL_ACCESS_KEY}.activation_argv must be a non-empty JSON string array"
         )
+    executable = activation_argv[0]
+    if not Path(executable).is_absolute() or executable not in authority_set:
+        raise ValidationError(
+            f"{OPERATIONAL_ACCESS_KEY}.activation_argv[1] executable must be a canonical absolute authority_readable_path"
+        )
     for position, value in enumerate(activation_argv, start=1):
         if SHELL_META_RE.search(value):
             raise ValidationError(
