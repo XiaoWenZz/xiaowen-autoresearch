@@ -222,6 +222,14 @@ terminal or another artifact. Timeout cannot terminalize, finalize, mutate or
 reinterpret the objective; Controller recovery reconciles the original
 dispatch ID without blind resend.
 
+On PASS the same command returns `terminal_identity_projection`, containing the
+exact nested `completion_binding`; for an Executor it also contains the current
+`startup_chain_authority` as the exact object or explicit JSON `null`. The
+producer initializes its terminal from this projection rather than hand-writing
+the identity fields. This is a read-only projection of already committed state,
+not a second authority or artifact, and the sealed callback/observation parser
+still rejects any mismatch.
+
 The prebound `ACTIVE/NONE` job is an obligation to monitor, not proof that the
 remote submit already succeeded. An absent unit and absent expected files before
 `late_threshold` have zero effect; the threshold wakes the same owner for launch
