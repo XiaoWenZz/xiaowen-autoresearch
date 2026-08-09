@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import statistics
@@ -22,6 +23,11 @@ SOFT_TOKEN_THRESHOLD = 25_000_000
 HARD_TOKEN_THRESHOLD = 75_000_000
 MIN_SOFT_TOKEN_TURNS = 2
 MIN_RELATIVE_WINDOWS = 8
+CONTEXT_WINDOW_SIZE = 20
+CONTEXT_MEDIAN_TARGET = 64_000
+CONTEXT_P95_TARGET = 96_000
+CONTEXT_MEDIAN_ROLLOVER = 96_000
+CONTEXT_TAIL_LIMIT = 128_000
 ISSUE_FIELDS = (
     "source_type",
     "detector",
@@ -285,6 +291,148 @@ def _token_usage(event: dict[str, Any]) -> int | None:
     if isinstance(total, bool) or not isinstance(total, int) or total < 0:
         raise GateError("token_count last_token_usage.total_tokens is invalid")
     return total
+
+
+def _context_input_tokens(event: dict[str, Any], line_number: int) -> int:
+    payload = event.get("payload")
+    if not isinstance(payload, dict) or payload.get("type") != "token_count":
+        raise GateError(f"token_count event at line {line_number} is malformed")
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        raise GateError(f"token_count info at line {line_number} is malformed")
+    last = info.get("last_token_usage")
+    if not isinstance(last, dict):
+        raise GateError(
+            f"token_count last_token_usage at line {line_number} is malformed"
+        )
+    value = last.get("input_tokens")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise GateError(
+            f"token_count last_token_usage.input_tokens at line {line_number} is invalid"
+        )
+    return value
+
+
+def scan_controller_context_window(
+    rollout_path: Path,
+    thread_id: str,
+) -> tuple[str, int | None, list[int]]:
+    """Read one rollout's session identity and the latest post-epoch input window."""
+
+    session_id: str | None = None
+    epoch_marker_line: int | None = None
+    post_epoch_tokens: list[int] = []
+    with rollout_path.open("r", encoding="utf-8") as handle:
+        for line_number, raw in enumerate(handle, start=1):
+            if not raw.strip():
+                continue
+            try:
+                event = json.loads(raw, object_pairs_hook=_strict_object)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise GateError(f"invalid rollout JSON at line {line_number}") from exc
+            if not isinstance(event, dict):
+                raise GateError(f"rollout event at line {line_number} must be an object")
+
+            event_type = event.get("type")
+            if event_type == "session_meta":
+                if session_id is not None:
+                    raise GateError("rollout contains multiple session_meta records")
+                payload = event.get("payload")
+                if not isinstance(payload, dict):
+                    raise GateError("session_meta payload is missing or malformed")
+                identity = payload.get("id")
+                if not isinstance(identity, str) or not identity:
+                    raise GateError("session_meta.id is missing")
+                session_identity = payload.get("session_id")
+                if session_identity is not None and (
+                    not isinstance(session_identity, str)
+                    or session_identity != identity
+                ):
+                    raise GateError("session_meta session identity is contradictory")
+                if identity != thread_id:
+                    raise GateError("session_meta.id does not match requested thread")
+                session_id = identity
+                continue
+
+            if event_type == "compacted":
+                epoch_marker_line = line_number
+                post_epoch_tokens.clear()
+                continue
+
+            if event_type != "event_msg":
+                continue
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                continue
+            payload_type = payload.get("type")
+            if payload_type == "context_compacted":
+                epoch_marker_line = line_number
+                post_epoch_tokens.clear()
+            elif payload_type == "token_count":
+                post_epoch_tokens.append(_context_input_tokens(event, line_number))
+
+    if session_id is None:
+        raise GateError("rollout is missing session_meta identity")
+    return session_id, epoch_marker_line, post_epoch_tokens[-CONTEXT_WINDOW_SIZE:]
+
+
+# Keep a short importable alias for callers that use the existing token-window naming.
+scan_context_window = scan_controller_context_window
+
+
+def _nearest_rank_p95(values: list[int]) -> int | None:
+    if not values:
+        return None
+    rank = max(1, math.ceil(0.95 * len(values)))
+    return sorted(values)[rank - 1]
+
+
+def _integer_median(values: list[int]) -> int | float | None:
+    if not values:
+        return None
+    median = statistics.median(values)
+    if isinstance(median, float) and median.is_integer():
+        return int(median)
+    return median
+
+
+def controller_context_decision(
+    values: list[int],
+    *,
+    thread_id: str,
+    session_id: str,
+    epoch_marker_line: int | None,
+) -> dict[str, Any]:
+    count = len(values)
+    median = _integer_median(values)
+    p95 = _nearest_rank_p95(values)
+    tail = 0
+    for value in reversed(values):
+        if value <= CONTEXT_TAIL_LIMIT:
+            break
+        tail += 1
+    if count < CONTEXT_WINDOW_SIZE:
+        decision = "ALLOW"
+    elif tail >= CONTEXT_WINDOW_SIZE:
+        decision = "PAUSE_NEW_OBJECTIVE_ADMISSION"
+    elif median is not None and median > CONTEXT_MEDIAN_ROLLOVER:
+        decision = "REQUIRE_ROLLOVER"
+    else:
+        decision = "ALLOW"
+    return {
+        "status": "PASS",
+        "mode": "CONTROLLER_CONTEXT_WINDOW",
+        "thread_id": thread_id,
+        "session_id": session_id,
+        "count": count,
+        "median": median,
+        "p95": p95,
+        "tail_consecutive_over_128000": tail,
+        "epoch_marker_line": epoch_marker_line,
+        "median_target": CONTEXT_MEDIAN_TARGET,
+        "p95_target": CONTEXT_P95_TARGET,
+        "decision": decision,
+    }
 
 
 def scan_token_window(rollout_path: Path, dispatch_id: str) -> tuple[int, int, int]:
@@ -597,6 +745,10 @@ def build_parser() -> argparse.ArgumentParser:
     token.add_argument("--dispatch-id", required=True)
     token.add_argument("--decision-output-count", type=int, required=True)
     token.add_argument("--healthy-windows-json", default="[]")
+    context = subparsers.add_parser("controller-context-window")
+    context.add_argument("--state-db", default=str(STATE_DB))
+    context.add_argument("--workspace-root", default=str(WORKSPACE_ROOT))
+    context.add_argument("--thread-id", required=True)
     events = subparsers.add_parser("evaluate-events")
     events.add_argument("--events-json", required=True)
     rule_chain = subparsers.add_parser("validate-rule-chain")
@@ -631,6 +783,23 @@ def main() -> int:
                 healthy_windows=healthy,
             )
             result["activation_line"] = activation_line
+        elif args.command == "controller-context-window":
+            rollout_path, cwd = _thread_record(Path(args.state_db), args.thread_id)
+            workspace_root = Path(args.workspace_root)
+            if not _is_within(cwd, workspace_root):
+                raise GateError("thread cwd is outside the configured workspace")
+            if not rollout_path.is_file():
+                raise GateError("thread rollout_path is unavailable")
+            session_id, epoch_marker_line, values = scan_controller_context_window(
+                rollout_path,
+                args.thread_id,
+            )
+            result = controller_context_decision(
+                values,
+                thread_id=args.thread_id,
+                session_id=session_id,
+                epoch_marker_line=epoch_marker_line,
+            )
         elif args.command == "evaluate-events":
             events = _load_json_value(args.events_json, "events_json")
             result = evaluate_events(events)
@@ -641,8 +810,13 @@ def main() -> int:
                 skill_root=Path(args.skill_root),
             )
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        if args.command == "controller-context-window" and result["decision"] in {
+            "PAUSE_NEW_OBJECTIVE_ADMISSION",
+            "REQUIRE_ROLLOVER",
+        }:
+            return 2
         return 0 if result["status"] == "PASS" else 2
-    except (GateError, OSError, sqlite3.Error) as exc:
+    except (GateError, OSError, UnicodeError, sqlite3.Error) as exc:
         print(json.dumps({"status": "FAIL", "error": str(exc)}, sort_keys=True))
         return 2
 

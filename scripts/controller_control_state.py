@@ -2747,11 +2747,35 @@ def cmd_prepare_terminal_callback(args: argparse.Namespace) -> None:
         objective.get("startup_chain_authority"),
         require_startup_authority_mirror=_requires_startup_authority_mirror(objective),
     )
+
+    def compact_text(field: str) -> str | None:
+        value = terminal_body.get(field)
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise StateError(f"terminal.{field} must be null or a string")
+        if len(value.encode("utf-8")) > 2048:
+            raise StateError(f"terminal.{field} exceeds 2048 UTF-8 bytes")
+        return value
+
+    fresh_thread_reason = terminal_body.get("fresh_thread_reason")
+    if fresh_thread_reason is not None:
+        if (
+            not isinstance(fresh_thread_reason, str)
+            or fresh_thread_reason not in FRESH_THREAD_REASONS
+        ):
+            raise StateError("terminal.fresh_thread_reason is not allowlisted")
+
     payload = {
-        "completion_binding": copy.deepcopy(binding),
+        "terminal_event_id": binding["terminal_event_id"],
+        "objective_id": objective["objective_id"],
+        "owner_thread_id": objective["owner_thread_id"],
+        "terminal_path": binding["terminal_path"],
         "final_bytes": len(data),
         "final_sha256": hashlib.sha256(data).hexdigest(),
-        "terminal_body": terminal_body,
+        "disposition": compact_text("disposition"),
+        "next_action": compact_text("next_action"),
+        "fresh_thread_reason": fresh_thread_reason,
     }
     print(canonical_bytes(payload).decode("utf-8"), end="")
 

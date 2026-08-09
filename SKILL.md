@@ -1,6 +1,6 @@
 ---
 name: xiaowen-autoresearch
-description: "Control bounded research discovery, Scouts, confirmation, adjudication, recovery, and handoff. Use for decision-critical sources, contracts, protected evidence, remote/GPU work, advisory, or interpretation. Do not invoke for a simple concept explanation or in a pure implementation/execution worker after the frozen contract fixes the question, edit surface, commands, evidence boundary, budget, terminal, and callback."
+description: "Control bounded discovery, Scouts, confirmation, adjudication, recovery/handoff. Use for decision-critical sources/contracts, protected evidence, remote/GPU, advice/interpretation. Do not invoke for a simple concept explanation or pure implementation/execution worker after the frozen contract fixes question/edits/commands/evidence boundary/budget/terminal/callback."
 ---
 
 # Xiaowen AutoResearch
@@ -112,8 +112,10 @@ update on activation, material state change and terminal absorption.
 Keep one retargeted, never duplicated Controller heartbeat. Each wake resumes
 that Controller, drains prebound terminal absorb/route/activate/title/pin/CAS
 before final, and never redoes role semantics, interprets protected science,
-creates filler or crosses an unabsorbed terminal. Slurm checks capacity only for
-exact `A100_CAPACITY_AVAILABLE`. See `references/orchestration.md`.
+creates filler, or crosses an unabsorbed terminal. Before new-objective
+admission run `workflow_evolution_gate.py controller-context-window`.
+Slurm checks capacity only for exact `A100_CAPACITY_AVAILABLE`. See
+`references/orchestration.md`.
 
 They are no data protocol, capsule, schema, lifecycle, context-bootstrap,
 automation or evidence substitute, and cannot change the research contract,
@@ -331,13 +333,12 @@ similar conversation. Ordinary batches are `NON_BLOCKING`;
 validation. The singleton may wake an eligible Explorer/Audit but never open
 Pro or create a reader. Pro grants no authority by agreement.
 
-Recover from durable repository/contract/terminal authority, not chat memory.
-Ignore stale epochs and duplicate terminal IDs.
+Recover from durable repo/contract/terminal authority, not chat memory; reject
+stale epochs and duplicate terminal IDs.
 
 ## Existing deterministic helpers
 
-Use an existing helper only when its route requires it; do not add a new
-runtime governance family:
+Use helpers only on their routed path; add no runtime governance family:
 
 ```bash
 python3 scripts/init_task.py --help

@@ -696,9 +696,8 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
                     )
                 )
             callback_body = json.loads(callback.getvalue())
-            self.assertNotIn(
-                "startup_chain_authority", callback_body["terminal_body"]
-            )
+            self.assertNotIn("terminal_body", callback_body)
+            self.assertNotIn("completion_binding", callback_body)
             observe(
                 state_path,
                 revision=1,
@@ -809,9 +808,8 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
                     )
                 )
             callback_body = json.loads(callback.getvalue())
-            self.assertNotIn(
-                "startup_chain_authority", callback_body["terminal_body"]
-            )
+            self.assertNotIn("terminal_body", callback_body)
+            self.assertNotIn("completion_binding", callback_body)
 
             terminal_data = terminal.read_bytes()
             observe(
@@ -906,10 +904,29 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
                     )
                 )
             payload = json.loads(output.getvalue())
-            self.assertEqual(payload["completion_binding"], body["completion_binding"])
+            self.assertEqual(
+                set(payload),
+                {
+                    "terminal_event_id",
+                    "objective_id",
+                    "owner_thread_id",
+                    "terminal_path",
+                    "final_bytes",
+                    "final_sha256",
+                    "disposition",
+                    "next_action",
+                    "fresh_thread_reason",
+                },
+            )
+            self.assertEqual(payload["terminal_event_id"], "TERM-1")
+            self.assertEqual(payload["objective_id"], "objective-1")
+            self.assertEqual(payload["owner_thread_id"], "worker-1")
+            self.assertEqual(payload["terminal_path"], str(terminal))
             self.assertEqual(payload["final_bytes"], len(data))
             self.assertEqual(payload["final_sha256"], hashlib.sha256(data).hexdigest())
-            self.assertEqual(payload["terminal_body"], body)
+            self.assertIsNone(payload["disposition"])
+            self.assertIsNone(payload["next_action"])
+            self.assertIsNone(payload["fresh_thread_reason"])
 
     def test_observe_rejects_terminal_replaced_after_callback_before_state_mutation(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
