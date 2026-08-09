@@ -212,6 +212,17 @@ normal, migration and recovery writer exclusively locks it, rereads the
 revision/checksum under that lock, validates the transition, and commits both
 files before unlock; exactly one competing Controller/Executor CAS can succeed.
 
+The cold `absorb-and-block` route requires a new blocker to carry both
+`reason_code` and `evidence_ref`. The reason must be one of the existing
+`EXTERNAL_IMPOSSIBILITY_REASONS`; the evidence reference is exactly
+`<allowlisted-absolute-immutable-path>#sha256=<64 lowercase hex>`. The command
+opens the evidence with the same no-symlink immutable reader, verifies its
+digest, and rejects a reference to the worker terminal being absorbed before
+the CAS. A legacy `BLOCKED` snapshot with both attestation fields absent
+remains readable and valid; supplying only one field is invalid. The blocker
+digest is covered by the objective guard, so generic replacement cannot migrate
+or rewrite it around this gate.
+
 `await-successor-activation` is a prospective read-only startup barrier, not a
 state transition. Controller places the planned `activate-successor` revision,
 successor objective/owner/role, exact six-field completion binding, absorbed
@@ -305,6 +316,15 @@ cannot silently reset a consumed budget. `derive-startup-chain-id` accepts only
 the snapshot and objective ID, re-verifies the same bytes, and has no caller
 channel for a replacement contract or omitted history.
 
+Every `activate-successor` whose `new_owner_role` is `Executor` also requires
+the non-persistent CLI enum `--executor-continuation-kind`: `CARRIER` requires a
+non-null resolved `startup_chain_authority`; `ZERO_UTILITY_IMPLEMENTATION`
+requires the same owner thread and role, an `OPEN` candidate,
+`scientific_outcome=UNOBSERVED`, and no new remote job, while retaining or
+leaving null any existing authority. Non-Executor successors may not pass this
+enum. The enum is never stored as a state field, lifecycle, artifact, role, or
+additional budget.
+
 The delegated Executor alone may invoke this one matching-objective/owner
 `record-startup-attempt` CAS under the parent AGENTS chain. Every generic,
 lifecycle, routing, terminal, role, job, advisory and owner-transfer state write
@@ -378,6 +398,11 @@ thread across open objectives creates a terminal path that cannot close atomical
 Internal repair, constructability, contract, source/code/algebra,
 estimand/identification, weak-signal, or contribution work is never a durable
 blocker or inactive archive.
+
+In particular, source/runner/config/validator/grant-handler/host wrapper
+failures, constructability gaps, and portfolio parking are not blocker
+attestations. They remain owned engineering or carrier work until a genuine
+allowlisted external impossibility is independently attested.
 
 Every v4 Pro obligation uses explicit batch semantics; legacy advisory shapes
 are invalid for validation, replacement, migration and wake delivery. An

@@ -18,6 +18,13 @@ AUTOMATIONS_ROOT = Path(
     )
 )
 AUTOMATION = AUTOMATIONS_ROOT / AUTOMATION_ID / "automation.toml"
+RUNTIME_OVERLAY = (
+    Path(__file__).resolve().parents[2]
+    / "runtime-overlay"
+    / AUTOMATION_ID
+    / "automation.toml"
+)
+LIVE_AUTOMATION = Path("/Users/xiaowen/.codex/automations") / AUTOMATION_ID / "automation.toml"
 SKILL_ROOT = Path(
     os.environ.get("XAR_SKILL_ROOT", Path(__file__).resolve().parents[1])
 )
@@ -99,9 +106,12 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
 
         for phrase in (
             "schema_version=5",
-            "First run the read-only controller-context-window gate, then `show --projection active`",
-            "do not preload the full Skill, full state, or long references for this no-effect check",
-            "If the active projection has no objective/role/job/advisory/pending/callback obligation, return quietly",
+            "workflow_evolution_gate.py controller-context-window",
+            "controller_control_state.py show --projection active",
+            "Do not preload the full Skill, full state, long references, remote/child AGENTS, or Workflow Evolution",
+            "no-effect never routes Workflow Evolution",
+            "Treat only callback, terminal/pending absorption or terminal-state, due blocker, missing/failed owner, failed/overdue job, state contradiction, or explicit new-objective admission as actionable",
+            "If none is present, return quietly",
             "For an actionable obligation, reload the complete live Skill and only its directly triggered references before effects",
             "use `show --projection full` only for migration, contradiction, rebuild, or replay",
             "每次 wake 都是同一 Controller thread 的恢复事务",
@@ -117,6 +127,7 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             "absorb-and-block",
             "Terminal absorption, safety, existing-owner continuity, and blocker recovery remain nonblocking",
             "REQUIRE_ROLLOVER and PAUSE_NEW_OBJECTIVE_ADMISSION block only new-objective admission",
+            "context pause never blocks terminal/safety/existing-owner recovery",
             "Complete the runtime-supported compact/rollover before another new objective",
             "this gate creates no state/artifact",
             "require one successful receipt, then immediately CAS activate-successor",
@@ -227,6 +238,19 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             ):
                 active.append(config.get("id"))
         self.assertEqual(active, [AUTOMATION_ID])
+
+    def test_runtime_overlay_copies_live_metadata_and_fixture_prompt_verbatim(self) -> None:
+        if not RUNTIME_OVERLAY.is_file():
+            self.skipTest(f"runtime overlay not present: {RUNTIME_OVERLAY}")
+        fixture = load(AUTOMATION)
+        overlay = load(RUNTIME_OVERLAY)
+        self.assertEqual(overlay["prompt"], fixture["prompt"])
+        if LIVE_AUTOMATION.is_file():
+            live = load(LIVE_AUTOMATION)
+            self.assertEqual(
+                {key: overlay[key] for key in live if key != "prompt"},
+                {key: live[key] for key in live if key != "prompt"},
+            )
 
 
 if __name__ == "__main__":

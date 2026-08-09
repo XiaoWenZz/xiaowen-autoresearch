@@ -608,8 +608,13 @@ explicit existing-thread model override, the Sol owner may instead dispatch one
 contiguous same-thread `gpt-5.6-luna/max` turn. That prompt must contain the
 complete frozen capsule and exactly one unique line
 `LUNA_ROUTE_DISPATCH_ID=<id>`; this fallback does not claim the custom profile
-loaded. Before the action's first write, remote launch or protected read, run
-`scripts/validate_model_route.py` against durable rollout metadata, including
+loaded. Build the same-thread prompt with the existing canonical
+`scripts/validate_model_route.py` builder CLI
+`--build-same-thread-prompt --route-dispatch-id <id> --capsule-path <path>`
+using the existing capsule, and send its stdout verbatim only after the
+same-thread validator confirms exactly one marker. A missing or duplicate
+builder/marker fails before delivery. Before the action's first write, remote
+launch or protected read, run `scripts/validate_model_route.py` against durable rollout metadata, including
 the exact parent binding for a named child or the exact thread and route-dispatch
 binding for a same-thread turn. The check is ephemeral and writes no state or
 artifact; a mismatch returns to the Sol owner before effects or stops fail-closed:

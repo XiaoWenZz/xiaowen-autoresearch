@@ -9,8 +9,11 @@ from pathlib import Path
 
 from scripts.validate_model_route import (
     RouteReceipt,
+    build_same_thread_prompt,
+    build_same_thread_prompt_bytes,
     load_rollout_receipt,
     validate_receipt,
+    validate_same_thread_prompt,
 )
 
 
@@ -135,6 +138,131 @@ class ModelRouteTest(unittest.TestCase):
             "</input>\n"
             "</codex_delegation>"
         )
+
+    def write_capsule(
+        self, root: Path, name: str, content: str | bytes
+    ) -> tuple[Path, bytes]:
+        path = root / name
+        capsule_bytes = content.encode("utf-8") if isinstance(content, str) else content
+        path.write_bytes(capsule_bytes)
+        return path, capsule_bytes
+
+    def test_same_thread_prompt_builder_replays_p59_and_smi_capsules(self) -> None:
+        capsules = (
+            (
+                "p59-r2-identity-conformance.txt",
+                "P59 R2 identity conformance\nidentity=SCOUT_COMPLETE.identity\n",
+            ),
+            (
+                "smi-attempt-003-full-carrier.txt",
+                "SMI Attempt-003 full-carrier implementation\r\ncarrier=full\r\n",
+            ),
+        )
+        route_dispatch_id = "DISPATCH-PR8-SAME-THREAD-20260810-001"
+        marker = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n".encode("utf-8")
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            for name, capsule in capsules:
+                with self.subTest(name=name):
+                    path, capsule_bytes = self.write_capsule(root, name, capsule)
+                    built_bytes = build_same_thread_prompt_bytes(route_dispatch_id, path)
+                    self.assertEqual(built_bytes, marker + capsule_bytes)
+                    self.assertEqual(
+                        build_same_thread_prompt(route_dispatch_id, path),
+                        (marker + capsule_bytes).decode("utf-8"),
+                    )
+                    validate_same_thread_prompt(built_bytes, route_dispatch_id)
+                    self.assertEqual(
+                        built_bytes.count(b"LUNA_ROUTE_DISPATCH_ID="), 1
+                    )
+
+    def test_same_thread_prompt_validator_rejects_marker_shape_errors(self) -> None:
+        route_dispatch_id = "luna-route-1"
+        marker = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}"
+        cases = {
+            "absent": "capsule body",
+            "duplicate": f"{marker}\n{marker}\ncapsule body",
+            "wrong id": "LUNA_ROUTE_DISPATCH_ID=other-route\ncapsule body",
+            "hidden": f"{marker}\ncapsule body hides LUNA_ROUTE_DISPATCH_ID=other-route",
+            "not first": f"capsule body\n{marker}\n",
+        }
+        for name, prompt in cases.items():
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                validate_same_thread_prompt(prompt, route_dispatch_id)
+
+    def test_same_thread_prompt_builder_rejects_invalid_ids_and_capsules(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            path, _ = self.write_capsule(root, "capsule.txt", "capsule body\n")
+            for route_dispatch_id in (
+                "",
+                " ",
+                "bad/id",
+                "bad\nid",
+                "_bad-leading-token",
+            ):
+                with self.subTest(route_dispatch_id=route_dispatch_id), self.assertRaises(
+                    ValueError
+                ):
+                    build_same_thread_prompt(route_dispatch_id, path)
+
+            for name, content in (
+                ("marker-right.txt", "body LUNA_ROUTE_DISPATCH_ID=luna-route-1\n"),
+                ("marker-wrong.txt", "LUNA_ROUTE_DISPATCH_ID=other-route\nbody\n"),
+            ):
+                marker_path, _ = self.write_capsule(root, name, content)
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    ValueError, "route dispatch marker"
+                ):
+                    build_same_thread_prompt("luna-route-1", marker_path)
+
+            directory = root / "capsule-directory"
+            directory.mkdir()
+            with self.assertRaisesRegex(ValueError, "regular"):
+                build_same_thread_prompt("luna-route-1", directory)
+
+            symlink = root / "capsule-link"
+            symlink.symlink_to(path)
+            with self.assertRaisesRegex(ValueError, "regular"):
+                build_same_thread_prompt("luna-route-1", symlink)
+
+            invalid_utf8, _ = self.write_capsule(root, "invalid-utf8", b"\xff\xfe")
+            with self.assertRaisesRegex(ValueError, "UTF-8"):
+                build_same_thread_prompt("luna-route-1", invalid_utf8)
+
+            unreadable, _ = self.write_capsule(root, "unreadable", b"body")
+            unreadable.chmod(0)
+            try:
+                with self.assertRaisesRegex(ValueError, "readable"):
+                    build_same_thread_prompt("luna-route-1", unreadable)
+            finally:
+                unreadable.chmod(0o600)
+
+    def test_cli_builds_same_thread_prompt_to_stdout_verbatim(self) -> None:
+        route_dispatch_id = "XAR-PR8-SAME-THREAD-20260810-001"
+        capsule_bytes = "capsule\nwith\r\noriginal bytes\n".encode("utf-8")
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            path, _ = self.write_capsule(root, "capsule.txt", capsule_bytes)
+            before = path.read_bytes()
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(VALIDATOR),
+                    "--build-same-thread-prompt",
+                    "--route-dispatch-id",
+                    route_dispatch_id,
+                    "--capsule-path",
+                    str(path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr.decode())
+            expected = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n".encode()
+            self.assertEqual(result.stdout, expected + capsule_bytes)
+            self.assertEqual(result.stderr, b"")
+            self.assertEqual(path.read_bytes(), before)
 
     def test_frozen_deterministic_route_requires_luna_max(self) -> None:
         self.assertEqual(
