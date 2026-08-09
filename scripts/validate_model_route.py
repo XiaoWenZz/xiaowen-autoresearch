@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,9 +28,13 @@ class RouteReceipt:
     protected_exposed: bool = False
     decision_ambiguity: bool = False
     receipt_source: str = "direct"
+    route_mode: str = "named_child"
     agent_role: str | None = None
     parent_thread_id: str | None = None
     multi_agent_version: str | None = None
+    thread_id: str | None = None
+    turn_id: str | None = None
+    route_dispatch_id: str | None = None
 
 
 def expected_route(receipt: RouteReceipt) -> tuple[str, str]:
@@ -48,6 +53,8 @@ def validate_receipt(
     receipt: RouteReceipt,
     *,
     expected_parent_thread_id: str | None = None,
+    expected_thread_id: str | None = None,
+    expected_route_dispatch_id: str | None = None,
 ) -> tuple[str, str]:
     expected = expected_route(receipt)
     actual = (receipt.model, receipt.effort)
@@ -59,17 +66,39 @@ def validate_receipt(
     if receipt.action_class == "frozen_deterministic":
         if receipt.receipt_source != "durable_rollout":
             raise ValueError("Luna route requires durable rollout metadata")
-        if receipt.agent_role != "luna_worker":
-            raise ValueError("Luna route requires agent_role=luna_worker")
-        if receipt.multi_agent_version != "v1":
-            raise ValueError("Luna route requires multi_agent_version=v1")
-        if not expected_parent_thread_id:
-            raise ValueError("Luna route requires an independently expected parent thread")
-        if receipt.parent_thread_id != expected_parent_thread_id:
-            raise ValueError(
-                "Luna parent binding mismatch: "
-                f"expected={expected_parent_thread_id} actual={receipt.parent_thread_id}"
-            )
+        if receipt.route_mode == "named_child":
+            if receipt.agent_role != "luna_worker":
+                raise ValueError("Luna named-child route requires agent_role=luna_worker")
+            if receipt.multi_agent_version != "v1":
+                raise ValueError("Luna named-child route requires multi_agent_version=v1")
+            if not expected_parent_thread_id:
+                raise ValueError(
+                    "Luna named-child route requires an independently expected parent thread"
+                )
+            if receipt.parent_thread_id != expected_parent_thread_id:
+                raise ValueError(
+                    "Luna parent binding mismatch: "
+                    f"expected={expected_parent_thread_id} actual={receipt.parent_thread_id}"
+                )
+        elif receipt.route_mode == "same_thread":
+            if not expected_thread_id:
+                raise ValueError("Luna same-thread route requires an expected thread")
+            if receipt.thread_id != expected_thread_id:
+                raise ValueError(
+                    "Luna thread binding mismatch: "
+                    f"expected={expected_thread_id} actual={receipt.thread_id}"
+                )
+            if not receipt.turn_id:
+                raise ValueError("Luna same-thread route is missing durable turn identity")
+            if not expected_route_dispatch_id:
+                raise ValueError("Luna same-thread route requires an expected route dispatch")
+            if receipt.route_dispatch_id != expected_route_dispatch_id:
+                raise ValueError(
+                    "Luna route dispatch mismatch: "
+                    f"expected={expected_route_dispatch_id} actual={receipt.route_dispatch_id}"
+                )
+        else:
+            raise ValueError(f"unknown Luna route mode: {receipt.route_mode}")
     return expected
 
 
@@ -79,6 +108,32 @@ def _object(value: Any, where: str) -> dict[str, Any]:
     return value
 
 
+def _user_message_text(event: dict[str, Any]) -> str:
+    if event.get("type") != "response_item":
+        return ""
+    payload = event.get("payload")
+    if not isinstance(payload, dict):
+        return ""
+    if payload.get("type") != "message" or payload.get("role") != "user":
+        return ""
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        item["text"]
+        for item in content
+        if isinstance(item, dict)
+        and item.get("type") in {"input_text", "text"}
+        and isinstance(item.get("text"), str)
+    )
+
+
+def _has_exact_route_dispatch(text: str, route_dispatch_id: str) -> bool:
+    return re.search(
+        rf"(?m)^LUNA_ROUTE_DISPATCH_ID={re.escape(route_dispatch_id)}$", text
+    ) is not None
+
+
 def load_rollout_receipt(
     rollout_path: Path,
     *,
@@ -86,14 +141,26 @@ def load_rollout_receipt(
     context_eligible: bool,
     protected_exposed: bool,
     decision_ambiguity: bool,
+    route_mode: str = "named_child",
+    expected_route_dispatch_id: str | None = None,
 ) -> RouteReceipt:
     """Read only durable routing fields; never trust worker prose."""
 
     session_meta: dict[str, Any] | None = None
     turn_context: dict[str, Any] | None = None
+    user_messages: list[tuple[int, str, str | None]] = []
     with rollout_path.open("r", encoding="utf-8") as handle:
         for line_number, raw in enumerate(handle, start=1):
-            if '"session_meta"' not in raw and '"turn_context"' not in raw:
+            if not any(
+                marker in raw
+                for marker in ('"session_meta"', '"turn_context"', '"response_item"')
+            ):
+                continue
+            if '"response_item"' in raw and (
+                route_mode != "same_thread"
+                or not expected_route_dispatch_id
+                or expected_route_dispatch_id not in raw
+            ):
                 continue
             try:
                 event = json.loads(raw)
@@ -109,15 +176,39 @@ def load_rollout_receipt(
                 session_meta = payload
             elif event.get("type") == "turn_context":
                 turn_context = payload
+            elif event.get("type") == "response_item":
+                text = _user_message_text(event)
+                if text:
+                    metadata = payload.get("internal_chat_message_metadata_passthrough")
+                    message_turn_id = (
+                        metadata.get("turn_id") if isinstance(metadata, dict) else None
+                    )
+                    user_messages.append((line_number, text, message_turn_id))
     if session_meta is None or turn_context is None:
         raise ValueError("rollout is missing session_meta or turn_context routing metadata")
 
     model = turn_context.get("model")
     effort = turn_context.get("effort")
+    turn_id = turn_context.get("turn_id")
     if not isinstance(model, str) or not model:
         raise ValueError("turn_context.model is missing")
     if not isinstance(effort, str) or not effort:
         raise ValueError("turn_context.effort is missing")
+    route_dispatch_id: str | None = None
+    if route_mode == "same_thread":
+        if not expected_route_dispatch_id:
+            raise ValueError("same-thread rollout load requires an expected route dispatch")
+        if not isinstance(turn_id, str) or not turn_id:
+            raise ValueError("same-thread turn_context.turn_id is missing")
+        matches = [
+            line_number
+            for line_number, text, message_turn_id in user_messages
+            if message_turn_id == turn_id
+            and _has_exact_route_dispatch(text, expected_route_dispatch_id)
+        ]
+        if len(matches) != 1:
+            raise ValueError("same-thread route dispatch marker is missing or ambiguous")
+        route_dispatch_id = expected_route_dispatch_id
     return RouteReceipt(
         action_class=action_class,
         model=model,
@@ -126,9 +217,13 @@ def load_rollout_receipt(
         protected_exposed=protected_exposed,
         decision_ambiguity=decision_ambiguity,
         receipt_source="durable_rollout",
+        route_mode=route_mode,
         agent_role=session_meta.get("agent_role"),
         parent_thread_id=session_meta.get("parent_thread_id"),
         multi_agent_version=session_meta.get("multi_agent_version"),
+        thread_id=session_meta.get("id"),
+        turn_id=turn_id if isinstance(turn_id, str) else None,
+        route_dispatch_id=route_dispatch_id,
     )
 
 
@@ -138,7 +233,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model")
     parser.add_argument("--effort")
     parser.add_argument("--rollout-path")
+    parser.add_argument(
+        "--route-mode", choices=("named_child", "same_thread"), default="named_child"
+    )
     parser.add_argument("--expected-parent-thread-id")
+    parser.add_argument("--expected-thread-id")
+    parser.add_argument("--expected-route-dispatch-id")
     parser.add_argument("--context-eligible", action="store_true")
     parser.add_argument("--protected-exposed", action="store_true")
     parser.add_argument("--decision-ambiguity", action="store_true")
@@ -157,6 +257,8 @@ def main() -> int:
                 context_eligible=args.context_eligible,
                 protected_exposed=args.protected_exposed,
                 decision_ambiguity=args.decision_ambiguity,
+                route_mode=args.route_mode,
+                expected_route_dispatch_id=args.expected_route_dispatch_id,
             )
         else:
             if not args.model or not args.effort:
@@ -168,17 +270,28 @@ def main() -> int:
                 context_eligible=args.context_eligible,
                 protected_exposed=args.protected_exposed,
                 decision_ambiguity=args.decision_ambiguity,
+                route_mode=args.route_mode,
             )
         model, effort = validate_receipt(
             receipt,
             expected_parent_thread_id=args.expected_parent_thread_id,
+            expected_thread_id=args.expected_thread_id,
+            expected_route_dispatch_id=args.expected_route_dispatch_id,
         )
     except (OSError, ValueError) as exc:
         print(f"FAIL_MODEL_ROUTE: {exc}")
         return 1
     suffix = ""
-    if receipt.agent_role is not None:
+    if receipt.route_mode == "same_thread":
         suffix = (
+            " route_mode=same_thread"
+            f" thread_id={receipt.thread_id}"
+            f" turn_id={receipt.turn_id}"
+            f" route_dispatch_id={receipt.route_dispatch_id}"
+        )
+    elif receipt.agent_role is not None:
+        suffix = (
+            " route_mode=named_child"
             f" agent_role={receipt.agent_role}"
             f" parent_thread_id={receipt.parent_thread_id}"
             f" multi_agent_version={receipt.multi_agent_version}"

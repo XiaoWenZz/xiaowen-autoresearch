@@ -562,25 +562,33 @@ recovery, an isolated context, or an auditable evidence trail across turns.
 At each bounded runtime dispatch or continuation boundary, derive model family and
 reasoning effort from the remaining action and currently visible context. Pass
 both explicitly for Sol routes; omission or inheritance from the predecessor,
-candidate, role or reusable session fails admission. Dispatch frozen deterministic
-work only through V1 named-agent `agent_type=luna_worker` with
-`fork_context=false` (or the runtime's exact no-history equivalent) and no direct
-model or effort override. A full-history fork inherits the parent agent type; V2
-`task_name` labels and generic model overrides do not load the custom profile.
-Before the action's first write, remote launch or protected read, run
+candidate, role or reusable session fails admission. A role name never selects
+an effort tier by itself. Prefer frozen deterministic work through V1 named-agent
+`agent_type=luna_worker` with `fork_context=false` (or the runtime's exact
+no-history equivalent) and no direct model or effort override. A full-history
+fork inherits the parent agent type; V2 `task_name` labels do not load the custom
+profile. When the dispatcher lacks the V1 `agent_type` field but exposes an
+explicit existing-thread model override, the Sol owner may instead dispatch one
+contiguous same-thread `gpt-5.6-luna/max` turn. That prompt must contain the
+complete frozen capsule and exactly one unique line
+`LUNA_ROUTE_DISPATCH_ID=<id>`; this fallback does not claim the custom profile
+loaded. Before the action's first write, remote launch or protected read, run
 `scripts/validate_model_route.py` against durable rollout metadata, including
-the exact parent binding for Luna. The check is ephemeral and writes no state or
+the exact parent binding for a named child or the exact thread and route-dispatch
+binding for a same-thread turn. The check is ephemeral and writes no state or
 artifact; a mismatch returns to the Sol owner before effects or stops fail-closed:
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
-  contracts, Audits, causal/statistical/algebraic reasoning, protected-result
-  interpretation, route decisions, closure, and adjudication;
+  material contract/authority/claim choices, causal/statistical/algebraic
+  adjudication, protected-result interpretation, scientific routes and closure;
 - `gpt-5.6-sol` + `xhigh`: first real-carrier Scout Executor, complex
   implementation, remote integration/debugging, and evidence-bearing execution;
-- `gpt-5.6-sol` + `high`: bounded engineering whose diagnosis or reasoning
-  exceeds the frozen mechanical contract, including nonlocal behavioral
-  uncertainty, ambiguous failures, numerical stability, concurrency,
-  performance tradeoffs, or data-integrity risk; and
+- `gpt-5.6-sol` + `high`: outcome-blind independent conformance/readiness Audit
+  against a frozen oracle, or bounded engineering whose diagnosis exceeds the
+  frozen mechanical contract, including nonlocal behavioral uncertainty,
+  ambiguous failures, numerical stability, concurrency, performance tradeoffs,
+  data-integrity risk, and routine Controller recovery with no scientific or
+  authority choice; and
 - `gpt-5.6-luna` + `max`: the default for boundary-complete routine
   implementation, test writing/fixing, documentation, deterministic local
   integration, rehashing, sync, packaging, unchanged-contract reruns, and
@@ -593,13 +601,18 @@ an exact edit surface, deterministic acceptance commands, frozen evidence,
 exposure, budget and stop boundaries, and no decision-critical ambiguity or
 protected-result interpretation.
 
-The Luna receipt authority is the child rollout's `session_meta` plus current
-`turn_context`: `agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`,
-exact `parent_thread_id`, and `multi_agent_version=v1`. Worker prose is never a
-route receipt. Inspect the dispatcher before spending a spawn: absence of an
-`agent_type` field proves the named profile unavailable in that turn; do not
-substitute `task_name`, a generic direct-model override, or a new user-visible
-task. A failed exact dispatch or durable mismatch is `RULE_TOOLING_DRIFT`.
+The Luna receipt authority is durable rollout metadata, never worker prose. A
+named child requires `session_meta` plus current `turn_context` with
+`agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact
+`parent_thread_id`, and `multi_agent_version=v1`. A same-thread fallback requires
+the exact `session_meta.id`, latest `turn_context` model/effort/turn ID, and
+exactly one matching `LUNA_ROUTE_DISPATCH_ID` user message whose durable message
+metadata carries that same turn ID. Do not infer turn ownership from file order:
+queued user input may be serialized before a same-turn context record. Inspect the
+dispatcher before spending a spawn: absence of `agent_type` makes only the named
+profile unavailable, not a separately exposed existing-thread Luna route. Do not
+substitute `task_name` or create a user-visible task merely to change models. A
+failed exact dispatch or durable mismatch is `RULE_TOOLING_DRIFT`.
 
 File or module count alone is not a Sol trigger. Deterministic multi-module
 work remains Luna-eligible when the edit surface, interactions, and acceptance
@@ -627,19 +640,20 @@ Explicit routing cases:
 - inspecting or interpreting protected rerun output -> Audit/Controller, not
   merely `sol/high`.
 
-Do not switch per turn or microstep. One objective may contain at most one
-contiguous pre-release, outcome-blind Luna child segment when the oracle and
-visible context are frozen. The named child is an execution layer under the
+Do not switch per microstep. One objective may contain at most one contiguous
+pre-release, outcome-blind Luna segment when the oracle and visible context are
+frozen. A named child or same-thread Luna turn is an execution layer under the
 same Sol owner: it preserves objective, scientific role, cumulative budget and
 final terminal, gains no science/authority, and creates no owner handoff,
-lifecycle or state field. It returns evidence to the exact parent for
+lifecycle or state field. It returns evidence to the exact Sol owner for
 real-carrier, evidence-bearing or decision work. For one failure fingerprint it
 may make at most one bounded mechanical repair, then returns the fingerprint,
 evidence and next diagnostic without another Luna loop. An already-running turn
-is not presumed to support a mid-turn model switch. The user-visible task,
-generic collaboration override, and named-profile catalogs may differ. A missing
-named-agent field, failed exact dispatch, or durable mismatch makes Luna
-unavailable for that turn. Then use the nearest allowed Sol tier, report
+cannot switch model mid-turn; same-thread fallback is a new explicitly routed
+turn. The user-visible task, generic collaboration override, named-profile
+catalogs and existing-thread route may differ. Luna is unavailable only when
+neither exact route is exposed or durable validation fails. Then use the nearest
+allowed Sol tier, report
 `RULE_TOOLING_DRIFT` and its expected token-cost consequence, and never claim
 Luna executed. After
 protected-result exposure, never downgrade to Luna. After
@@ -872,8 +886,11 @@ raise the soft threshold to the larger of 25M, twice the median, and median plus
 three MAD, capped at the 75M hard boundary. Valid negative/null decisions count
 as output; engineering/tests/files/terminals/reviews/GPU/token activity do not.
 Use the existing SQLite thread-to-rollout pointer and only `token_count` events
-after the exact dispatch marker; reject missing/ambiguous dispatch, nonworkspace
-threads and the independent ARIS task. `scripts/workflow_evolution_gate.py`
+after the one canonical Controller-to-owner user message containing the exact
+dispatch ID, `PASS_MODEL_ROUTE:` and `await-successor-activation`; ignore later
+terminal, callback, compaction, tool and prose echoes, while rejecting zero or
+multiple canonical markers, nonworkspace threads and the independent ARIS task.
+`scripts/workflow_evolution_gate.py`
 emits Shadow Mode JSON only and creates no artifact or state.
 
 Every finding includes a separate rule-conformance classification. A clear,

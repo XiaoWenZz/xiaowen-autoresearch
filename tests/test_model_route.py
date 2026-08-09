@@ -62,6 +62,64 @@ class ModelRouteTest(unittest.TestCase):
         )
         return path
 
+    def write_same_thread_rollout(
+        self,
+        root: Path,
+        *,
+        thread_id: str = "executor-1",
+        route_dispatch_id: str = "luna-route-1",
+        duplicate_marker: bool = False,
+        stale_marker: bool = False,
+        marker_before_context: bool = False,
+        omit_marker_turn_id: bool = False,
+        model: str = "gpt-5.6-luna",
+        effort: str = "max",
+        name: str = "same-thread-rollout.jsonl",
+    ) -> Path:
+        marker = {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "internal_chat_message_metadata_passthrough": (
+                    {} if omit_marker_turn_id else {
+                        "turn_id": "old-turn" if stale_marker else "turn-1"
+                    }
+                ),
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}",
+                    }
+                ],
+            },
+        }
+        events = [
+            {"type": "session_meta", "payload": {"id": thread_id}},
+        ]
+        if stale_marker or marker_before_context:
+            events.append(marker)
+        events.append(
+            {
+                "type": "turn_context",
+                "payload": {
+                    "model": model,
+                    "effort": effort,
+                    "multi_agent_version": "v2",
+                    "turn_id": "turn-1",
+                },
+            }
+        )
+        if not stale_marker and not marker_before_context:
+            events.append(marker)
+            if duplicate_marker:
+                events.append(marker)
+        path = root / name
+        path.write_text(
+            "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
+        )
+        return path
+
     def test_frozen_deterministic_route_requires_luna_max(self) -> None:
         self.assertEqual(
             validate_receipt(
@@ -114,6 +172,111 @@ class ModelRouteTest(unittest.TestCase):
         for receipt, message in cases:
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 validate_receipt(receipt, expected_parent_thread_id="parent-1")
+
+    def test_same_thread_luna_binds_current_thread_and_exact_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_same_thread_rollout(Path(raw))
+            receipt = load_rollout_receipt(
+                path,
+                action_class="frozen_deterministic",
+                context_eligible=True,
+                protected_exposed=False,
+                decision_ambiguity=False,
+                route_mode="same_thread",
+                expected_route_dispatch_id="luna-route-1",
+            )
+            self.assertEqual(
+                validate_receipt(
+                    receipt,
+                    expected_thread_id="executor-1",
+                    expected_route_dispatch_id="luna-route-1",
+                ),
+                ("gpt-5.6-luna", "max"),
+            )
+            self.assertEqual(receipt.thread_id, "executor-1")
+            self.assertEqual(receipt.turn_id, "turn-1")
+            self.assertIsNone(receipt.agent_role)
+
+    def test_same_thread_luna_accepts_marker_before_context_in_same_turn(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_same_thread_rollout(
+                Path(raw), marker_before_context=True
+            )
+            receipt = load_rollout_receipt(
+                path,
+                action_class="frozen_deterministic",
+                context_eligible=True,
+                protected_exposed=False,
+                decision_ambiguity=False,
+                route_mode="same_thread",
+                expected_route_dispatch_id="luna-route-1",
+            )
+            self.assertEqual(receipt.turn_id, "turn-1")
+
+    def test_same_thread_luna_rejects_wrong_thread_and_dispatch(self) -> None:
+        receipt = self.luna_receipt(
+            route_mode="same_thread",
+            agent_role=None,
+            parent_thread_id=None,
+            multi_agent_version="v2",
+            thread_id="executor-1",
+            turn_id="turn-1",
+            route_dispatch_id="luna-route-1",
+        )
+        with self.assertRaisesRegex(ValueError, "thread binding mismatch"):
+            validate_receipt(
+                receipt,
+                expected_thread_id="executor-2",
+                expected_route_dispatch_id="luna-route-1",
+            )
+        with self.assertRaisesRegex(ValueError, "route dispatch mismatch"):
+            validate_receipt(
+                receipt,
+                expected_thread_id="executor-1",
+                expected_route_dispatch_id="luna-route-2",
+            )
+
+    def test_same_thread_luna_rejects_stale_or_duplicate_marker(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            for path, dispatch in (
+                (
+                    self.write_same_thread_rollout(
+                        root, stale_marker=True, name="stale.jsonl"
+                    ),
+                    "luna-route-1",
+                ),
+                (
+                    self.write_same_thread_rollout(
+                        root,
+                        route_dispatch_id="luna-route-2",
+                        duplicate_marker=True,
+                        name="duplicate.jsonl",
+                    ),
+                    "luna-route-2",
+                ),
+                (
+                    self.write_same_thread_rollout(
+                        root,
+                        route_dispatch_id="luna-route-3",
+                        omit_marker_turn_id=True,
+                        name="missing-turn-id.jsonl",
+                    ),
+                    "luna-route-3",
+                ),
+            ):
+                with self.subTest(path=path), self.assertRaisesRegex(
+                    ValueError, "missing or ambiguous"
+                ):
+                    load_rollout_receipt(
+                        path,
+                        action_class="frozen_deterministic",
+                        context_eligible=True,
+                        protected_exposed=False,
+                        decision_ambiguity=False,
+                        route_mode="same_thread",
+                        expected_route_dispatch_id=dispatch,
+                    )
 
     def test_load_rollout_receipt_uses_metadata_not_worker_prose(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
@@ -186,6 +349,33 @@ class ModelRouteTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("PASS_MODEL_ROUTE: gpt-5.6-luna/max", result.stdout)
             self.assertIn("agent_role=luna_worker", result.stdout)
+
+    def test_cli_accepts_exact_same_thread_luna_rollout(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_same_thread_rollout(Path(raw))
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(VALIDATOR),
+                    "--action-class",
+                    "frozen_deterministic",
+                    "--rollout-path",
+                    str(path),
+                    "--route-mode",
+                    "same_thread",
+                    "--expected-thread-id",
+                    "executor-1",
+                    "--expected-route-dispatch-id",
+                    "luna-route-1",
+                    "--context-eligible",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PASS_MODEL_ROUTE: gpt-5.6-luna/max", result.stdout)
+            self.assertIn("route_mode=same_thread", result.stdout)
 
 
 if __name__ == "__main__":
