@@ -1,0 +1,192 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from scripts.validate_model_route import (
+    RouteReceipt,
+    load_rollout_receipt,
+    validate_receipt,
+)
+
+
+ROOT = Path(__file__).parents[1]
+VALIDATOR = ROOT / "scripts" / "validate_model_route.py"
+
+
+class ModelRouteTest(unittest.TestCase):
+    def luna_receipt(self, **overrides: object) -> RouteReceipt:
+        values: dict[str, object] = {
+            "action_class": "frozen_deterministic",
+            "model": "gpt-5.6-luna",
+            "effort": "max",
+            "context_eligible": True,
+            "receipt_source": "durable_rollout",
+            "agent_role": "luna_worker",
+            "parent_thread_id": "parent-1",
+            "multi_agent_version": "v1",
+        }
+        values.update(overrides)
+        return RouteReceipt(**values)  # type: ignore[arg-type]
+
+    def write_rollout(self, root: Path, **overrides: object) -> Path:
+        session = {
+            "id": "child-1",
+            "parent_thread_id": "parent-1",
+            "agent_role": "luna_worker",
+            "agent_nickname": "Popper",
+            "multi_agent_version": "v1",
+        }
+        turn = {"model": "gpt-5.6-luna", "effort": "max"}
+        for key, value in overrides.items():
+            if key in turn:
+                turn[key] = value
+            else:
+                session[key] = value
+        path = root / "rollout.jsonl"
+        path.write_text(
+            "\n".join(
+                json.dumps(event)
+                for event in (
+                    {"type": "session_meta", "payload": session},
+                    {"type": "event_msg", "payload": {"type": "task_started"}},
+                    {"type": "turn_context", "payload": turn},
+                )
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_frozen_deterministic_route_requires_luna_max(self) -> None:
+        self.assertEqual(
+            validate_receipt(
+                self.luna_receipt(), expected_parent_thread_id="parent-1"
+            ),
+            ("gpt-5.6-luna", "max"),
+        )
+        with self.assertRaisesRegex(ValueError, "runtime route mismatch"):
+            validate_receipt(
+                self.luna_receipt(model="gpt-5.6-sol", effort="xhigh"),
+                expected_parent_thread_id="parent-1",
+            )
+
+    def test_real_carrier_requires_sol_xhigh(self) -> None:
+        self.assertEqual(
+            validate_receipt(RouteReceipt("real_carrier", "gpt-5.6-sol", "xhigh")),
+            ("gpt-5.6-sol", "xhigh"),
+        )
+        with self.assertRaisesRegex(ValueError, "runtime route mismatch"):
+            validate_receipt(RouteReceipt("real_carrier", "gpt-5.6-luna", "max"))
+
+    def test_decision_ambiguity_forces_sol_max(self) -> None:
+        self.assertEqual(
+            validate_receipt(
+                RouteReceipt(
+                    "bounded_engineering",
+                    "gpt-5.6-sol",
+                    "max",
+                    decision_ambiguity=True,
+                )
+            ),
+            ("gpt-5.6-sol", "max"),
+        )
+
+    def test_protected_exposure_and_unfrozen_context_reject_luna(self) -> None:
+        for receipt in (
+            self.luna_receipt(protected_exposed=True),
+            self.luna_receipt(context_eligible=False),
+        ):
+            with self.subTest(receipt=receipt), self.assertRaises(ValueError):
+                validate_receipt(receipt, expected_parent_thread_id="parent-1")
+
+    def test_luna_requires_named_durable_role_parent_and_v1(self) -> None:
+        cases = (
+            (self.luna_receipt(receipt_source="direct"), "durable rollout"),
+            (self.luna_receipt(agent_role="default"), "agent_role=luna_worker"),
+            (self.luna_receipt(multi_agent_version="v2"), "multi_agent_version=v1"),
+            (self.luna_receipt(parent_thread_id="other"), "parent binding mismatch"),
+        )
+        for receipt, message in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                validate_receipt(receipt, expected_parent_thread_id="parent-1")
+
+    def test_load_rollout_receipt_uses_metadata_not_worker_prose(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_rollout(Path(raw))
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "type": "response_item",
+                            "payload": {
+                                "text": "agent_role=other model=gpt-5.6-sol effort=low"
+                            },
+                        }
+                    )
+                    + "\n"
+                )
+            receipt = load_rollout_receipt(
+                path,
+                action_class="frozen_deterministic",
+                context_eligible=True,
+                protected_exposed=False,
+                decision_ambiguity=False,
+            )
+            self.assertEqual(receipt.agent_role, "luna_worker")
+            self.assertEqual(receipt.model, "gpt-5.6-luna")
+            self.assertEqual(
+                validate_receipt(receipt, expected_parent_thread_id="parent-1"),
+                ("gpt-5.6-luna", "max"),
+            )
+
+    def test_cli_is_read_only_and_fails_closed_on_wrong_receipt(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(VALIDATOR),
+                "--action-class",
+                "frozen_deterministic",
+                "--model",
+                "gpt-5.6-sol",
+                "--effort",
+                "xhigh",
+                "--context-eligible",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("FAIL_MODEL_ROUTE", result.stdout)
+
+    def test_cli_accepts_exact_named_luna_rollout(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            path = self.write_rollout(Path(raw))
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(VALIDATOR),
+                    "--action-class",
+                    "frozen_deterministic",
+                    "--rollout-path",
+                    str(path),
+                    "--expected-parent-thread-id",
+                    "parent-1",
+                    "--context-eligible",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PASS_MODEL_ROUTE: gpt-5.6-luna/max", result.stdout)
+            self.assertIn("agent_role=luna_worker", result.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

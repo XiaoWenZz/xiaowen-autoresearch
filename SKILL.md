@@ -5,24 +5,22 @@ description: "Control bounded research discovery, Scouts, confirmation, adjudica
 
 # Xiaowen AutoResearch
 
-Optimize decision-relevant evidence per unit cost. This is a control plane, not
-default machinery for every research-labelled task.
+Optimize evidence per cost; never add machinery by label.
 
 ## 1. Resolve authority and side effects
 
-1. Read the complete applicable `AGENTS.md` chain and any contract/manifest the
-   action uses. This skill cannot override platform, system, developer, or
+1. Read the applicable `AGENTS.md` chain and used contract/manifest. This skill
+   cannot override platform, system, developer, or
    `AGENTS.md` authority.
 2. State repository, branch, remote, environment, scope, and owner before a
    write, launch, remote diagnosis, or protected-evidence action. Preserve
    unrelated dirty work.
-3. Discover matching sessions only for a persistent worker, remote/unattended
-   dispatch, or shared-state mutation. A local single-owner task is already its
-   owner; create no registry, chronology, lease, or duplicate task.
-4. Classify the action as routine/reversible, prospectively authorized bounded
-   execution, or approval-required. Paid-service use, publication/public-facing
-   communication, production, destructive, protected-evidence, budget-changing,
-   and claim-changing actions require explicit authority.
+3. Discover matching sessions only for persistent work, remote/unattended
+   dispatch, or shared-state mutation. A local single-owner task is its owner;
+   create no registry, chronology, lease, or duplicate task.
+4. Classify as routine/reversible, authorized bounded, or approval-required.
+   Paid/public/production/destructive/protected-evidence/budget- or claim-changing
+   actions require authority.
 
 Stop on a decision-critical authority conflict.
 
@@ -43,9 +41,9 @@ delivery surface. Lite creates:
 - at most one terminal only when durable evidence is genuinely needed,
   otherwise only the user-visible final response.
 
-Local source/literature/code/workflow audits, one local Scout, and one-shot Pro
-advisory remain Lite. Sidecars or `0444` apply only to real evidence-chain
-artifacts, never merely to research-labelled work.
+Local source/literature/code/workflow audits, one local Scout, bounded Pro
+batches, and one-shot Pro closure advisory remain Lite. Sidecars or `0444`
+apply only to real evidence-chain artifacts.
 
 Escalate to Managed only when at least one trigger is real:
 
@@ -66,8 +64,7 @@ public-test, publication-facing, expensive, or irreversible evidence.
 
 ## 3. Select one route and load one layer
 
-Read only the row for the selected route. Read a conditional reference only
-when its named trigger exists.
+Read the selected row and only trigger-matched conditional references.
 
 | Route | Required references | Conditional trigger |
 | --- | --- | --- |
@@ -76,30 +73,24 @@ when its named trigger exists.
 | Problem Scout / scientific contract | [problem-space.md](references/problem-space.md), [research-integrity.md](references/research-integrity.md) | [research-programs.md](references/research-programs.md) only when the Scout belongs to a Program/Epoch |
 | Contribution / verification / adjudication | [portfolio-search.md](references/portfolio-search.md), [research-integrity.md](references/research-integrity.md) | [research-programs.md](references/research-programs.md) for Program decisions; [gate-backtesting.md](references/gate-backtesting.md) only for retrospective calibration |
 | Managed controller / recovery | [orchestration.md](references/orchestration.md) | [portfolio-lanes.md](references/portfolio-lanes.md) only when a real shared lane changes; [state-schema.md](references/state-schema.md) only when durable Managed state is actually required |
-| External advisory | the selected scientific route's references | [orchestration.md](references/orchestration.md) only for persistent asynchronous delivery or recovery |
+| External Pro | selected route references | [external-opportunity-search-prompts.md](references/external-opportunity-search-prompts.md) for discovery; [orchestration.md](references/orchestration.md) only on an independent Managed trigger |
 | Knowledge-map handoff | [research-map-maintenance.md](references/research-map-maintenance.md) | [research-integrity.md](references/research-integrity.md) when adding or changing a claim |
 
-A route transition requires the new row before the transitioning action. Do not
-preload all references.
+Load a new route row before transition; never preload all references.
 
 ## 4. Exclude the frozen execution plane
 
-Keep these boundaries: the Controller routes and accepts; the Explorer owns one
-complete source-to-`PROBE` loop; the Audit owns the whole `R0` decision in one
-owner/terminal; the Executor enters only after a complete implementation
-contract is frozen. Packet, locator, sidecar, and file checks stay inside the
-current owner as mechanical preflight.
+Keep role boundaries: Controller routes/accepts; Explorer owns one complete
+source-to-`PROBE` loop; Audit owns the whole `R0` decision in one owner/terminal;
+Executor enters only after a complete implementation contract freezes. Packet,
+locator, sidecar, and file checks stay in the current owner as preflight.
 
-At an idea boundary, reuse the existing task capsule, decision record, and
-terminal/closure record. Do not include the prior idea's raw transcript. For
-the same idea, use `/compact` only
-when decision-relevant history has become materially redundant. On an idea
-switch, reuse the canonical role session only after a runtime-supported
-compact/reset succeeds and isolation is verifiable. Record selection is not
-context isolation; otherwise open one fresh session, transfer the canonical
-role binding, and close/archive the prior session so no duplicate owner remains.
-A strict-blind owner exposed to forbidden bytes stays ineligible even after
-compaction; use a fresh unexposed owner.
+Reuse the idea's task capsule and durable records, never its raw transcript.
+Use `/compact` only after decision-relevant history becomes redundant. Reuse a
+canonical role across ideas only after verifiable runtime compact/reset;
+record selection is not isolation. Otherwise transfer the role once and retire
+the predecessor. A strict-blind owner exposed to forbidden bytes stays
+ineligible after compaction.
 
 For a missing field/hash, load only the authoritative section and directly
 referenced evidence needed to resolve it; load the complete record only for an
@@ -108,68 +99,76 @@ transcript. Never collapse `ENGINEERING_INVALID`, `HOLD_ACCESS_CHANNEL`,
 `CARRIER_STOP`, or `UNOBSERVED` into a scientific negative. A contract change
 creates a new candidate/version and preserves the old records.
 
-Before a persistent Managed worker is created or reused, verify its saved
-Project ID, cwd/repository, candidate/version, and canonical role. A projectless
-or unverified worker has no scientific/shared-state authority. Pin only active
-Managed canonical roles that need Controller follow-up. At each Controller
-resume, activation, state transition, and terminal, use runtime APIs to
-reconcile pins; Lite and Pro advisory tasks are never auto-pinned.
+Before Managed reuse/create, verify Project ID, cwd/repository,
+candidate/version and role or grant no shared-state authority. Pin
+Managed roles needing follow-up, never Lite/Pro; `Audit · Workflow Evolution`
+stays pinned through idle/`COMPLETE` until retirement,
+transfer, or user request, gaining no role, authority, lease, heartbeat, or
+state; then reconcile via runtime APIs.
 
-Name each persistent research-role session
-`<Role> · <candidate-or-bounded-scope> · <STATE>` and update it at activation,
-reuse, material phase/state change, and terminal absorption with the runtime
-title API; never rely on conversation memory alone.
+Title persistent roles `<Role> · <candidate-or-bounded-scope> · <STATE>` and
+update on activation, material state change and terminal absorption.
 
-Maintain one persistent Controller-global continuity heartbeat; it remains
-active through idle periods and worker/job completions. Adjust cadence in place;
-keep remote jobs in the snapshot; never mutate its prompt or delete it. It may
-reconcile liveness, pins/titles,
-completions, and owners, but cannot research, read protected results, launch, or
-certify science.
+Keep one retargeted, never duplicated Controller heartbeat. Each wake resumes
+that Controller, drains prebound terminal absorb/route/activate/title/pin/CAS
+before final, and never redoes role semantics, interprets protected science,
+creates filler or crosses an unabsorbed terminal. Slurm checks capacity only for
+exact `A100_CAPACITY_AVAILABLE`. See `references/orchestration.md`.
 
-They are not a new data protocol, capsule, schema, lifecycle, context-bootstrap
-layer, automation, or evidence substitute. They cannot change the research
-contract, metric, seed, budget, stop rule, or protected/outcome boundary.
+They are no data protocol, capsule, schema, lifecycle, context-bootstrap,
+automation or evidence substitute, and cannot change the research contract,
+metric, seed, budget, stop rule, or protected/outcome boundary.
 
 After a complete contract freezes question, edits, commands, evidence, budget,
-terminal, and callback, dispatch a fresh pure executor and do not invoke or load
-this skill there. The contract itself is the only task capsule: applicable
-`AGENTS.md`, contract, evaluator, tests, commands. Add no lifecycle, receipt,
-telemetry, or context. Freeze weight/track, candidate/version, exposure,
-model/effort, GPU cap, and claim tier; downstream must not rederive defaults.
-Fuse deterministic checks; do not wake a
-model for each check. A local executor returns its final directly.
+terminal, and callback, activate one bounded objective in the canonical
+Executor and do not invoke or load this skill there. A cross-thread successor
+requires an allowlisted reason, immutable evidence reference, and valid role
+mapping. The contract is the only capsule; freeze route, identity, exposure,
+cap, and claim.
 
-Use one post-freeze fast path in one uninterrupted Executor loop: identity/cap;
-repo/carrier; read-only code/evaluation preflight; no-utility minimal sanity;
-one root-caused targeted patch; at most one clean reimplementation if identity
-is unchanged; fused validation/exact cells; write structured raw outputs; hand
-exact paths/hashes to the validator. No intermediate Controller callback or
-task/version. Stop on an unresolved root, external fact, or
-scientific/authority/exposure/budget/protected change. A new run/output identity
-preserves provenance.
+Use one post-freeze fast path, owner/model, and final terminal. Before
+release/no-rescue, run the production chain itself—CLI -> `prepare_run` ->
+consumer -> generated launch -> coordinator/bootstrap -> exact runtime—to
+`READY_BEFORE_FIRST_UTILITY`, then exit with zero
+training/update/eval/utility/protected access. Generate launch/witness from one
+source; check env, modes, and future-reader canaries.
+
+Bind contract/prior-record digests in `startup_chain_authority`; derive its ID
+from state+objective. The same Executor CAS-appends at most two sealed failure
+records, changing no terminal/callback/Controller/owner/objective; `BLOCKED`/
+rebuild retain it and only Audit replaces it. IDs, paths and fingerprints cannot
+reset it. Round 1 is minimal repair; round 2 is clean reimplementation then an
+in-owner inventory, not terminal. Outside an orchestration escalation gate,
+repair/rerun; unsafe state uses a clean `carrier_generation` within the same
+scientific attempt/owner/budget. Child rules may preserve bytes but cannot
+impose first-mismatch terminal/create-new. Preserve cumulative debit/ceilings.
+Parent rules let that Executor use `record-startup-attempt` without terminal,
+callback, Controller, owner or objective transition.
+Never default to
+`Lead -> Builder -> Acceptance` or two delegated objectives in one thread.
 
 ## 5. Route model and reasoning effort
 
-- `gpt-5.6-sol max`: formulation, sources/neighbors, contracts, Audit,
-  scientific analysis/interpretation, routes, closure, and adjudication.
-- `gpt-5.6-sol xhigh`: first real-carrier Scout Executor, complex implementation,
-  remote integration/debugging, and evidence-bearing execution.
-- `gpt-5.6-sol high`: bounded frozen-contract implementation, testing,
-  deterministic integration, and routine execution.
-- `gpt-5.6-luna max`: high-volume deterministic rehash/sync/package/rerun or
-  simple outcome-invariant repair only; never scientific adjudication.
+- `gpt-5.6-sol max`: formulation/contracts/Audit/scientific
+  interpretation/routes/closure/adjudication.
+- `gpt-5.6-sol xhigh`: real-carrier Scout, remote integration/debugging,
+  evidence execution.
+- `gpt-5.6-sol high`: within-contract reasoning beyond mechanical acceptance;
+  file/module count alone is no trigger.
+- `gpt-5.6-luna max`: default for frozen deterministic implementation/
+  integration, tests/docs from frozen oracles, package/sync/rehash,
+  sealed reruns, and repairs.
 
-Bind the route to the active objective, not permanently to the reusable session
-and not to each microphase. Keep model and effort stable until that objective's
-terminal or explicit handoff. Reclassify only a separately bounded successor.
-Resume the same canonical session on `gpt-5.6-luna max` when it is purely
-deterministic rehash/sync/package, unchanged-contract rerun, or root-caused
-outcome-invariant repair. Never create another role or session solely to change
-model.
-
-Raise ambiguity about authority, evidence, exposure, concurrency, or data
-integrity to `sol max`; never substitute `luna max` for `sol xhigh/max`.
+At each boundary choose cheapest capable; ties use Luna. For frozen deterministic
+work use V1 `agent_type=luna_worker`, no history fork or model override; V2
+`task_name` is not that profile. Before effects verify durable rollout
+`agent_role/model/effort/parent_thread_id/multi_agent_version` with
+`scripts/validate_model_route.py`. Freeze edits, acceptance, evidence/exposure,
+budget and stop.
+The child preserves Sol owner, objective, cumulative budget and final terminal;
+it gains no science role or authority. Allow one repair per fingerprint, then
+return evidence to Sol. Never route protected/scientific/authority/ambiguous
+decisions to Luna.
 
 ## 6. Preserve scientific hard controls
 
@@ -244,8 +243,9 @@ Use the integrity reference for the Scout contract, dual-5090 envelope, SLA,
 and same-root breaker. A constructable Scout outranks more dossiers; idle GPU
 never authorizes filler.
 
-End a same-root engineering stall with one root-cause inventory and a minimal
-real carrier, simplified new version, or evidence-gap archive—not a rename.
+End a same-root engineering stall with one root-cause inventory in its owner,
+then a minimal/clean carrier. New version/owner/route requires a material
+boundary; renaming never grants repair.
 
 Use 75% source/code/falsification and 15% governance shares only as retrospective
 diagnostics from existing records, never as per-task telemetry, a sidecar, or an
@@ -253,34 +253,42 @@ acceptance gate. Compare time-to-first-scientific-outcome, time-to-valid-R1,
 R0-to-R1 pass rate, access-hold rate, and governance-attention share without
 creating a new measurement family; activity and GPU use are not science.
 
+Workflow Evolution is reusable Audit scope, not a fifth role. Fuse verified
+leads and traces into one replayed, rollbackable patch. Reliability is the
+floor; assess time, yield, attention, recurrence/blast radius.
+Default locally; batch only
+material science, acceptance, exposure, authority, irreversible/public/paid/
+permission or user-facing choices. Add no self-trigger, science block,
+telemetry, watcher or lifecycle.
+
+Never emit `RETAIN|COMPLETE` from a candidate-only diff: live files must
+byte-match it, required checks pass, and the consumer/Controller receive the
+exact live hash plus reload instruction. Advisory may review the deployed diff
+later.
+
 Use `R0`--`R3` as shorthand, never a lifecycle; follow
 [problem-space.md](references/problem-space.md). Keep at most one active `R1`
-per candidate/version; it is not a portfolio-wide mutex. An unchanged-protocol
-repair may rerun within cap. Continue bounded Explorer work while any currently
-usable, authorized GPU card can absorb another smallest valid complete tranche.
-Independent launch-ready Scouts may run in parallel across cards or hosts with
-isolated owners/repositories and frozen per-job caps. Pause Explorer for
-compute saturation only when every currently usable, authorized card is
-occupied by valid live work and at least one additional independently frozen,
-launch-ready item waits solely for capacity. Blocked or profile-waiting items,
-unavailable cards, and empty cards do not count. This never authorizes filler;
-after three consecutive no-`PROBE` searches, run the recall audit.
+per candidate/version, never portfolio-wide. Unchanged-protocol repair may rerun
+within cap. Run isolated frozen Scouts in parallel; continue Explorer while any
+authorized usable card can take a smallest valid tranche. Pause only when every
+such card runs valid work and a launch-ready item waits solely for capacity;
+blocked/profile-waiting/unavailable/empty cards do not count. Never create
+filler; after three no-`PROBE` searches, run recall audit.
 
 ## 8. Complete without callback ceremony
 
-For user-visible Lite, end only after one open-loop audit maps every named
-action to `DONE`, externally/authority `BLOCKED`, or `DELEGATED` with a
-successful receipt. A concept explanation, status reply, or side question does
-not clear an active objective unless the user replaces/cancels it or its
-authority changes. Execute any safe current next decision instead of leaving it
-as prose.
-Do not persist this audit or create Program, lease, callback, sidecar, heartbeat,
-`RECEIPT_ONLY`, `FINAL_ACK`, or receiver machinery.
+For user-visible Lite, end only with every action `DONE`, finite
+external/authority `BLOCKED`, or receipt-backed `DELEGATED`. A side question or
+status does not clear an objective unless the user replaces/cancels it or its
+authority changes. Execute any safe next decision. Do not persist this audit or
+create Program, lease, callback, sidecar, heartbeat, `RECEIPT_ONLY`, `FINAL_ACK`,
+or receiver machinery.
 
 When durable Lite evidence is needed, keep one terminal with identity/scope,
 evidence/validation, `FACT / INFERENCE / HYPOTHESIS`, one disposition, and one
 next action/reopening fact. Add knowledge provenance only for a
 decision-changing synthesis handoff, never a routine local workflow/code audit.
+Validate rule hashes with `workflow_evolution_gate.py validate-rule-chain` before seal.
 
 A successful tool receipt releases the worker immediately; Lite creates no receiver,
 fallback, acknowledgement, or callback transaction and never waits for
@@ -290,41 +298,38 @@ Persistent Managed completion follows orchestration:
 one bounded top-level send; release on successful receipt; never resend an
 ambiguous delivery; ACK never blocks. Fallback has idempotent effects.
 
-Atomic terminal absorption covers `PROBE`, `PASS_R0*`, `PASS_R1*`, `PASS_R2*`,
-`PROFILE_*`, `ENGINEERING_*`, `CONTRACT_CONFLICT`, `HOLD_ACCESS_CHANNEL`, and
-`CARRIER_STOP`. An open/`UNTESTED` candidate must finish the same turn as:
-`DELEGATED` with successful dispatch receipt plus matching activation snapshot;
-`BLOCKED` with one reopening fact/observer/trigger; or `DONE` by scoped
-close/archive plus reopening fact. `dispatch_next` is incomplete before
-activation. A status reply, “Controller decides whether,” or `NEXT_ACTION`
-leaves `OPEN_WITHOUT_OWNER`; route before final. Static heartbeat reads a
-rebuildable snapshot; fallback only, never authority/dispatch.
+Atomically absorb every actionable terminal: `PROBE`, `PASS_R*`, `PROFILE_*`,
+engineering/conflict/access/carrier stops. In that turn an open candidate becomes
+receipt-and-activation-backed `DELEGATED`, or finite `BLOCKED` only on an
+external fact/unavailable authority with observer, trigger/check and deadline.
+`DONE` requires scientific `CLOSED`; `OPEN/DONE` and `OPEN_WITHOUT_OWNER` are
+invalid and internal gaps stay owned. `dispatch_next` is incomplete before
+activation. Ordinary/heartbeat wakes recover idempotently and cannot final
+before safe absorb/route/activate or a finite external block.
 
-## 9. Use external advisory as a one-shot
+## 9. Route Pro through the scientific owner
 
-Every durable scientific `DROP` or `CLOSE` follows the Closure Confidence Gate
-in [research-integrity.md](references/research-integrity.md). A complete-witness
-`LOW` closure may finish locally after independent Audit; a composed,
-interpretive, disputed, or last-route `HIGH` closure remains provisional until
-one adversarial rebuttal. Engineering/access/carrier failure and search
-exhaustion are not closures and never invoke this gate.
+Controller detects and routes a Pro trigger but must not author the prompt or
+adjudicate the answer. Explorer owns source/neighbor/reduction/formulation; an
+eligible Audit owns contract/estimand, signal-versus-implementation,
+contribution, Confirmation and closure. Executor returns ambiguity and never
+uses Pro to alter frozen execution.
 
-For a `HIGH` closure, freeze local facts, submit one Pro rebuttal, read once,
-verify decision-critical claims locally, and stop—no sink, polling, duplicate,
-or follow-up. Record only its trigger, disposition, decision effect, and final
-confidence in the existing decision record. If Pro is unavailable, use one
-fresh independent local closure Audit; never hard-close from unavailability.
+Use Pro proactively at material gates or bottlenecks to falsify, improve, or
+cross-check a route, even when a local answer exists. Always verify locally;
+skip only deterministic repair with no decision ambiguity.
 
-Keep Pro off the critical path: submit once, continue local work, then let the
-current owner make at most one state-only check after local work completes.
-Add no monitor, poll loop, sink, automation, lifecycle, duplicate, or follow-up.
-On `READY`, read once and verify.
-
-Use persistent asynchronous delivery only when a Managed trigger independently
-exists. Preserve the exact response and verify decision-critical claims
-locally. Do not send secrets, protected evidence, raw histories, private paths,
-or scientific payloads. Advisory agreement is not novelty, validity,
-acceptance, or permission.
+Pro is never a lane, owner or authority. Use sequential one-shot batches in one
+exact-ID conversation: one in-flight submit/read, no queue/follow-up/page poll,
+sink or duplicate; deduplicate by candidate/scope hash. Before submission,
+provide one hashed review bundle containing the complete live Skill, every
+applicable `AGENTS.md`, routed direct references, candidate diff/validation and
+bounded evidence. Redact only secrets and protected payloads; a summary is not
+a substitute. Missing ordinary advisory is `SKIPPED_UNAVAILABLE`, never a
+similar conversation. Ordinary batches are `NON_BLOCKING`;
+`BLOCKING_HIGH_RISK` needs a previously bound exact gate and locally absorbed
+validation. The singleton may wake an eligible Explorer/Audit but never open
+Pro or create a reader. Pro grants no authority by agreement.
 
 Recover from durable repository/contract/terminal authority, not chat memory.
 Ignore stale epochs and duplicate terminal IDs.
@@ -344,5 +349,5 @@ python3 scripts/validate_opportunity_gate_calibration.py --help
 python3 scripts/reconcile_research_lanes.py --help
 ```
 
-After changing source, config, contract, or execution code, run the narrowest
-relevant validation and report the exact command with PASS/FAIL.
+After any change, run the narrowest relevant validation and report its exact
+command with PASS/FAIL.

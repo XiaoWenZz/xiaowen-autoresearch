@@ -264,16 +264,43 @@ primary, guard, or mechanism utility. After any utility exposure, changing the
 candidate, baseline, branch definitions, diagnostics, thresholds, MPE, guard,
 metric, strata, or seed order creates a new version with disjoint Scout units.
 
-The `96` GPU-hour/`48 h` envelope is a ceiling, not an allocation. Unused GPU,
-an SLA, or available budget never entitles an extra arm, seed, endpoint,
-candidate, or profile. There is no automatic cap expansion. If a pre-utility
-real profile establishes that the frozen minimal faithful Scout cannot fit and
-no cheaper faithful carrier exists, stop that attempt. Any higher ceiling needs
-explicit prospective authority for a new attempt/version with hardware, cap,
-arms, seeds, question, exposure and outcome actions frozen before utility
-access. It uses disjoint evidence and cannot rescue or reinterpret the stopped
-attempt. Without that authority, use `HOLD_INFORMATION` with an exact resource
-reopening fact, not an evidence gap or scientific negative.
+The `96` GPU-hour/`48 h` envelope is an outer exploratory safety ceiling, not a
+default allocation or a point runtime prediction. Every compute contract names
+both a `planning_estimate` for the pessimistic complete path (compile, warmup,
+profile, evaluation, persistence and validation included) and a
+`hard_safety_ceiling` for unaffordable/runaway execution. A forecast miss below
+the ceiling is not by itself `ENGINEERING_INVALID` or scientific evidence.
+Normally leave at least `1.5x` margin over the pessimistic estimate, or about
+`2x` while compile, profiler, asset or runtime variance remains, provided the
+ceiling remains affordable. These multipliers are lower-bound heuristics, not
+target caps. When the failure cost remains affordable, prefer a materially
+wider hard ceiling and update the planning estimate dynamically from
+outcome-blind throughput, VRAM, compilation, asset and scheduler facts.
+
+Unused GPU, an SLA, or available budget never entitles an extra arm, seed,
+endpoint, candidate or profile, but it removes compute scarcity as an excuse
+to delay an admitted lawful Scout. Queue by surviving novelty, problem
+importance, causal depth and expected decision information, never by expected
+result sign. Before utility access, a budget-only prospective amendment inside
+an already approved total envelope may be frozen directly by the Controller if
+accelerator class, scientific identity, exposure, metrics, baselines, seeds,
+stops and claims remain unchanged; it needs no predicate Audit or scientific
+version. Any expansion beyond the approved total ceiling still needs explicit
+prospective authority. No amendment may rescue or reinterpret observed
+outcomes; without lawful authority, use `HOLD_INFORMATION` with an exact
+resource reopening fact, not a scientific negative.
+
+The Controller may prospectively raise staged operational timeouts up to the
+already frozen hard/outer ceiling at recorded outcome-blind checkpoints,
+without another Audit or scientific version. The dynamic decision must not use
+effect sign, score, utility or any protected-result content.
+
+The `96` GPU-hour/`48 h` envelope remains a ceiling, not an allocation. Unused
+GPU, an SLA, or available budget never entitles an extra arm, seed, endpoint,
+candidate, or profile. There is no automatic cap expansion beyond the frozen
+hard safety or total envelope. Expansion beyond that envelope requires
+explicit prospective authority for a new attempt/version. It uses disjoint
+evidence and cannot rescue or reinterpret the stopped attempt.
 
 ### First-Scout contract and action table
 
