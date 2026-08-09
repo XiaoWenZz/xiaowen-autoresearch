@@ -69,8 +69,10 @@ def validate_receipt(
         if receipt.route_mode == "named_child":
             if receipt.agent_role != "luna_worker":
                 raise ValueError("Luna named-child route requires agent_role=luna_worker")
-            if receipt.multi_agent_version != "v1":
-                raise ValueError("Luna named-child route requires multi_agent_version=v1")
+            if receipt.multi_agent_version not in {"v1", "v2"}:
+                raise ValueError(
+                    "Luna named-child route requires multi_agent_version=v1 or v2"
+                )
             if not expected_parent_thread_id:
                 raise ValueError(
                     "Luna named-child route requires an independently expected parent thread"

@@ -646,6 +646,116 @@ class WorkflowEvolutionReplayTest(unittest.TestCase):
         self.assertIn("unproven future reader", ORCHESTRATION)
         self.assertIn("future-reader canaries", SKILL)
 
+    def test_active_route_replays_preserve_required_boundaries(self) -> None:
+        p59 = REPLAY_FIXTURE["events"]["p59_strict_blind_capsule"]
+        self.assertFalse(p59["required_identity_in_capsule"])
+        self.assertTrue(p59["outside_locator_is_provenance_only"])
+        self.assertEqual(p59["dispatch_before_fix"], "BLOCK_PRE_DISPATCH_ACCESS")
+        self.assertFalse(p59["contaminated_owner_reused"])
+        self.assertEqual(p59["dispatch_after_fix"], "ONE_FRESH_STRICT_BLIND_OWNER")
+
+        for event_name, fingerprint in (
+            ("smi_r1_profile_binding", "SMI-R1-PROFILE-BINDING"),
+            ("tta_transient_service_launches", "TTA-SERVICE-COUNT-3"),
+        ):
+            event = REPLAY_FIXTURE["events"][event_name]
+            self.assertTrue(event["same_owner"])
+            self.assertFalse(event["utility_observed"])
+            result = replay_startup_chain(
+                [PreutilityDefect(fingerprint, "same-scientific-attempt")]
+            )
+            self.assertEqual(result.executor_owners, 1)
+            self.assertEqual(result.scientific_attempts, 1)
+            self.assertEqual(result.create_new_attempts, 0)
+            self.assertEqual(result.intermediate_terminals, 0)
+            self.assertEqual(result.controller_roundtrips, 0)
+
+        smi = REPLAY_FIXTURE["events"]["smi_r1_profile_binding"]
+        self.assertIsNone(smi["exact_target_profile_binding"])
+        self.assertTrue(smi["resolved_by_r1_profile"])
+        self.assertGreaterEqual(
+            smi["hard_cap_gpu_hours"], 2 * smi["pessimistic_gpu_hours"]
+        )
+        self.assertLessEqual(smi["hard_cap_gpu_hours"], smi["outer_gpu_hours"])
+
+        p56 = REPLAY_FIXTURE["events"]["p56_future_reader_permission_boundary"]
+        self.assertEqual(p56["required_stage"], "BEFORE_SEALING")
+        self.assertTrue(p56["reader_must_be_mechanically_exercised"])
+        self.assertFalse(p56["legacy_mode0000_reader_available"])
+        permission = replay_startup_chain(
+            [
+                PreutilityDefect(
+                    "P56-LEGACY-READER-PERMISSION",
+                    "attempt-002",
+                    escalation_reason=p56["current_route"],
+                )
+            ]
+        )
+        self.assertEqual(
+            permission.disposition,
+            "ESCALATE_PUBLIC_PRODUCTION_PAID_AUTH_PERMISSION",
+        )
+
+    def test_budget_correction_is_generous_bounded_and_outcome_blind(self) -> None:
+        policy = REPLAY_FIXTURE["events"]["budget_correction"]
+        allowed = policy["allowed"]
+        self.assertTrue(allowed["pre_release"])
+        self.assertTrue(allowed["outcome_blind"])
+        self.assertEqual(allowed["correction_count"], 1)
+        self.assertGreaterEqual(
+            allowed["hard_cap_gpu_hours"], 2 * allowed["pessimistic_gpu_hours"]
+        )
+        self.assertLessEqual(
+            allowed["hard_cap_gpu_hours"], allowed["outer_gpu_hours"]
+        )
+        self.assertEqual(allowed["exact_cumulative_debit_gpu_hours"], 0.0)
+        self.assertTrue(allowed["same_owner"])
+        self.assertFalse(allowed["favorable_stopping"])
+        result = replay_startup_chain(
+            [PreutilityDefect("BUDGET-CORRECTION-WITHIN-OUTER", "attempt-001")]
+        )
+        self.assertEqual(result.create_new_attempts, 0)
+        self.assertEqual(result.intermediate_terminals, 0)
+        self.assertEqual(result.controller_roundtrips, 0)
+        self.assertEqual(
+            policy["rejected"],
+            [
+                "SECOND_CORRECTION",
+                "BEYOND_OUTER_ENVELOPE",
+                "POST_OUTCOME_RESCUE",
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "outcome-blind"):
+            replay_startup_chain(
+                [
+                    PreutilityDefect(
+                        "POST-OUTCOME-BUDGET-RESCUE",
+                        "attempt-001",
+                        protected_access=True,
+                    )
+                ]
+            )
+
+    def test_child_contract_conflicts_are_reconciled_before_dispatch(self) -> None:
+        event = REPLAY_FIXTURE["events"]["child_contract_reconciliation"]
+        self.assertEqual(event["dispatch_decision"], "RETURN_TO_CURRENT_OWNER")
+        for transition in (
+            "executor_dispatched",
+            "new_owner",
+            "new_attempt",
+            "intermediate_terminal",
+            "controller_roundtrip",
+        ):
+            self.assertFalse(event[transition])
+        flattened = " ".join(ORCHESTRATION.split())
+        for phrase in (
+            "project each child `AGENTS.md`",
+            "exact runtime bindings that R1 is meant to resolve",
+            "local attempt/service/check counts",
+            "same Controller transaction",
+            "two-record authority is only an immutable diagnostic prefix",
+        ):
+            self.assertIn(phrase, flattened)
     def test_tta_egress_and_local_cuda_ipc_are_separate_witnesses(self) -> None:
         event = REPLAY_FIXTURE["events"]["tta_cuda_no_egress"]
         self.assertEqual(event["private_unix_socketpair"], "PASS")

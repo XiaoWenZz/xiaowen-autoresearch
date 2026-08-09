@@ -30,6 +30,69 @@
       "reader_must_be_mechanically_exercised": true,
       "utility_observed": false
     },
+    "p59_strict_blind_capsule": {
+      "required_identity_in_capsule": false,
+      "outside_locator_is_provenance_only": true,
+      "dispatch_before_fix": "BLOCK_PRE_DISPATCH_ACCESS",
+      "contaminated_owner_reused": false,
+      "dispatch_after_fix": "ONE_FRESH_STRICT_BLIND_OWNER",
+      "utility_observed": false
+    },
+    "smi_r1_profile_binding": {
+      "exact_target_profile_binding": null,
+      "resolved_by_r1_profile": true,
+      "pessimistic_gpu_hours": 3.0,
+      "hard_cap_gpu_hours": 6.0,
+      "outer_gpu_hours": 96,
+      "same_owner": true,
+      "new_audit": false,
+      "utility_observed": false
+    },
+    "p56_future_reader_permission_boundary": {
+      "required_stage": "BEFORE_SEALING",
+      "reader_must_be_mechanically_exercised": true,
+      "legacy_mode0000_reader_available": false,
+      "current_route": "PUBLIC_PRODUCTION_PAID_AUTH_PERMISSION",
+      "utility_observed": false
+    },
+    "tta_transient_service_launches": {
+      "launch_count": 3,
+      "gpu_hours": 0,
+      "classification": "DIAGNOSTIC_NOT_AUTHORITY",
+      "same_owner": true,
+      "utility_observed": false
+    },
+    "budget_correction": {
+      "allowed": {
+        "pre_release": true,
+        "outcome_blind": true,
+        "correction_count": 1,
+        "pessimistic_gpu_hours": 3.0,
+        "hard_cap_gpu_hours": 6.0,
+        "outer_gpu_hours": 96,
+        "exact_cumulative_debit_gpu_hours": 0.0,
+        "same_owner": true,
+        "favorable_stopping": false
+      },
+      "rejected": [
+        "SECOND_CORRECTION",
+        "BEYOND_OUTER_ENVELOPE",
+        "POST_OUTCOME_RESCUE"
+      ]
+    },
+    "child_contract_reconciliation": {
+      "recoverable_local_defect": true,
+      "child_action_table": "FIRST_MISMATCH_TERMINAL_CREATE_NEW",
+      "exact_profile_binding_unknown_until_r1": true,
+      "service_launch_count_is_diagnostic": true,
+      "dispatch_decision": "RETURN_TO_CURRENT_OWNER",
+      "executor_dispatched": false,
+      "new_owner": false,
+      "new_attempt": false,
+      "intermediate_terminal": false,
+      "controller_roundtrip": false,
+      "utility_observed": false
+    },
     "tta_cuda_no_egress": {
       "private_unix_socketpair": "PASS",
       "ordinary_send_recv": "EPERM",

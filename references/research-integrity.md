@@ -77,14 +77,21 @@ and promising to ignore them.
 | `strict_result_blind` | safe tree/packet validated | `DISPATCH_STRICT_R0` |
 | `strict_result_blind` | safe tree/packet missing or invalid | `BLOCK_PRE_DISPATCH_ACCESS` |
 
-Before a strict-blind Audit is dispatched, the current owner performs one
-deterministic mechanical preflight: freeze exact files, URLs, API fields,
-archive members, or source-code paths; strip forbidden result-bearing fields or
-sections without rendering them into model-visible output; bind exact source
-identities; and validate both the allowlist and forbidden-field absence. This
-preflight is not a Program, lease, lane, terminal, or separate research role.
-If it fails, the Audit is not dispatchable. Do not launch an Audit to discover
-that its access tree is missing.
+Before any fresh strict-blind owner (including an Audit) is dispatched, the
+current owner performs one deterministic mechanical preflight: freeze exact
+files, URLs, API fields, archive members, or source-code paths; strip forbidden
+result-bearing fields or sections without rendering them into model-visible
+output; bind exact source identities; and validate both the allowlist and
+forbidden-field absence. This preflight is not a Program, lease, lane,
+terminal, or separate research role. If it fails, the Audit is not dispatchable
+and no fresh owner is either. Do not launch an Audit to discover that its
+access tree is missing.
+
+The dispatch instruction may traverse only locators inside the validated
+capsule/safe tree. A path embedded in a readable document but outside that tree
+is provenance only and must not be followed; if a required identity is absent
+from the capsule, block before dispatch. Use this existing safe-tree preflight;
+do not add a packet or validator.
 
 Inside a valid strict-blind task, do not use surfaces that transitively load the
 forbidden family, such as search snippets, result-bearing `README` sections,
@@ -155,8 +162,15 @@ new lifecycle, state tree, or artifact family:
   code path that the scientific Scout will execute. A pure synthetic smoke has
   scientific conversion value only when that controlled synthetic carrier is
   itself the preregistered scientific witness; otherwise it is engineering
-  evidence only. An unchanged-protocol outcome-blind repair may rerun under a
-  new attempt identity within the existing cap; a carrier, arm, estimand,
+  evidence only. The profile may resolve and bind the exact interpreter,
+  dependency, driver/CUDA, GPU UUID, model/data paths and hashes, argv,
+  environment, and its pessimistic complete-path estimate. These are launch
+  manifest/profile outputs, not a separate Audit, when scientific identity,
+  exposure, outer hard ceiling, and the zero-utility barrier are frozen; a
+  closed safe-output schema remains deterministic mechanical output in the
+  same owner. An unchanged-protocol outcome-blind repair keeps the same
+  `scientific_attempt`/owner/objective; unsafe partial state may use a clean
+  `carrier_generation`, never a new attempt identity. A carrier, arm, estimand,
   threshold, or scientific-contract change returns to prospective adjudication.
 - `R2`: freeze a scientific contract proportionate to its claim. A first
   descriptive Scout binds exact code/config/data/model/carrier/attempt identity,
@@ -281,14 +295,18 @@ Unused GPU, an SLA, or available budget never entitles an extra arm, seed,
 endpoint, candidate or profile, but it removes compute scarcity as an excuse
 to delay an admitted lawful Scout. Queue by surviving novelty, problem
 importance, causal depth and expected decision information, never by expected
-result sign. Before utility access, a budget-only prospective amendment inside
-an already approved total envelope may be frozen directly by the Controller if
-accelerator class, scientific identity, exposure, metrics, baselines, seeds,
-stops and claims remain unchanged; it needs no predicate Audit or scientific
-version. Any expansion beyond the approved total ceiling still needs explicit
-prospective authority. No amendment may rescue or reinterpret observed
-outcomes; without lawful authority, use `HOLD_INFORMATION` with an exact
-resource reopening fact, not a scientific negative.
+result sign. Before utility access, an explicitly user-authorized owner may make
+one budget-only prospective correction inside an already approved total
+envelope when the prior substage cap cannot cover the pessimistic
+decision-complete path plus affordable headroom. Accelerator class, scientific
+identity, exposure, metrics, baselines, seeds, stops and claims remain
+unchanged; exact cumulative debit and the outer hard ceiling remain binding.
+This needs no predicate Audit, terminal, new attempt or scientific version. A
+second correction or expansion beyond the approved total ceiling needs
+explicit prospective authority. No amendment may use outcome sign, rescue or
+reinterpret observed outcomes; without lawful authority, use
+`HOLD_INFORMATION` with an exact resource reopening fact, not a scientific
+negative.
 
 The Controller may prospectively raise staged operational timeouts up to the
 already frozen hard/outer ceiling at recorded outcome-blind checkpoints,

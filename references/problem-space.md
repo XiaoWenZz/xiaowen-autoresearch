@@ -239,8 +239,9 @@ Do not import a complete scientific contract into problem-admission readiness:
   public-test, or scientific payload, and its failure is engineering/carrier
   evidence rather than a scientific negative. It makes the bound real carrier
   and baseline runnable without reading utility. An unchanged-protocol repair
-  may rerun under a new attempt identity within the existing cap; a carrier or
-  scientific-contract change returns to prospective adjudication.
+  keeps the same scientific attempt/owner/objective and may replace unsafe
+  partial state with a clean `carrier_generation`; a carrier or scientific-
+  contract change returns to prospective adjudication.
 - A first descriptive `R2` freezes exact code/config/data/model/carrier identity
   and exposure; `2` or `3` necessary arms; `6` paired bundles; estimand, primary
   metric, MPE, guard comparator, strongest complete fair baseline, distinct
