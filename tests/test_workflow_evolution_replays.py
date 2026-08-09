@@ -38,6 +38,14 @@ REPLAY_FIXTURE = json.loads(
         encoding="utf-8"
     )
 )
+P59_PREPARE_RUN_REPLAY_FILES = tuple(
+    WORKSPACE / REPLAY_FIXTURE["events"]["p59_prepare_run_cli"][key]
+    for key in ("old_source", "fixed_source")
+)
+P59_RELEASE_REPLAY_FILES = tuple(
+    WORKSPACE / REPLAY_FIXTURE["events"]["p59_release_environment"][key]
+    for key in ("old_source", "fixed_source")
+)
 SKILL = (ROOT / "SKILL.md").read_text(encoding="utf-8")
 ORCHESTRATION = (ROOT / "references" / "orchestration.md").read_text(
     encoding="utf-8"
@@ -383,6 +391,10 @@ def replay_startup_chain(defects: list[PreutilityDefect]) -> ReplayResult:
 
 
 class WorkflowEvolutionReplayTest(unittest.TestCase):
+    @unittest.skipUnless(
+        all(path.is_file() for path in P59_PREPARE_RUN_REPLAY_FILES),
+        "historical P59 prepare-run sources are local integration authorities",
+    )
     def test_p59_historical_prepare_run_and_real_cli_reproduce_run_id_keyerror(
         self,
     ) -> None:
@@ -413,6 +425,10 @@ class WorkflowEvolutionReplayTest(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), f"PASS prepare-run {fixed.RUN_ID}\n")
         self.assertFalse(event["utility_observed"])
 
+    @unittest.skipUnless(
+        all(path.is_file() for path in P59_RELEASE_REPLAY_FILES),
+        "historical P59 release sources are local integration authorities",
+    )
     def test_p59_exact_attempt002_release_heredoc_reproduces_unbound_env(
         self,
     ) -> None:
@@ -500,6 +516,10 @@ class WorkflowEvolutionReplayTest(unittest.TestCase):
         self.assertRegex(completed.stderr, r"EXPECTED_RUN_ID: unbound variable")
         self.assertFalse(event["utility_observed"])
 
+    @unittest.skipUnless(
+        all(path.is_file() for path in P59_RELEASE_REPLAY_FILES),
+        "historical P59 release sources are local integration authorities",
+    )
     def test_p59_attempt003_exact_mode_gate_and_single_argv_builder(self) -> None:
         event = REPLAY_FIXTURE["events"]["p59_release_environment"]
         fixed_path = WORKSPACE / event["fixed_source"]
