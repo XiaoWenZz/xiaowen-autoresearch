@@ -391,6 +391,18 @@ Only `claim-advisory-wake` may perform `AWAITING_RESPONSE/NONE ->
 RESPONSE_OBSERVED/CLAIMED`, and only `complete-advisory-wake` may perform
 `CLAIMED -> SENT`; generic replacement and initial snapshot creation may not
 seed or advance those observations.
+
+An interactive authentication, credential, or approval boundary with its
+existing UI or PTY still live is not a completed Executor turn. Show the exact
+user action in commentary and keep the same task, turn, session, objective,
+terminal binding, and PTY `IN_PROGRESS`; do not emit final, close the PTY,
+invent a remote job, poll, or create a replacement owner while awaiting the
+user. Continue in that same turn after the user acts. If the runtime cannot
+preserve an in-progress turn, seal the prebound terminal with the genuine
+external-authority block and an exact reopen trigger; never substitute
+`FINAL + NON_TERMINAL`. If such a malformed final is nevertheless observed,
+Controller keeps the cursor before it and sends only the existing same-owner
+recovery wake.
 An observed `NON_BLOCKING` batch may use the standalone
 `absorb-nonblocking-advisory` CAS so its local terminal is absorbed without
 changing objective lifecycle. `BLOCKING_HIGH_RISK` may never use that command.

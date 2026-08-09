@@ -1482,6 +1482,21 @@ class ControllerControlStateTest(unittest.TestCase):
                 cmd_advance_cursors(args)
             self.assertIsNone(read_state(path)["managed_roles"][0]["cursor"])
 
+            # Exact transient-authentication fast path: the same live owner and
+            # PTY remain ordinary in-progress work, with no invented remote job.
+            args.updates_json = json.dumps([{
+                "thread_id": "worker-1",
+                "expected_cursor": None,
+                "new_cursor": "cursor:interactive-auth-in-progress",
+                "observation_kind": "NON_TERMINAL",
+                "source_turn_state": "IN_PROGRESS",
+            }])
+            cmd_advance_cursors(args)
+            self.assertEqual(
+                read_state(path)["managed_roles"][0]["cursor"],
+                "cursor:interactive-auth-in-progress",
+            )
+
     def test_executor_final_may_wait_on_one_registered_active_remote_job(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
