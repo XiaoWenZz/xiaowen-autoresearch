@@ -24,6 +24,7 @@ HARD_TOKEN_THRESHOLD = 75_000_000
 MIN_SOFT_TOKEN_TURNS = 2
 MIN_RELATIVE_WINDOWS = 8
 CONTEXT_WINDOW_SIZE = 20
+CONTEXT_MIN_ROLLOVER_SAMPLES = 8
 CONTEXT_MEDIAN_TARGET = 64_000
 CONTEXT_P95_TARGET = 96_000
 CONTEXT_MEDIAN_ROLLOVER = 96_000
@@ -411,11 +412,13 @@ def controller_context_decision(
         if value <= CONTEXT_TAIL_LIMIT:
             break
         tail += 1
-    if count < CONTEXT_WINDOW_SIZE:
-        decision = "ALLOW"
-    elif tail >= CONTEXT_WINDOW_SIZE:
+    if tail >= CONTEXT_WINDOW_SIZE:
         decision = "PAUSE_NEW_OBJECTIVE_ADMISSION"
-    elif median is not None and median > CONTEXT_MEDIAN_ROLLOVER:
+    elif (
+        count >= CONTEXT_MIN_ROLLOVER_SAMPLES
+        and median is not None
+        and median > CONTEXT_MEDIAN_ROLLOVER
+    ):
         decision = "REQUIRE_ROLLOVER"
     else:
         decision = "ALLOW"
@@ -429,6 +432,7 @@ def controller_context_decision(
         "p95": p95,
         "tail_consecutive_over_128000": tail,
         "epoch_marker_line": epoch_marker_line,
+        "minimum_rollover_samples": CONTEXT_MIN_ROLLOVER_SAMPLES,
         "median_target": CONTEXT_MEDIAN_TARGET,
         "p95_target": CONTEXT_P95_TARGET,
         "decision": decision,

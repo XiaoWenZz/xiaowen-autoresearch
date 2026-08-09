@@ -11,6 +11,7 @@ from pathlib import Path
 
 from scripts.workflow_evolution_gate import (
     CONTEXT_MEDIAN_ROLLOVER,
+    CONTEXT_MIN_ROLLOVER_SAMPLES,
     CONTEXT_WINDOW_SIZE,
     GateError,
     HARD_TOKEN_THRESHOLD,
@@ -303,6 +304,26 @@ class ControllerContextWindowTest(unittest.TestCase):
         self.assertEqual(p95_only["decision"], "ALLOW")
         self.assertEqual(p95_only["median"], 64_000)
         self.assertEqual(p95_only["p95"], 120_000)
+
+        early_rollover = controller_context_decision(
+            [132_741] * CONTEXT_MIN_ROLLOVER_SAMPLES,
+            thread_id="thread-1",
+            session_id="thread-1",
+            epoch_marker_line=None,
+        )
+        self.assertEqual(early_rollover["decision"], "REQUIRE_ROLLOVER")
+        self.assertEqual(
+            early_rollover["minimum_rollover_samples"],
+            CONTEXT_MIN_ROLLOVER_SAMPLES,
+        )
+
+        too_few = controller_context_decision(
+            [132_741] * (CONTEXT_MIN_ROLLOVER_SAMPLES - 1),
+            thread_id="thread-1",
+            session_id="thread-1",
+            epoch_marker_line=None,
+        )
+        self.assertEqual(too_few["decision"], "ALLOW")
 
     def test_scan_resets_after_latest_compaction_and_caps_at_latest_twenty(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:

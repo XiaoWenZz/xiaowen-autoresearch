@@ -323,16 +323,25 @@ Controller context-window alarms are read-only and scoped to one
 `workflow_evolution_gate.py controller-context-window` against the existing
 SQLite thread pointer. After the latest top-level `compacted` or
 `event_msg/context_compacted`, use at most the latest 20
-`last_token_usage.input_tokens`: fewer than 20 is `ALLOW`; 20 consecutive
-values above 128000 is `PAUSE_NEW_OBJECTIVE_ADMISSION`; otherwise median above
-96000 is `REQUIRE_ROLLOVER`; all other windows are `ALLOW`. Median 64000 and
-p95 96000 are diagnostic targets only. The JSON gate emits no state or
-artifact, returns nonzero only for the two blocking decisions, and parser
-failure is distinct from an executed decision. An atomic rollover increments
-the epoch, resets its rolling window and consecutive counter, and occurs at
-most once per epoch. The alarm may pause only new-objective admission;
-terminal absorption, safety, existing-owner continuity and blocker recovery
-remain nonblocking.
+`last_token_usage.input_tokens`: 20 consecutive values above 128000 is
+`PAUSE_NEW_OBJECTIVE_ADMISSION`; with at least 8 samples, median above 96000 is
+`REQUIRE_ROLLOVER`; all other windows are `ALLOW`. Eight observations are the
+minimum soft sample, not a scientific or throughput score. Median 64000 and p95
+96000 are diagnostic targets only. The JSON gate emits no state or artifact,
+returns nonzero only for the two blocking decisions, and parser failure is
+distinct from an executed decision. An atomic rollover increments the epoch,
+resets its rolling window and consecutive counter, and occurs at most once per
+epoch. The alarm may pause only new-objective admission; terminal absorption,
+safety, existing-owner continuity and blocker recovery remain nonblocking.
+
+`controller_control_state.py show` defaults to the read-only `active`
+projection: controller identity, non-`DONE` objectives, current roles/jobs/
+advisories/pending absorptions, canonical-state digest and count/digest-only
+history summaries. It omits closed-objective bodies and absorbed-ID lists.
+Use `show --projection full` only for migration, contradiction, rebuild or
+replay. Mutation commands always read and validate the full canonical snapshot;
+the active projection is neither an input nor an authority and creates no new
+state or artifact.
 
 Normal successor activation reuses the canonical thread and canonical role.
 When `new_owner_thread_id != old_owner_thread_id`, `activate-successor` requires

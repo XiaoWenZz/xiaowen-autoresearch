@@ -93,13 +93,17 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
         self.assertEqual(config["rrule"], "FREQ=MINUTELY;INTERVAL=30")
 
         prompt = config["prompt"]
-        self.assertLess(len(prompt), 2314)
+        self.assertLess(len(prompt), 2600)
         references = [item for item in STATE_TOOL_REFERENCES if item in prompt]
         self.assertEqual(len(references), 1)
 
         for phrase in (
             "schema_version=5",
-            "Reload the live Skill and its directly routed orchestration/state-schema references before effects",
+            "First run the read-only controller-context-window gate, then `show --projection active`",
+            "do not preload the full Skill, full state, or long references for this no-effect check",
+            "If the active projection has no objective/role/job/advisory/pending/callback obligation, return quietly",
+            "For an actionable obligation, reload the complete live Skill and only its directly triggered references before effects",
+            "use `show --projection full` only for migration, contradiction, rebuild, or replay",
             "每次 wake 都是同一 Controller thread 的恢复事务",
             "final 前必须 drain terminal verify/absorb/route/dispatch/activation/close/finite-block/title/pin/state-CAS",
             "Callbacks are compact receipt-only envelopes",
@@ -112,8 +116,8 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             "close-objective",
             "absorb-and-block",
             "Terminal absorption, safety, existing-owner continuity, and blocker recovery remain nonblocking",
-            "Before any new dispatch or route, run read-only workflow_evolution_gate.py controller-context-window",
             "REQUIRE_ROLLOVER and PAUSE_NEW_OBJECTIVE_ADMISSION block only new-objective admission",
+            "Complete the runtime-supported compact/rollover before another new objective",
             "this gate creates no state/artifact",
             "require one successful receipt, then immediately CAS activate-successor",
             "the destination awaits that minimum revision with the exact binding and remote-job projection or explicit no-remote-job",
@@ -143,6 +147,7 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             "不得创建 task/session/owner/automation",
             "controller_control_state_v5.py",
             "FREQ=MINUTELY;INTERVAL=15",
+            "Reload the live Skill and its directly routed orchestration/state-schema references before effects",
         ):
             with self.subTest(obsolete=obsolete):
                 self.assertNotIn(obsolete, prompt)
@@ -186,7 +191,30 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(shown.returncode, 0, shown.stderr.decode("utf-8"))
-            self.assertEqual(shown.stdout, data)
+            active = json.loads(shown.stdout)
+            self.assertEqual(active["projection"], "active")
+            self.assertEqual(active["revision"], 0)
+            self.assertEqual(active["objectives"], SCHEMA_V5_FIXTURE["objectives"])
+            self.assertEqual(
+                active["history_summary"]["absorbed_terminal_event_ids"]["count"],
+                0,
+            )
+            self.assertNotIn("absorbed_terminal_event_ids", active)
+            full = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "show",
+                    "--state",
+                    str(state),
+                    "--projection",
+                    "full",
+                ],
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(full.returncode, 0, full.stderr.decode("utf-8"))
+            self.assertEqual(full.stdout, data)
 
     def test_only_one_active_heartbeat_targets_the_controller(self) -> None:
         active = []

@@ -291,6 +291,7 @@ class SkillRouterTest(unittest.TestCase):
             "previously bound exact gate",
             "locally absorbed validation",
             "authority by agreement",
+            "one hashed review bundle",
             "complete live Skill",
             "every applicable `AGENTS.md`",
             "candidate diff/validation",
@@ -325,10 +326,13 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(source="router", phrase=phrase):
                 self.assertIn(phrase, router)
         for phrase in (
-            "exact-hashed authority bundle, not a summary-only prompt",
+            "exact-hashed full authority bundle",
             "complete current Skill directory",
             "every applicable parent-to-child `AGENTS.md`",
-            "candidate diff and validation",
+            "candidate diff/validation",
+            "prior full bundle hash",
+            "every applicable authority hash are unchanged",
+            "Package only Git-tracked Skill files",
             "Name every exclusion and hash the files actually sent",
             "rather than creating a packet registry or artifact family",
         ):
@@ -635,7 +639,10 @@ class SkillRouterTest(unittest.TestCase):
             "Keep the Controller logically singleton while allowing physical context rollover",
             "compact receipt fields",
             "dispatch receipt, lease epoch, contract revision",
-            "rolling 20-event Controller input median",
+            "at least 8 samples have median above 96000",
+            "show --projection active",
+            "without paying the full reload cost",
+            "show --projection full",
             "`physical_controller_context_epoch`",
             "never delays terminal absorption",
             "operational efficiency alarms, never scientific acceptance or closure gates",
@@ -1183,6 +1190,16 @@ class SkillRouterTest(unittest.TestCase):
             "not a new callback, receipt family, state field, watcher, heartbeat, registry, role, or lifecycle",
         ):
             with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
+
+    def test_internal_portfolio_ordering_cannot_be_parked_as_blocked(self) -> None:
+        orchestration = flat(ORCHESTRATION)
+        for phrase in (
+            "Internal portfolio sequencing is never a blocker authority",
+            "does not satisfy `EXTERNAL_FACT` or `UNAVAILABLE_AUTHORITY`",
+            "do not park it as `BLOCKED`",
+        ):
+            with self.subTest(source="orchestration", phrase=phrase):
                 self.assertIn(phrase, orchestration)
 
     def test_workflow_evolution_detection_is_event_driven_shadow_and_rule_aware(self) -> None:

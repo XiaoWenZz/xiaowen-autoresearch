@@ -9,6 +9,7 @@ from pathlib import Path
 
 from scripts.controller_control_state import (
     StateError,
+    active_state_projection,
     cmd_absorb_and_block,
     cmd_absorb_nonblocking_advisory,
     canonical_bytes,
@@ -130,6 +131,51 @@ def base_state(terminal_path: str = "/private/tmp/TERM-AUTHORITY-1.json") -> dic
         "pending_absorptions": [],
         "absorbed_terminal_event_ids": [],
     }
+
+
+class ActiveProjectionTest(unittest.TestCase):
+    def test_active_projection_omits_replay_history_bodies(self) -> None:
+        state = base_state()
+        state["absorbed_terminal_event_ids"] = [
+            f"TERM-ABSORBED-{index:04d}" for index in range(330)
+        ]
+        state["objectives"].append(
+            {
+                "objective_id": "objective-closed",
+                "candidate_id": "candidate-closed",
+                "candidate_state": "CLOSED",
+                "stage": "SCOPED_CLOSE",
+                "scientific_outcome": "PRESERVED_IN_CANONICAL_STATE_ONLY",
+                "lifecycle": "DONE",
+                "next_action": "NONE",
+                "owner_thread_id": None,
+                "owner_role": None,
+                "owner_state": None,
+                "completion_binding": None,
+                "blocker": None,
+            }
+        )
+
+        projection = active_state_projection(state)
+
+        self.assertEqual(projection["projection"], "active")
+        self.assertEqual(
+            [item["objective_id"] for item in projection["objectives"]],
+            ["objective-1"],
+        )
+        self.assertNotIn("absorbed_terminal_event_ids", projection)
+        self.assertNotIn("absorbed_advisory_scopes", projection)
+        self.assertEqual(
+            projection["history_summary"]["absorbed_terminal_event_ids"]["count"],
+            330,
+        )
+        self.assertEqual(
+            projection["history_summary"]["closed_objectives"]["count"], 1
+        )
+        self.assertLess(
+            len(canonical_bytes(projection)),
+            len(canonical_bytes(state)) // 2,
+        )
 
 
 def observe_and_verify(path: Path, revision: int, objective_id: str = "objective-1") -> int:

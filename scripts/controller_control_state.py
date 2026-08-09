@@ -2488,9 +2488,57 @@ def cmd_validate(args: argparse.Namespace) -> None:
     print(json.dumps({"status": "PASS", "revision": state["revision"]}, sort_keys=True))
 
 
+def active_state_projection(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the routine Controller view without replay-only history bodies."""
+    active_objectives = [
+        copy.deepcopy(item)
+        for item in state["objectives"]
+        if item["lifecycle"] != "DONE"
+    ]
+    closed_objective_ids = [
+        item["objective_id"]
+        for item in state["objectives"]
+        if item["lifecycle"] == "DONE"
+    ]
+    absorbed_events = state["absorbed_terminal_event_ids"]
+    absorbed_advisories = state["absorbed_advisory_scopes"]
+    return {
+        "projection": "active",
+        "schema_version": state["schema_version"],
+        "revision": state["revision"],
+        "updated_at": state["updated_at"],
+        "canonical_state_sha256": hashlib.sha256(canonical_bytes(state)).hexdigest(),
+        "controller": copy.deepcopy(state["controller"]),
+        "objectives": active_objectives,
+        "managed_roles": copy.deepcopy(state["managed_roles"]),
+        "remote_jobs": copy.deepcopy(state["remote_jobs"]),
+        "advisory_reads": copy.deepcopy(state["advisory_reads"]),
+        "pending_absorptions": copy.deepcopy(state["pending_absorptions"]),
+        "history_summary": {
+            "closed_objectives": {
+                "count": len(closed_objective_ids),
+                "ids_sha256": hashlib.sha256(
+                    canonical_bytes(closed_objective_ids)
+                ).hexdigest(),
+            },
+            "absorbed_terminal_event_ids": {
+                "count": len(absorbed_events),
+                "sha256": hashlib.sha256(canonical_bytes(absorbed_events)).hexdigest(),
+            },
+            "absorbed_advisory_scopes": {
+                "count": len(absorbed_advisories),
+                "sha256": hashlib.sha256(
+                    canonical_bytes(absorbed_advisories)
+                ).hexdigest(),
+            },
+        },
+    }
+
+
 def cmd_show(args: argparse.Namespace) -> None:
     state = read_state(Path(args.state))
-    print(canonical_bytes(state).decode("utf-8"), end="")
+    output = state if args.projection == "full" else active_state_projection(state)
+    print(canonical_bytes(output).decode("utf-8"), end="")
 
 
 def _validate_committed_successor(
@@ -3553,10 +3601,15 @@ def cmd_absorb_and_block(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for name, handler in (("validate", cmd_validate), ("show", cmd_show)):
-        sub = subparsers.add_parser(name)
-        sub.add_argument("--state", required=True)
-        sub.set_defaults(handler=handler)
+    validate = subparsers.add_parser("validate")
+    validate.add_argument("--state", required=True)
+    validate.set_defaults(handler=cmd_validate)
+    show = subparsers.add_parser("show")
+    show.add_argument("--state", required=True)
+    show.add_argument(
+        "--projection", choices=("active", "full"), default="active"
+    )
+    show.set_defaults(handler=cmd_show)
     await_activation = subparsers.add_parser("await-successor-activation")
     await_activation.add_argument("--state", required=True)
     await_activation.add_argument("--minimum-revision", type=int, required=True)
