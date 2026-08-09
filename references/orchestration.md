@@ -514,10 +514,13 @@ recovery, an isolated context, or an auditable evidence trail across turns.
 
 At each bounded runtime dispatch or continuation boundary, derive model family and
 reasoning effort from the remaining action and currently visible context. Pass
-both explicitly to the runtime create/resume call; omission or inheritance from
-the predecessor, candidate, role or reusable session fails admission. Dispatch
-frozen deterministic work through the named `luna_worker` profile. Before the
-action's first write, remote launch or protected read, run
+both explicitly for Sol routes; omission or inheritance from the predecessor,
+candidate, role or reusable session fails admission. Dispatch frozen deterministic
+work only through V1 named-agent `agent_type=luna_worker` with
+`fork_context=false` (or the runtime's exact no-history equivalent) and no direct
+model or effort override. A full-history fork inherits the parent agent type; V2
+`task_name` labels and generic model overrides do not load the custom profile.
+Before the action's first write, remote launch or protected read, run
 `scripts/validate_model_route.py` against durable rollout metadata, including
 the exact parent binding for Luna. The check is ephemeral and writes no state or
 artifact; a mismatch returns to the Sol owner before effects or stops fail-closed:
@@ -546,10 +549,10 @@ protected-result interpretation.
 The Luna receipt authority is the child rollout's `session_meta` plus current
 `turn_context`: `agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`,
 exact `parent_thread_id`, and `multi_agent_version=v1`. Worker prose is never a
-route receipt. A generic direct-model override catalog may expose only Sol/Terra;
-that interface-local list does not prove the named custom profile unavailable.
-Try the named profile first and classify `RULE_TOOLING_DRIFT` only if that exact
-route fails or its durable metadata mismatches.
+route receipt. Inspect the dispatcher before spending a spawn: absence of an
+`agent_type` field proves the named profile unavailable in that turn; do not
+substitute `task_name`, a generic direct-model override, or a new user-visible
+task. A failed exact dispatch or durable mismatch is `RULE_TOOLING_DRIFT`.
 
 File or module count alone is not a Sol trigger. Deterministic multi-module
 work remains Luna-eligible when the edit surface, interactions, and acceptance
@@ -587,10 +590,11 @@ real-carrier, evidence-bearing or decision work. For one failure fingerprint it
 may make at most one bounded mechanical repair, then returns the fingerprint,
 evidence and next diagnostic without another Luna loop. An already-running turn
 is not presumed to support a mid-turn model switch. The user-visible task,
-generic collaboration override, and named-profile catalogs may differ; only a
-failed or mismatched named-profile dispatch proves this Luna route unavailable.
-Then use the nearest allowed Sol tier, report `RULE_TOOLING_DRIFT` and its
-expected token-cost consequence, and never claim Luna executed. After
+generic collaboration override, and named-profile catalogs may differ. A missing
+named-agent field, failed exact dispatch, or durable mismatch makes Luna
+unavailable for that turn. Then use the nearest allowed Sol tier, report
+`RULE_TOOLING_DRIFT` and its expected token-cost consequence, and never claim
+Luna executed. After
 protected-result exposure, never downgrade to Luna. After
 decision-critical reasoning, Luna is allowed only when that decision has been
 frozen into a deterministic oracle which Luna cannot reinterpret. Ambiguity in

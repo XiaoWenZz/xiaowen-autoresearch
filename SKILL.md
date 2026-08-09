@@ -159,11 +159,12 @@ Never default to
   integration, tests/docs from frozen oracles, package/sync/rehash,
   sealed reruns, and repairs.
 
-At each bounded action boundary choose cheapest capable; ties use Luna. For
-frozen deterministic work dispatch named `luna_worker`; before effects verify
-durable rollout `agent_role/model/effort/parent_thread_id/multi_agent_version`
-with `scripts/validate_model_route.py`. A generic override catalog cannot prove
-Luna unavailable. Freeze edits, acceptance, evidence/exposure, budget and stop.
+At each boundary choose cheapest capable; ties use Luna. For frozen deterministic
+work use V1 `agent_type=luna_worker`, no history fork or model override; V2
+`task_name` is not that profile. Before effects verify durable rollout
+`agent_role/model/effort/parent_thread_id/multi_agent_version` with
+`scripts/validate_model_route.py`. Freeze edits, acceptance, evidence/exposure,
+budget and stop.
 The child preserves Sol owner, objective, cumulative budget and final terminal;
 it gains no science role or authority. Allow one repair per fingerprint, then
 return evidence to Sol. Never route protected/scientific/authority/ambiguous

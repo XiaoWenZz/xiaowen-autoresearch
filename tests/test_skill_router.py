@@ -1060,9 +1060,10 @@ class SkillRouterTest(unittest.TestCase):
             "default for frozen deterministic implementation",
             "choose cheapest capable; ties use Luna",
             "file/module count alone is no trigger",
-            "dispatch named `luna_worker`",
+            "V1 `agent_type=luna_worker`",
+            "no history fork or model override",
+            "V2 `task_name` is not that profile",
             "durable rollout `agent_role/model/effort/parent_thread_id/multi_agent_version`",
-            "generic override catalog cannot prove Luna unavailable",
             "Allow one repair per fingerprint",
             "Never route protected/scientific/authority/ambiguous decisions to Luna",
         ):
@@ -1086,7 +1087,7 @@ class SkillRouterTest(unittest.TestCase):
         for phrase in (
             "call `set_thread_pinned`",
             "At each bounded runtime dispatch or continuation boundary",
-            "Pass both explicitly to the runtime create/resume call",
+            "Pass both explicitly for Sol routes",
             "omission or inheritance from the predecessor",
             "against durable rollout metadata",
             "writes no state or artifact",
@@ -1104,6 +1105,10 @@ class SkillRouterTest(unittest.TestCase):
             "RULE_TOOLING_DRIFT",
             "never claim Luna executed",
             "Worker prose is never a route receipt",
+            "`fork_context=false`",
+            "A full-history fork inherits the parent agent type",
+            "absence of an `agent_type` field proves the named profile unavailable",
+            "do not substitute `task_name`",
         ):
             with self.subTest(orchestration_phrase=phrase):
                 self.assertIn(phrase, orchestration)
