@@ -287,6 +287,7 @@ When durable Lite evidence is needed, keep one terminal with identity/scope,
 evidence/validation, `FACT / INFERENCE / HYPOTHESIS`, one disposition, and one
 next action/reopening fact. Add knowledge provenance only for a
 decision-changing synthesis handoff, never a routine local workflow/code audit.
+Validate rule hashes with `workflow_evolution_gate.py validate-rule-chain` before seal.
 
 A successful tool receipt releases the worker immediately; Lite creates no receiver,
 fallback, acknowledgement, or callback transaction and never waits for

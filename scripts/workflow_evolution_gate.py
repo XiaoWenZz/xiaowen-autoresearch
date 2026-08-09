@@ -9,11 +9,13 @@ import json
 import re
 import sqlite3
 import statistics
+import stat
 from pathlib import Path
 from typing import Any, Iterable
 
 
 WORKSPACE_ROOT = Path("/Users/xiaowen/Documents/Obsidian Vault/003_科研")
+SKILL_ROOT = Path(__file__).resolve().parents[1]
 STATE_DB = Path("/Users/xiaowen/.codex/state_5.sqlite")
 ARIS_THREAD_ID = "019fdaac-ce48-74d1-8fa0-94bab9ee2f3e"
 SOFT_TOKEN_THRESHOLD = 25_000_000
@@ -40,6 +42,15 @@ class GateError(ValueError):
     pass
 
 
+def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise GateError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def _canonical(value: Any) -> bytes:
     return (
         json.dumps(
@@ -63,6 +74,153 @@ def _is_within(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _strict_json_file(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(
+            path.read_text(encoding="utf-8"), object_pairs_hook=_strict_object
+        )
+    except UnicodeDecodeError as exc:
+        raise GateError("terminal_json is not strict UTF-8") from exc
+    except json.JSONDecodeError as exc:
+        raise GateError("terminal_json is not valid JSON") from exc
+    if not isinstance(value, dict):
+        raise GateError("terminal_json must contain one object")
+    return value
+
+
+def _checked_rule_path(path: Path, workspace_root: Path, skill_root: Path) -> Path:
+    if not path.is_absolute():
+        raise GateError("rule-chain path must be absolute")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise GateError(f"rule-chain path is unavailable: {path}") from exc
+    if resolved != path:
+        raise GateError(f"rule-chain path uses traversal or a symlink: {path}")
+    metadata = path.lstat()
+    if not stat.S_ISREG(metadata.st_mode):
+        raise GateError(f"rule-chain path is not a regular file: {path}")
+    in_skill = _is_within(path, skill_root)
+    workspace_agent = _is_within(path, workspace_root) and path.name == "AGENTS.md"
+    if not in_skill and not workspace_agent:
+        raise GateError(f"rule-chain path is outside allowed rule roots: {path}")
+    return path
+
+
+def _reported_sha256(value: Any, where: str) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise GateError(f"{where} must be one lowercase SHA-256")
+    return value
+
+
+def _rule_chain_assertions(
+    rule_chain: Any,
+    *,
+    workspace_root: Path,
+    skill_root: Path,
+) -> list[tuple[Path, str]]:
+    if not isinstance(rule_chain, dict):
+        raise GateError("terminal.rule_chain must be an object")
+    assertions: list[tuple[Path, str]] = []
+
+    def walk(value: Any, where: str) -> None:
+        if isinstance(value, dict):
+            has_path = "path" in value
+            has_sha = "sha256" in value
+            if has_path != has_sha:
+                raise GateError(f"{where} has an incomplete path/SHA-256 assertion")
+            if has_path:
+                raw_path = value["path"]
+                if not isinstance(raw_path, str) or not raw_path:
+                    raise GateError(f"{where}.path must be a non-empty string")
+                path = _checked_rule_path(Path(raw_path), workspace_root, skill_root)
+                assertions.append(
+                    (path, _reported_sha256(value["sha256"], f"{where}.sha256"))
+                )
+                return
+            for key, item in value.items():
+                if key == "routed_references":
+                    if not isinstance(item, dict) or not item:
+                        raise GateError(
+                            f"{where}.routed_references must be a non-empty object"
+                        )
+                    for name, digest in item.items():
+                        if (
+                            not isinstance(name, str)
+                            or Path(name).name != name
+                            or not name.endswith(".md")
+                        ):
+                            raise GateError("routed reference name must be one Markdown basename")
+                        path = _checked_rule_path(
+                            skill_root / "references" / name,
+                            workspace_root,
+                            skill_root,
+                        )
+                        assertions.append(
+                            (
+                                path,
+                                _reported_sha256(
+                                    digest,
+                                    f"{where}.routed_references.{name}",
+                                ),
+                            )
+                        )
+                else:
+                    walk(item, f"{where}.{key}")
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                walk(item, f"{where}[{index}]")
+
+    walk(rule_chain, "terminal.rule_chain")
+    if not assertions:
+        raise GateError("terminal.rule_chain contains no file hash assertions")
+    paths = [path for path, _ in assertions]
+    if len(paths) != len(set(paths)):
+        raise GateError("terminal.rule_chain contains duplicate file assertions")
+    return assertions
+
+
+def validate_rule_chain_terminal(
+    terminal_path: Path,
+    *,
+    workspace_root: Path = WORKSPACE_ROOT,
+    skill_root: Path = SKILL_ROOT,
+) -> dict[str, Any]:
+    terminal = _strict_json_file(terminal_path)
+    assertions = _rule_chain_assertions(
+        terminal.get("rule_chain"),
+        workspace_root=workspace_root.resolve(strict=True),
+        skill_root=skill_root.resolve(strict=True),
+    )
+    entries: list[dict[str, str]] = []
+    mismatches: list[dict[str, str]] = []
+    for path, reported in assertions:
+        observed = _sha256_file(path)
+        entry = {
+            "path": str(path),
+            "reported_sha256": reported,
+            "observed_sha256": observed,
+        }
+        entries.append(entry)
+        if reported != observed:
+            mismatches.append(entry)
+    return {
+        "status": "PASS" if not mismatches else "FAIL",
+        "mode": "PRE_SEAL_READ_ONLY",
+        "checked": len(entries),
+        "entries": entries,
+        "mismatches": mismatches,
+    }
 
 
 def _thread_record(db_path: Path, thread_id: str) -> tuple[Path, Path]:
@@ -425,6 +583,10 @@ def build_parser() -> argparse.ArgumentParser:
     token.add_argument("--healthy-windows-json", default="[]")
     events = subparsers.add_parser("evaluate-events")
     events.add_argument("--events-json", required=True)
+    rule_chain = subparsers.add_parser("validate-rule-chain")
+    rule_chain.add_argument("--terminal-json", required=True)
+    rule_chain.add_argument("--workspace-root", default=str(WORKSPACE_ROOT))
+    rule_chain.add_argument("--skill-root", default=str(SKILL_ROOT))
     return parser
 
 
@@ -453,11 +615,17 @@ def main() -> int:
                 healthy_windows=healthy,
             )
             result["activation_line"] = activation_line
-        else:
+        elif args.command == "evaluate-events":
             events = _load_json_value(args.events_json, "events_json")
             result = evaluate_events(events)
+        else:
+            result = validate_rule_chain_terminal(
+                Path(args.terminal_json),
+                workspace_root=Path(args.workspace_root),
+                skill_root=Path(args.skill_root),
+            )
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-        return 0
+        return 0 if result["status"] == "PASS" else 2
     except (GateError, OSError, sqlite3.Error) as exc:
         print(json.dumps({"status": "FAIL", "error": str(exc)}, sort_keys=True))
         return 2

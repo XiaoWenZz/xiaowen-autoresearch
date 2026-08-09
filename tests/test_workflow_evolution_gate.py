@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import subprocess
@@ -9,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from scripts.workflow_evolution_gate import (
+    GateError,
     HARD_TOKEN_THRESHOLD,
     ISSUE_FIELDS,
     SOFT_TOKEN_THRESHOLD,
@@ -17,6 +19,7 @@ from scripts.workflow_evolution_gate import (
     model_route_scorecard,
     relative_soft_threshold,
     token_decision,
+    validate_rule_chain_terminal,
 )
 
 
@@ -170,6 +173,164 @@ class TokenDetectorTest(unittest.TestCase):
             result = subprocess.run(aris, capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 2)
             self.assertIn("ARIS", json.loads(result.stdout)["error"])
+
+
+class RuleChainPresealTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory(dir="/private/tmp")
+        self.root = Path(self.temporary.name)
+        self.workspace = self.root / "workspace"
+        self.skill = self.root / "skill"
+        (self.workspace / "project").mkdir(parents=True)
+        (self.skill / "references").mkdir(parents=True)
+        self.workspace_agents = self.workspace / "AGENTS.md"
+        self.project_agents = self.workspace / "project" / "AGENTS.md"
+        self.skill_file = self.skill / "SKILL.md"
+        self.orchestration = self.skill / "references" / "orchestration.md"
+        self.state_schema = self.skill / "references" / "state-schema.md"
+        for path, value in (
+            (self.workspace_agents, "workspace\n"),
+            (self.project_agents, "project\n"),
+            (self.skill_file, "skill\n"),
+            (self.orchestration, "orchestration\n"),
+            (self.state_schema, "state-schema\n"),
+        ):
+            path.write_text(value, encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    @staticmethod
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def terminal(self, rule_chain: object, *, name: str = "terminal.json") -> Path:
+        path = self.root / name
+        path.write_text(json.dumps({"rule_chain": rule_chain}) + "\n", encoding="utf-8")
+        return path
+
+    def validate(self, terminal: Path) -> dict:
+        return validate_rule_chain_terminal(
+            terminal,
+            workspace_root=self.workspace,
+            skill_root=self.skill,
+        )
+
+    def test_files_read_completely_projection_passes(self) -> None:
+        terminal = self.terminal(
+            {
+                "files_read_completely": [
+                    {
+                        "path": str(self.workspace_agents),
+                        "sha256": self.digest(self.workspace_agents),
+                    },
+                    {
+                        "path": str(self.project_agents),
+                        "sha256": self.digest(self.project_agents),
+                    },
+                    {
+                        "path": str(self.skill_file),
+                        "sha256": self.digest(self.skill_file),
+                    },
+                ]
+            }
+        )
+        result = self.validate(terminal)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["checked"], 3)
+        self.assertEqual(result["mismatches"], [])
+
+    def test_named_objects_and_routed_references_pass(self) -> None:
+        terminal = self.terminal(
+            {
+                "root_AGENTS": {
+                    "path": str(self.workspace_agents),
+                    "sha256": self.digest(self.workspace_agents),
+                },
+                "live_skill": {
+                    "path": str(self.skill_file),
+                    "sha256": self.digest(self.skill_file),
+                },
+                "routed_references": {
+                    "orchestration.md": self.digest(self.orchestration),
+                    "state-schema.md": self.digest(self.state_schema),
+                },
+            }
+        )
+        result = self.validate(terminal)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["checked"], 4)
+
+    def test_cli_reports_mismatch_and_exits_two(self) -> None:
+        terminal = self.terminal(
+            {
+                "live_skill": {
+                    "path": str(self.skill_file),
+                    "sha256": "0" * 64,
+                }
+            }
+        )
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL),
+                "validate-rule-chain",
+                "--terminal-json",
+                str(terminal),
+                "--workspace-root",
+                str(self.workspace),
+                "--skill-root",
+                str(self.skill),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 2)
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["mismatches"][0]["reported_sha256"], "0" * 64)
+        self.assertEqual(
+            result["mismatches"][0]["observed_sha256"], self.digest(self.skill_file)
+        )
+
+    def test_rejects_symlink_outside_root_duplicate_and_traversal(self) -> None:
+        outside = self.root / "outside.md"
+        outside.write_text("outside\n", encoding="utf-8")
+        symlink = self.skill / "linked.md"
+        symlink.symlink_to(self.skill_file)
+        cases = (
+            {
+                "linked": {"path": str(symlink), "sha256": self.digest(self.skill_file)}
+            },
+            {"outside": {"path": str(outside), "sha256": self.digest(outside)}},
+            {"routed_references": {"../outside.md": self.digest(outside)}},
+        )
+        for index, rule_chain in enumerate(cases):
+            with self.subTest(index=index):
+                with self.assertRaises(GateError):
+                    self.validate(self.terminal(rule_chain, name=f"unsafe-{index}.json"))
+
+        duplicate = self.root / "duplicate.json"
+        duplicate.write_text('{"rule_chain":{},"rule_chain":{}}\n', encoding="utf-8")
+        with self.assertRaisesRegex(GateError, "duplicate JSON key"):
+            self.validate(duplicate)
+
+    def test_rejects_empty_malformed_and_duplicate_file_assertions(self) -> None:
+        cases = (
+            {},
+            {"skill": {"path": str(self.skill_file), "sha256": "ABC"}},
+            {
+                "files_read_completely": [
+                    {"path": str(self.skill_file), "sha256": self.digest(self.skill_file)},
+                    {"path": str(self.skill_file), "sha256": self.digest(self.skill_file)},
+                ]
+            },
+        )
+        for index, rule_chain in enumerate(cases):
+            with self.subTest(index=index):
+                with self.assertRaises(GateError):
+                    self.validate(self.terminal(rule_chain, name=f"invalid-{index}.json"))
 
 
 class TraceAndConformanceDetectorTest(unittest.TestCase):
