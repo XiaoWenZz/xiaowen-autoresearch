@@ -10,14 +10,18 @@ import unittest
 from pathlib import Path
 
 from scripts.workflow_evolution_gate import (
+    CONTEXT_MEDIAN_ROLLOVER,
+    CONTEXT_WINDOW_SIZE,
     GateError,
     HARD_TOKEN_THRESHOLD,
     ISSUE_FIELDS,
     SOFT_TOKEN_THRESHOLD,
     classify_conformance,
+    controller_context_decision,
     evaluate_events,
     model_route_scorecard,
     relative_soft_threshold,
+    scan_controller_context_window,
     token_decision,
     validate_rule_chain_terminal,
 )
@@ -250,6 +254,128 @@ class TokenDetectorTest(unittest.TestCase):
             result = subprocess.run(aris, capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 2)
             self.assertIn("ARIS", json.loads(result.stdout)["error"])
+
+
+class ControllerContextWindowTest(unittest.TestCase):
+    @staticmethod
+    def session_event(thread_id: str = "thread-1") -> dict:
+        return {"type": "session_meta", "payload": {"id": thread_id}}
+
+    @staticmethod
+    def token_event(value: object) -> dict:
+        return {
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {"last_token_usage": {"input_tokens": value}},
+            },
+        }
+
+    def test_precedence_and_diagnostic_p95(self) -> None:
+        pause = controller_context_decision(
+            [195_396] * CONTEXT_WINDOW_SIZE,
+            thread_id="thread-1",
+            session_id="thread-1",
+            epoch_marker_line=None,
+        )
+        self.assertEqual(pause["decision"], "PAUSE_NEW_OBJECTIVE_ADMISSION")
+        self.assertEqual(pause["count"], 20)
+        self.assertEqual(pause["median"], 195_396)
+        self.assertEqual(pause["p95"], 195_396)
+        self.assertEqual(pause["tail_consecutive_over_128000"], 20)
+
+        rollover = controller_context_decision(
+            [100_000] * CONTEXT_WINDOW_SIZE,
+            thread_id="thread-1",
+            session_id="thread-1",
+            epoch_marker_line=None,
+        )
+        self.assertEqual(rollover["decision"], "REQUIRE_ROLLOVER")
+        self.assertEqual(rollover["median"], 100_000)
+        self.assertGreater(rollover["median"], CONTEXT_MEDIAN_ROLLOVER)
+
+        p95_only = controller_context_decision(
+            [64_000] * 18 + [120_000] * 2,
+            thread_id="thread-1",
+            session_id="thread-1",
+            epoch_marker_line=None,
+        )
+        self.assertEqual(p95_only["decision"], "ALLOW")
+        self.assertEqual(p95_only["median"], 64_000)
+        self.assertEqual(p95_only["p95"], 120_000)
+
+    def test_scan_resets_after_latest_compaction_and_caps_at_latest_twenty(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            rollout = Path(raw) / "rollout.jsonl"
+            events = [
+                self.session_event(),
+                self.token_event(195_396),
+                {"type": "compacted", "payload": {}},
+                {"type": "event_msg", "payload": {"type": "context_compacted"}},
+                *[self.token_event(64_000) for _ in range(21)],
+            ]
+            rollout.write_text(
+                "".join(json.dumps(event) + "\n" for event in events),
+                encoding="utf-8",
+            )
+            session_id, marker_line, values = scan_controller_context_window(
+                rollout, "thread-1"
+            )
+            self.assertEqual(session_id, "thread-1")
+            self.assertEqual(marker_line, 4)
+            self.assertEqual(values, [64_000] * CONTEXT_WINDOW_SIZE)
+
+    def test_cli_emits_executed_decision_and_rejects_parser_identity_errors(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            rollout = root / "rollout.jsonl"
+            rollout.write_text(
+                "".join(
+                    json.dumps(event) + "\n"
+                    for event in [
+                        self.session_event(),
+                        *[self.token_event(195_396) for _ in range(20)],
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            database = root / "state.sqlite"
+            connection = sqlite3.connect(database)
+            connection.execute(
+                "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO threads VALUES (?, ?, ?)",
+                ("thread-1", str(rollout), str(WORKSPACE)),
+            )
+            connection.commit()
+            connection.close()
+
+            command = [
+                sys.executable,
+                str(TOOL),
+                "controller-context-window",
+                "--state-db",
+                str(database),
+                "--workspace-root",
+                str(WORKSPACE),
+                "--thread-id",
+                "thread-1",
+            ]
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 2)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "PASS")
+            self.assertEqual(payload["decision"], "PAUSE_NEW_OBJECTIVE_ADMISSION")
+
+            rollout.write_text(
+                json.dumps(self.session_event("other-thread")) + "\n", encoding="utf-8"
+            )
+            result = subprocess.run(command, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 2)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "FAIL")
+            self.assertIn("requested thread", payload["error"])
 
 
 class RuleChainPresealTest(unittest.TestCase):

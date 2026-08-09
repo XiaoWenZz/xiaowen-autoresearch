@@ -142,17 +142,22 @@ The nested six-field `completion_binding` is the sole terminal identity
 authority. A top-level `terminal_event_id` or `terminal_path` is an optional
 compatibility mirror and, when present, must equal the nested value. Generate
 the existing callback with `controller_control_state.py
-prepare-terminal-callback`: it reads the sealed regular non-symlink file,
-opens every parent component with no-follow directory handles, rejects write
-bits or stat changes, requires the body binding to equal the current
-objective/dispatch/lease registry, and emits that binding plus
-`final_bytes`, `final_sha256`, and the unchanged terminal body. Sending is
-rejected locally on a missing field or any body/mirror/envelope/registry
-conflict. The Controller passes those exact byte/hash receipt fields to
-`observe-terminal`; a same-path replacement after callback preparation fails
-before revision, cursor, owner or pending state changes. The immutable source-task final is recovery fallback, never the normal
-envelope source. Callback repetition is transport evidence, not a second
-identity authority or permission to accept a disposition.
+prepare-terminal-callback`: it reads and fully validates the sealed regular
+non-symlink file, opens every parent component with no-follow directory
+handles, rejects write bits or stat changes, and resolves the current
+objective/dispatch/lease identity locally. The transport envelope is
+receipt-only and contains exactly `terminal_event_id`, `objective_id`,
+`owner_thread_id`, `terminal_path`, `final_bytes`, `final_sha256`,
+`disposition`, `next_action`, and nullable `fresh_thread_reason`; it never
+emits `terminal_body` or `completion_binding`. Missing legacy disposition or
+next-action values remain null; non-null text is capped at 2048 UTF-8 bytes,
+and a fresh-thread reason must be allowlisted. Sending is rejected locally on
+any body/mirror/envelope/registry conflict. The Controller passes those exact
+byte/hash receipt fields to `observe-terminal`; a same-path replacement after
+callback preparation fails before revision, cursor, owner or pending state
+changes. The immutable source-task final is recovery fallback, never the
+normal envelope source. Callback repetition is transport evidence, not a
+second identity authority or permission to accept a disposition.
 
 Schema v5 binds terminal identity before delegation and persists an
 identity-only recovery barrier:
@@ -313,11 +318,21 @@ which removes it atomically. Generic replacement cannot create/remove it, and
 new v5 state cannot seed it. This compatibility path never binds or resets
 startup authority and is invalid for prospective v5 terminals.
 
-Controller token alarms are scoped to one
-`physical_controller_context_epoch`. An atomic rollover increments the epoch,
-resets its rolling window and consecutive counter, and occurs at most once per
-epoch. It may pause only new-objective admission; terminal absorption, safety,
-existing-owner continuity and blocker recovery remain nonblocking.
+Controller context-window alarms are read-only and scoped to one
+`physical_controller_context_epoch`. Before any new dispatch or route, run
+`workflow_evolution_gate.py controller-context-window` against the existing
+SQLite thread pointer. After the latest top-level `compacted` or
+`event_msg/context_compacted`, use at most the latest 20
+`last_token_usage.input_tokens`: fewer than 20 is `ALLOW`; 20 consecutive
+values above 128000 is `PAUSE_NEW_OBJECTIVE_ADMISSION`; otherwise median above
+96000 is `REQUIRE_ROLLOVER`; all other windows are `ALLOW`. Median 64000 and
+p95 96000 are diagnostic targets only. The JSON gate emits no state or
+artifact, returns nonzero only for the two blocking decisions, and parser
+failure is distinct from an executed decision. An atomic rollover increments
+the epoch, resets its rolling window and consecutive counter, and occurs at
+most once per epoch. The alarm may pause only new-objective admission;
+terminal absorption, safety, existing-owner continuity and blocker recovery
+remain nonblocking.
 
 Normal successor activation reuses the canonical thread and canonical role.
 When `new_owner_thread_id != old_owner_thread_id`, `activate-successor` requires

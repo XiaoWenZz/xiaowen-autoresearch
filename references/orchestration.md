@@ -418,25 +418,34 @@ the existing recovery path for the same objective; never dispatch a fresh
 Executor or create a new attempt merely because the generic terminal exists.
 
 Keep the Controller logically singleton while allowing physical context
-rollover. A worker callback carries only the compact receipt fields
-`terminal_event_id`, `objective_id`, `owner_thread_id`, immutable
-`path/bytes/sha256`, `disposition`, `next_action`, and nullable
-`fresh_thread_reason`; that reason is a non-authoritative worker suggestion.
+rollover. A worker callback carries only the exact compact receipt fields
+`terminal_event_id`, `objective_id`, `owner_thread_id`, `terminal_path`,
+`final_bytes`, `final_sha256`, `disposition`, `next_action`, and nullable
+`fresh_thread_reason`; it never carries `terminal_body` or the six-field
+`completion_binding`. That reason is a non-authoritative worker suggestion.
 Before compact absorption, resolve the event against the current objective,
 owner/role registry, dispatch receipt, lease epoch, contract revision and
-terminal digest. Open the immutable terminal on any mismatch; only Controller
-may accept a fresh-thread reason with its evidence reference. Reconstruct a rolled-over Controller from the
-checksum-bound snapshot, immutable terminals and runtime facts; do not replay
-raw transcripts. For the initial 30-day rollout, keep the rolling 20-event
-Controller input median at or below 64k tokens and p95 at or below 96k; a median
-above 96k forces compact/rollover before the next route, and 20 consecutive
-events above 128k pause new-objective admission until recovery. Measure these
-within one `physical_controller_context_epoch`: atomic rollover increments the
-epoch and resets its window and consecutive counter, at most once per epoch.
-A threshold never delays terminal absorption, safety action, existing-owner
-continuity, or blocker recovery; it pauses only new-objective admission and
-creates no role, artifact, or lifecycle. These are operational efficiency
-alarms, never scientific acceptance or closure gates.
+terminal digest, opening the immutable terminal locally on any mismatch. Only
+Controller may accept a fresh-thread reason with its evidence reference.
+Reconstruct a rolled-over Controller from the checksum-bound snapshot,
+immutable terminals and runtime facts; do not replay raw transcripts.
+
+Before any new dispatch or route, run the read-only
+`workflow_evolution_gate.py controller-context-window` using the existing
+SQLite thread pointer. The gate resets after the latest top-level `compacted`
+or `event_msg/context_compacted`, reads at most the latest 20
+`last_token_usage.input_tokens`, and returns exactly `ALLOW`,
+`REQUIRE_ROLLOVER` when median exceeds 96000, or
+`PAUSE_NEW_OBJECTIVE_ADMISSION` after 20 consecutive values above 128000.
+This is the rolling 20-event Controller input median; p95 remains diagnostic.
+Median 64000 and p95 96000 are diagnostic targets only. A blocking decision
+pauses only new-objective admission and never delays terminal absorption,
+safety, existing-owner continuity, or blocker recovery. The gate creates no
+state or artifact, and a parser failure is distinct from an executed decision.
+Measure these within one `physical_controller_context_epoch`: atomic rollover
+increments the epoch and resets its window and consecutive counter, at most
+once per epoch. These are operational efficiency alarms, never scientific
+acceptance or closure gates.
 Invalid, stale, or contradictory state wakes the Controller for rebuild; it
 does not invent an owner, successor, terminal, job, or scientific meaning.
 If a valid snapshot omitted one already dispatch-bound objective, rebuild only
