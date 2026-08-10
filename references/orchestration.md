@@ -632,6 +632,8 @@ Supply the applicable complete arguments: `--rollout-path`, `--route-mode`,
 `--expected-route-dispatch-id`, `--expected-source-thread-id`, `--capsule-path`,
 and `--context-eligible` for Luna. Omission or mismatch fails before effects and
 returns to the Sol owner; the check writes no state or artifact.
+Same-thread receipt loading always requires the independently expected current
+turn; it never treats the latest durable turn as authority by omission.
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
   material contract/authority/claim choices, causal/statistical/algebraic

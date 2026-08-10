@@ -529,6 +529,7 @@ class ModelRouteTest(unittest.TestCase):
                     route_dispatch_id="dispatch-1",
                 ),
                 expected_thread_id="thread-1",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id="dispatch-1",
             ),
             ("gpt-5.6-sol", "xhigh"),
@@ -546,6 +547,7 @@ class ModelRouteTest(unittest.TestCase):
                     route_dispatch_id="dispatch-1",
                 ),
                 expected_thread_id="thread-1",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id="dispatch-1",
             )
 
@@ -564,6 +566,7 @@ class ModelRouteTest(unittest.TestCase):
                     route_dispatch_id="dispatch-1",
                 ),
                 expected_thread_id="thread-1",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id="dispatch-1",
             ),
             ("gpt-5.6-sol", "xhigh"),
@@ -577,6 +580,41 @@ class ModelRouteTest(unittest.TestCase):
                 expected_first_turn_id="turn-1",
                 expected_route_dispatch_id="luna-route-1",
             )
+
+    def test_same_thread_requires_independently_expected_current_turn(self) -> None:
+        receipt = RouteReceipt(
+            "bounded_engineering",
+            "gpt-5.6-sol",
+            "high",
+            receipt_source="durable_rollout",
+            route_mode="same_thread",
+            thread_id="executor-1",
+            turn_id="turn-1",
+            route_dispatch_id="dispatch-1",
+        )
+        with self.assertRaisesRegex(ValueError, "expected current turn"):
+            validate_receipt(
+                receipt,
+                expected_thread_id="executor-1",
+                expected_route_dispatch_id="dispatch-1",
+            )
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            rollout = self.write_same_thread_rollout(
+                root,
+                route_dispatch_id="dispatch-1",
+            )
+            with self.assertRaisesRegex(ValueError, "expected current turn"):
+                load_rollout_receipt(
+                    rollout,
+                    action_class="bounded_engineering",
+                    context_eligible=False,
+                    protected_exposed=False,
+                    decision_ambiguity=False,
+                    route_mode="same_thread",
+                    expected_route_dispatch_id="dispatch-1",
+                    capsule_path=root / "capsule.txt",
+                )
 
     def test_protected_exposure_and_unfrozen_context_reject_luna(self) -> None:
         for receipt in (
@@ -863,6 +901,7 @@ class ModelRouteTest(unittest.TestCase):
                 protected_exposed=False,
                 decision_ambiguity=False,
                 route_mode="same_thread",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id=route_dispatch_id,
                 expected_source_thread_id="019fdcaf-75b6-7603-9519-31f49789ee29",
                 capsule_path=capsule_path,
@@ -897,6 +936,7 @@ class ModelRouteTest(unittest.TestCase):
                         protected_exposed=False,
                         decision_ambiguity=False,
                         route_mode="same_thread",
+                        expected_turn_id="turn-1",
                         expected_route_dispatch_id=route_dispatch_id,
                         expected_source_thread_id="019fdcaf-75b6-7603-9519-31f49789ee29",
                         capsule_path=capsule,
@@ -1031,6 +1071,7 @@ class ModelRouteTest(unittest.TestCase):
                 protected_exposed=False,
                 decision_ambiguity=False,
                 route_mode="same_thread",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id=route_dispatch_id,
                 capsule_path=root / "capsule.txt",
             )
@@ -1038,6 +1079,7 @@ class ModelRouteTest(unittest.TestCase):
                 validate_receipt(
                     receipt,
                     expected_thread_id="executor-1",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id=route_dispatch_id,
                 ),
                 ("gpt-5.6-sol", "high"),
@@ -1059,6 +1101,7 @@ class ModelRouteTest(unittest.TestCase):
                     protected_exposed=False,
                     decision_ambiguity=False,
                     route_mode="same_thread",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id=route_dispatch_id,
                     capsule_path=root / "capsule.txt",
                 )
@@ -1093,6 +1136,7 @@ class ModelRouteTest(unittest.TestCase):
                 protected_exposed=False,
                 decision_ambiguity=False,
                 route_mode="same_thread",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id=route_dispatch_id,
                 capsule_path=root / "capsule.txt",
             )
@@ -1100,6 +1144,7 @@ class ModelRouteTest(unittest.TestCase):
                 validate_receipt(
                     receipt,
                     expected_thread_id="executor-1",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id=route_dispatch_id,
                 ),
                 ("gpt-5.6-sol", "xhigh"),
@@ -1108,12 +1153,14 @@ class ModelRouteTest(unittest.TestCase):
                 validate_receipt(
                     receipt,
                     expected_thread_id="executor-2",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id=route_dispatch_id,
                 )
             with self.assertRaisesRegex(ValueError, "same-thread route dispatch"):
                 validate_receipt(
                     receipt,
                     expected_thread_id="executor-1",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id="other-route",
                 )
             with self.assertRaisesRegex(ValueError, "runtime route mismatch"):
@@ -1129,6 +1176,7 @@ class ModelRouteTest(unittest.TestCase):
                         route_dispatch_id=route_dispatch_id,
                     ),
                     expected_thread_id="executor-1",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id=route_dispatch_id,
                 )
 
@@ -1150,6 +1198,7 @@ class ModelRouteTest(unittest.TestCase):
                 protected_exposed=False,
                 decision_ambiguity=False,
                 route_mode="same_thread",
+                expected_turn_id="turn-1",
                 expected_route_dispatch_id=dispatch_id,
                 capsule_path=root / "capsule.txt",
             )
@@ -1157,6 +1206,7 @@ class ModelRouteTest(unittest.TestCase):
                 validate_receipt(
                     receipt,
                     expected_thread_id="executor-1",
+                    expected_turn_id="turn-1",
                     expected_route_dispatch_id=dispatch_id,
                 ),
                 ("gpt-5.6-sol", "max"),
@@ -1343,6 +1393,8 @@ class ModelRouteTest(unittest.TestCase):
                     "same_thread",
                     "--expected-thread-id",
                     "executor-1",
+                    "--expected-turn-id",
+                    "turn-1",
                     "--expected-route-dispatch-id",
                     "luna-route-1",
                     "--capsule-path",
@@ -1377,6 +1429,8 @@ class ModelRouteTest(unittest.TestCase):
                     "same_thread",
                     "--expected-thread-id",
                     "executor-1",
+                    "--expected-turn-id",
+                    "turn-1",
                     "--expected-route-dispatch-id",
                     "luna-route-1",
                     "--context-eligible",

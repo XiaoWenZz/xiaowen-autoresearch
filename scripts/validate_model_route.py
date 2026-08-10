@@ -132,7 +132,11 @@ def validate_receipt(
             )
         if not receipt.turn_id:
             raise ValueError("same-thread route is missing durable turn identity")
-        if expected_turn_id is not None and receipt.turn_id != expected_turn_id:
+        if not expected_turn_id:
+            raise ValueError(
+                "same-thread route requires an independently expected current turn"
+            )
+        if receipt.turn_id != expected_turn_id:
             raise ValueError(
                 "same-thread turn binding mismatch: "
                 f"expected={expected_turn_id} actual={receipt.turn_id}"
@@ -567,6 +571,10 @@ def load_rollout_receipt(
             )
         if expected_route_dispatch_id is None:
             raise ValueError("same-thread rollout load requires an expected route dispatch")
+        if not expected_turn_id:
+            raise ValueError(
+                "same-thread rollout load requires an expected current turn"
+            )
         if capsule_path is None:
             raise ValueError("same-thread rollout load requires --capsule-path")
         canonical_prompt = _build_same_thread_prompt_bytes(
@@ -628,6 +636,11 @@ def load_rollout_receipt(
         raise ValueError("rollout is missing session_meta or turn_context routing metadata")
 
     turn_context = turn_contexts[-1]
+    if route_mode == "same_thread" and turn_context.get("turn_id") != expected_turn_id:
+        raise ValueError(
+            "same-thread turn binding mismatch: "
+            f"expected={expected_turn_id} actual={turn_context.get('turn_id')}"
+        )
     model = turn_context.get("model")
     effort = turn_context.get("effort")
     turn_id = turn_context.get("turn_id")

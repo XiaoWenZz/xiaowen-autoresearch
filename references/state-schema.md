@@ -266,6 +266,10 @@ the cursor and objective/owner identity unchanged while encoding
 `SAME_OWNER_TERMINAL_RECOVERY:v1:<owner>:<source_cursor>:<base64url(previous_next_action)>`
 in the existing `next_action`. Exact replay is read-only and returns
 `RECOVERY_REQUIRED`; a different final cursor cannot overwrite the recovery.
+An exact writable regular single-link draft may use this recovery without
+changing its bytes or mode, but every parent and final path component is checked
+without following symlinks; any symlink or other unsafe existing path fails
+before CAS.
 The active projection exposes this existing `next_action`, so the same wake can
 send each returned recovery without adding an outbox, job, terminal, or
 lifecycle. Terminal cursors retain the separate absorbed-event barrier.

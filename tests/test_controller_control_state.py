@@ -1696,6 +1696,93 @@ class ControllerControlStateTest(unittest.TestCase):
             self.assertEqual(json.loads(replay.getvalue())["status"], "RECOVERY_REQUIRED")
             self.assertEqual(read_state(state_path), first)
 
+    def test_executor_final_writable_draft_under_symlinked_parent_fails_before_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            real_parent = directory / "real-parent"
+            real_parent.mkdir()
+            draft = real_parent / "draft-terminal.json"
+            draft_bytes = b"unfinished draft under real parent\n"
+            draft.write_bytes(draft_bytes)
+            draft.chmod(0o640)
+            linked_parent = directory / "linked-parent"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+            bound_path = linked_parent / draft.name
+            state_path = directory / "controller-state.json"
+            state = base_state(str(bound_path))
+            state["objectives"][0]["owner_state"] = "ACTIVE"
+            state["managed_roles"][0].update(
+                {"state": "ACTIVE", "title": "Executor · Candidate One · ACTIVE"}
+            )
+            state["remote_jobs"] = []
+            write_state(state_path, state, -1)
+            update = {
+                "thread_id": "worker-1",
+                "expected_cursor": None,
+                "new_cursor": "cursor:symlinked-parent-draft",
+                "observation_kind": "NON_TERMINAL",
+                "source_turn_state": "FINAL",
+            }
+            before_stat = draft.stat()
+            with self.assertRaisesRegex(StateError, "symlinked component"):
+                cmd_advance_cursors(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(state_path),
+                            "expected_revision": 0,
+                            "updates_json": json.dumps([update]),
+                        },
+                    )()
+                )
+            self.assertEqual(read_state(state_path)["revision"], 0)
+            self.assertEqual(draft.read_bytes(), draft_bytes)
+            after_stat = draft.stat()
+            self.assertEqual(after_stat.st_mode, before_stat.st_mode)
+            self.assertEqual(after_stat.st_nlink, before_stat.st_nlink)
+
+    def test_executor_final_missing_nonsymlink_parent_uses_existing_recovery(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            terminal_path = directory / "missing-parent" / "terminal.json"
+            state_path = directory / "controller-state.json"
+            state = base_state(str(terminal_path))
+            state["objectives"][0]["owner_state"] = "ACTIVE"
+            state["managed_roles"][0].update(
+                {"state": "ACTIVE", "title": "Executor · Candidate One · ACTIVE"}
+            )
+            state["remote_jobs"] = []
+            write_state(state_path, state, -1)
+            update = {
+                "thread_id": "worker-1",
+                "expected_cursor": None,
+                "new_cursor": "cursor:missing-parent",
+                "observation_kind": "NON_TERMINAL",
+                "source_turn_state": "FINAL",
+            }
+            output = io.StringIO()
+            with redirect_stdout(output):
+                cmd_advance_cursors(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(state_path),
+                            "expected_revision": 0,
+                            "updates_json": json.dumps([update]),
+                        },
+                    )()
+                )
+            self.assertEqual(json.loads(output.getvalue())["status"], "RECOVERY_REQUIRED")
+            recovered = read_state(state_path)
+            self.assertEqual(recovered["revision"], 1)
+            self.assertIsNone(recovered["managed_roles"][0]["cursor"])
+            self.assertIn(
+                "SAME_OWNER_TERMINAL_RECOVERY:v1:worker-1:cursor:missing-parent:",
+                recovered["objectives"][0]["next_action"],
+            )
+
     def test_executor_final_recovery_batch_returns_every_same_owner_recovery(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"

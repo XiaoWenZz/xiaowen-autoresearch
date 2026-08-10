@@ -500,6 +500,46 @@ def _open_terminal_no_symlinks(path: Path) -> int:
         os.close(directory_fd)
 
 
+def _lstat_terminal_no_symlinks(path: Path) -> os.stat_result | None:
+    """Classify an allowlisted terminal path without following any component."""
+
+    normalized = _terminal_path(str(path), "terminal_path")
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise StateError("platform lacks no-symlink terminal traversal support")
+    components = normalized.parts[1:]
+    if not components:
+        raise StateError("terminal path must name a file beneath an allowlisted root")
+    directory_flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open("/", directory_flags)
+    try:
+        for component in components[:-1]:
+            try:
+                next_fd = os.open(component, directory_flags, dir_fd=directory_fd)
+            except FileNotFoundError:
+                return None
+            os.close(directory_fd)
+            directory_fd = next_fd
+        try:
+            metadata = os.stat(
+                components[-1],
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(metadata.st_mode):
+            raise StateError(f"terminal path has a symlinked component: {path}")
+        return metadata
+    except StateError:
+        raise
+    except OSError as exc:
+        raise StateError(
+            f"terminal path has an unavailable or symlinked component: {path}"
+        ) from exc
+    finally:
+        os.close(directory_fd)
+
+
 def _read_immutable_terminal(path: Path) -> bytes:
     """Read one sealed terminal, rejecting symlink traversal and read-time mutation."""
     try:
@@ -3494,13 +3534,11 @@ def _validate_existing_executor_terminal_for_cursor(
     """
 
     try:
-        metadata = terminal_path.lstat()
-    except FileNotFoundError:
+        metadata = _lstat_terminal_no_symlinks(terminal_path)
+    except StateError:
+        raise
+    if metadata is None:
         return "missing"
-    except OSError as exc:
-        raise StateError(
-            "FINAL NON_TERMINAL Executor terminal path cannot be checked"
-        ) from exc
     if (
         stat.S_ISREG(metadata.st_mode)
         and metadata.st_nlink == 1
