@@ -1,6 +1,9 @@
 import hashlib
 import json
 import os
+import shlex
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -90,6 +93,25 @@ def load(path: Path) -> dict:
         return tomllib.load(handle)
 
 
+def parse_bootstrap_commands(prompt: str) -> list[list[str]]:
+    return [
+        shlex.split(segment.strip())
+        for segment in prompt.split("`")
+        if segment.strip().startswith("python3 ")
+    ]
+
+
+def option_value(command: list[str], option: str) -> str:
+    index = command.index(option)
+    if index + 1 >= len(command):
+        raise AssertionError(f"missing value for {option}")
+    return command[index + 1]
+
+
+def expand_codex_home(command: list[str], codex_home: Path) -> list[str]:
+    return [token.replace("${CODEX_HOME}", str(codex_home)) for token in command]
+
+
 class ControllerHeartbeatAutomationTest(unittest.TestCase):
     def test_frozen_singleton_fixture_uses_native_controller_recovery_contract(self) -> None:
         config = load(AUTOMATION)
@@ -103,11 +125,34 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
         self.assertLess(len(prompt), 2600)
         references = [item for item in STATE_TOOL_REFERENCES if item in prompt]
         self.assertEqual(len(references), 1)
+        bootstrap = parse_bootstrap_commands(prompt)
+        self.assertEqual(
+            bootstrap,
+            [
+                [
+                    "python3",
+                    "${CODEX_HOME}/skills/xiaowen-autoresearch/scripts/workflow_evolution_gate.py",
+                    "controller-context-window",
+                    "--thread-id",
+                    config["target_thread_id"],
+                ],
+                [
+                    "python3",
+                    "${CODEX_HOME}/skills/xiaowen-autoresearch/scripts/controller_control_state.py",
+                    "show",
+                    "--state",
+                    "/Users/xiaowen/Documents/Obsidian Vault/003_科研/experiments/control/controller-state.json",
+                    "--projection",
+                    "active",
+                ],
+            ],
+        )
+        self.assertEqual(option_value(bootstrap[0], "--thread-id"), config["target_thread_id"])
 
         for phrase in (
             "schema_version=5",
-            "workflow_evolution_gate.py controller-context-window",
-            "controller_control_state.py show --projection active",
+            'workflow_evolution_gate.py" controller-context-window --thread-id',
+            'controller_control_state.py" show --state',
             "Do not preload the full Skill, full state, long references, remote/child AGENTS, or Workflow Evolution",
             "no-effect never routes Workflow Evolution",
             "Treat only callback, terminal/pending absorption or terminal-state, due blocker, missing/failed owner, failed/overdue job, state contradiction, or explicit new-objective admission as actionable",
@@ -226,6 +271,109 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             )
             self.assertEqual(full.returncode, 0, full.stderr.decode("utf-8"))
             self.assertEqual(full.stdout, data)
+
+    def test_prompt_bootstrap_commands_execute_with_temporary_runtime_inputs(self) -> None:
+        config = load(AUTOMATION)
+        bootstrap = parse_bootstrap_commands(config["prompt"])
+        self.assertEqual(len(bootstrap), 2)
+        self.assertEqual(
+            option_value(bootstrap[0], "--thread-id"),
+            config["target_thread_id"],
+        )
+        self.assertEqual(option_value(bootstrap[1], "--projection"), "active")
+
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            codex_home = root / "codex-home"
+            scripts = codex_home / "skills" / "xiaowen-autoresearch" / "scripts"
+            scripts.mkdir(parents=True)
+            for name in ("workflow_evolution_gate.py", "controller_control_state.py"):
+                shutil.copy2(SKILL_ROOT / "scripts" / name, scripts / name)
+
+            workspace = root / "workspace"
+            workspace.mkdir()
+            rollout = root / "controller-rollout.jsonl"
+            rollout.write_text(
+                json.dumps(
+                    {
+                        "type": "session_meta",
+                        "payload": {
+                            "id": config["target_thread_id"],
+                            "session_id": config["target_thread_id"],
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            state_db = root / "state.sqlite"
+            with sqlite3.connect(state_db) as connection:
+                connection.execute(
+                    "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT)"
+                )
+                connection.execute(
+                    "INSERT INTO threads VALUES (?, ?, ?)",
+                    (config["target_thread_id"], str(rollout), str(workspace)),
+                )
+
+            state = root / "controller-state.json"
+            data = (
+                json.dumps(
+                    SCHEMA_V5_FIXTURE,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode("utf-8")
+            state.write_bytes(data)
+            state.with_name(state.name + ".sha256").write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {state.name}\n",
+                encoding="utf-8",
+            )
+
+            environment = os.environ.copy()
+            environment["CODEX_HOME"] = str(codex_home)
+            context_command = expand_codex_home(
+                bootstrap[0]
+                + ["--state-db", str(state_db), "--workspace-root", str(workspace)],
+                codex_home,
+            )
+            context_result = subprocess.run(
+                context_command,
+                cwd=workspace,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                context_result.returncode,
+                0,
+                context_result.stdout + context_result.stderr,
+            )
+            self.assertEqual(json.loads(context_result.stdout)["status"], "PASS")
+
+            state_command = list(bootstrap[1])
+            state_option = state_command.index("--state")
+            state_command[state_option + 1] = str(state)
+            state_result = subprocess.run(
+                expand_codex_home(state_command, codex_home),
+                cwd=workspace,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                state_result.returncode,
+                0,
+                state_result.stdout + state_result.stderr,
+            )
+            active = json.loads(state_result.stdout)
+            self.assertEqual(active["projection"], "active")
+            self.assertEqual(active["schema_version"], 5)
+            self.assertEqual(active["revision"], 0)
 
     def test_only_one_active_heartbeat_targets_the_controller(self) -> None:
         active = []

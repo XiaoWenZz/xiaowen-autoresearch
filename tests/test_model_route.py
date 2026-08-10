@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 
 from scripts.validate_model_route import (
+    LEGACY_ROUTE_DISPATCH_MARKER,
+    ROUTE_DISPATCH_MARKER,
     RouteReceipt,
     SAME_THREAD_PROMPT_PREAMBLE,
     build_same_thread_prompt,
@@ -160,7 +162,7 @@ class ModelRouteTest(unittest.TestCase):
             ),
         )
         route_dispatch_id = "DISPATCH-PR8-SAME-THREAD-20260810-001"
-        marker = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n".encode("utf-8")
+        marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
         preamble = SAME_THREAD_PROMPT_PREAMBLE.encode("utf-8")
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
@@ -175,23 +177,50 @@ class ModelRouteTest(unittest.TestCase):
                     )
                     validate_same_thread_prompt(built_bytes, route_dispatch_id)
                     self.assertEqual(
-                        built_bytes.count(b"LUNA_ROUTE_DISPATCH_ID="), 1
+                        built_bytes.count(ROUTE_DISPATCH_MARKER.encode("utf-8")), 1
                     )
+
+    def test_same_thread_prompt_builder_replays_sol_and_luna_routes(self) -> None:
+        routes = (
+            ("bounded_engineering", "gpt-5.6-sol/high"),
+            ("real_carrier", "gpt-5.6-sol/xhigh"),
+            ("frozen_deterministic", "gpt-5.6-luna/max"),
+        )
+        route_dispatch_id = "DISPATCH-PR8-ROUTE-PREAMBLE-20260810-001"
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            path, capsule_bytes = self.write_capsule(root, "capsule.txt", "body\n")
+            for action_class, route in routes:
+                with self.subTest(action_class=action_class):
+                    built = build_same_thread_prompt_bytes(
+                        route_dispatch_id, path, action_class=action_class
+                    )
+                    expected = (
+                        f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n"
+                        f"PASS_MODEL_ROUTE: {route}\n"
+                        "await-successor-activation\n"
+                    ).encode("utf-8")
+                    self.assertEqual(built, expected + capsule_bytes)
+                    validate_same_thread_prompt(
+                        built, route_dispatch_id, action_class=action_class
+                    )
+                    self.assertNotIn(LEGACY_ROUTE_DISPATCH_MARKER.encode(), built)
 
     def test_same_thread_prompt_validator_rejects_marker_shape_errors(self) -> None:
         route_dispatch_id = "luna-route-1"
-        marker = f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}"
+        marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}"
         cases = {
             "absent": "capsule body",
             "duplicate": f"{marker}\n{marker}\ncapsule body",
-            "wrong id": "LUNA_ROUTE_DISPATCH_ID=other-route\ncapsule body",
-            "hidden": f"{marker}\ncapsule body hides LUNA_ROUTE_DISPATCH_ID=other-route",
+            "wrong id": f"{ROUTE_DISPATCH_MARKER}other-route\ncapsule body",
+            "hidden": f"{marker}\ncapsule body hides {ROUTE_DISPATCH_MARKER}other-route",
             "not first": f"capsule body\n{marker}\n",
             "missing preamble": f"{marker}\ncapsule body",
             "wrong preamble": (
                 f"{marker}\nPASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
                 "await-successor-activation\ncapsule body"
             ),
+            "legacy": f"{LEGACY_ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n",
         }
         for name, prompt in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
@@ -267,11 +296,40 @@ class ModelRouteTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr.decode())
             expected = (
-                f"LUNA_ROUTE_DISPATCH_ID={route_dispatch_id}\n"
+                f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n"
                 f"{SAME_THREAD_PROMPT_PREAMBLE}"
             ).encode()
             self.assertEqual(result.stdout, expected + capsule_bytes)
             self.assertEqual(result.stderr, b"")
+            self.assertEqual(path.read_bytes(), before)
+            sol_result = subprocess.run(
+                [
+                    sys.executable,
+                    str(VALIDATOR),
+                    "--build-same-thread-prompt",
+                    "--action-class",
+                    "bounded_engineering",
+                    "--route-dispatch-id",
+                    route_dispatch_id,
+                    "--capsule-path",
+                    str(path),
+                ],
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(
+                sol_result.returncode, 0, sol_result.stderr.decode()
+            )
+            self.assertTrue(
+                sol_result.stdout.startswith(
+                    (
+                        f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n"
+                        "PASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
+                        "await-successor-activation\n"
+                    ).encode()
+                )
+            )
+            self.assertEqual(sol_result.stderr, b"")
             self.assertEqual(path.read_bytes(), before)
 
     def test_frozen_deterministic_route_requires_luna_max(self) -> None:
@@ -432,6 +490,120 @@ class ModelRouteTest(unittest.TestCase):
                 expected_route_dispatch_id=route_dispatch_id,
             )
             self.assertEqual(receipt.route_dispatch_id, route_dispatch_id)
+
+    def test_same_thread_sol_accepts_generic_marker_and_rejects_legacy_marker(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            route_dispatch_id = "sol-route-1"
+            generic = self.write_same_thread_rollout(
+                root,
+                route_dispatch_id=route_dispatch_id,
+                marker_text=f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}",
+                model="gpt-5.6-sol",
+                effort="high",
+                name="generic.jsonl",
+            )
+            receipt = load_rollout_receipt(
+                generic,
+                action_class="bounded_engineering",
+                context_eligible=False,
+                protected_exposed=False,
+                decision_ambiguity=False,
+                route_mode="same_thread",
+                expected_route_dispatch_id=route_dispatch_id,
+            )
+            self.assertEqual(
+                validate_receipt(
+                    receipt,
+                    expected_thread_id="executor-1",
+                    expected_route_dispatch_id=route_dispatch_id,
+                ),
+                ("gpt-5.6-sol", "high"),
+            )
+            legacy = self.write_same_thread_rollout(
+                root,
+                route_dispatch_id=route_dispatch_id,
+                model="gpt-5.6-sol",
+                effort="high",
+                name="legacy-sol.jsonl",
+            )
+            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                load_rollout_receipt(
+                    legacy,
+                    action_class="bounded_engineering",
+                    context_eligible=False,
+                    protected_exposed=False,
+                    decision_ambiguity=False,
+                    route_mode="same_thread",
+                    expected_route_dispatch_id=route_dispatch_id,
+                )
+            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                load_rollout_receipt(
+                    legacy,
+                    action_class="frozen_deterministic",
+                    context_eligible=True,
+                    protected_exposed=False,
+                    decision_ambiguity=True,
+                    route_mode="same_thread",
+                    expected_route_dispatch_id=route_dispatch_id,
+                )
+
+    def test_same_thread_sol_rejects_wrong_binding_or_model(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            route_dispatch_id = "sol-route-2"
+            path = self.write_same_thread_rollout(
+                root,
+                route_dispatch_id=route_dispatch_id,
+                marker_text=f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}",
+                model="gpt-5.6-sol",
+                effort="xhigh",
+                name="sol-xhigh.jsonl",
+            )
+            receipt = load_rollout_receipt(
+                path,
+                action_class="real_carrier",
+                context_eligible=False,
+                protected_exposed=False,
+                decision_ambiguity=False,
+                route_mode="same_thread",
+                expected_route_dispatch_id=route_dispatch_id,
+            )
+            self.assertEqual(
+                validate_receipt(
+                    receipt,
+                    expected_thread_id="executor-1",
+                    expected_route_dispatch_id=route_dispatch_id,
+                ),
+                ("gpt-5.6-sol", "xhigh"),
+            )
+            with self.assertRaisesRegex(ValueError, "same-thread thread binding"):
+                validate_receipt(
+                    receipt,
+                    expected_thread_id="executor-2",
+                    expected_route_dispatch_id=route_dispatch_id,
+                )
+            with self.assertRaisesRegex(ValueError, "same-thread route dispatch"):
+                validate_receipt(
+                    receipt,
+                    expected_thread_id="executor-1",
+                    expected_route_dispatch_id="other-route",
+                )
+            with self.assertRaisesRegex(ValueError, "runtime route mismatch"):
+                validate_receipt(
+                    RouteReceipt(
+                        action_class="real_carrier",
+                        model="gpt-5.6-luna",
+                        effort="max",
+                        receipt_source="durable_rollout",
+                        route_mode="same_thread",
+                        thread_id="executor-1",
+                        turn_id="turn-1",
+                        route_dispatch_id=route_dispatch_id,
+                    ),
+                    expected_thread_id="executor-1",
+                    expected_route_dispatch_id=route_dispatch_id,
+                )
 
     def test_same_thread_luna_rejects_arbitrary_prose_prefix(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:

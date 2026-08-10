@@ -931,8 +931,8 @@ class SkillRouterTest(unittest.TestCase):
             "`record-startup-attempt` is the sole same-objective CAS",
             "leaving terminal identity, roles, jobs, advisories and pending/absorbed IDs unchanged",
             "Every prospective Executor terminal mirrors the exact authority or explicit `null`",
-            "rebuild restores and revalidates the object before CAS",
-            "missing field or digest drift fails with the snapshot unchanged",
+            "Rebuild restores and revalidates these objects before CAS",
+            "missing required field or digest drift fails with the snapshot unchanged",
             "including while active with no observed terminal",
             "new v5 state cannot seed it",
         ):
@@ -1112,7 +1112,7 @@ class SkillRouterTest(unittest.TestCase):
             "default for frozen deterministic implementation",
             "Choose cheapest capable; ties use Luna",
             "file/module count is no trigger",
-            "role alone never selects effort",
+            "role never selects effort",
             "named no-history `agent_type=luna_worker`",
             "existing-thread model override",
             "--route-dispatch-id <id>",
@@ -1178,7 +1178,7 @@ class SkillRouterTest(unittest.TestCase):
             "using the existing capsule",
             "send its stdout verbatim",
             "exactly one marker",
-            "missing or duplicate builder/marker fails before delivery",
+            "Missing, duplicate, hidden or legacy markers fail before delivery",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, orchestration)

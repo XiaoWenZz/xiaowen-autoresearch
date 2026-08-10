@@ -22,11 +22,21 @@ ROUTES = {
 }
 
 
-ROUTE_DISPATCH_MARKER = "LUNA_ROUTE_DISPATCH_ID="
+ROUTE_DISPATCH_MARKER = "MODEL_ROUTE_DISPATCH_ID="
+LEGACY_ROUTE_DISPATCH_MARKER = "LUNA_ROUTE_DISPATCH_ID="
 _ROUTE_DISPATCH_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
-SAME_THREAD_PROMPT_PREAMBLE = (
-    "PASS_MODEL_ROUTE: gpt-5.6-luna/max\n"
-    "await-successor-activation\n"
+
+
+def _same_thread_prompt_preamble(action_class: str) -> str:
+    try:
+        model, effort = ROUTES[action_class]
+    except KeyError as exc:
+        raise ValueError(f"unknown action class: {action_class}") from exc
+    return f"PASS_MODEL_ROUTE: {model}/{effort}\nawait-successor-activation\n"
+
+
+SAME_THREAD_PROMPT_PREAMBLE = _same_thread_prompt_preamble(
+    "frozen_deterministic"
 )
 
 
@@ -74,7 +84,28 @@ def validate_receipt(
             "runtime route mismatch: "
             f"expected={expected[0]}/{expected[1]} actual={actual[0]}/{actual[1]}"
         )
-    if receipt.action_class == "frozen_deterministic":
+    if receipt.route_mode not in {"named_child", "same_thread"}:
+        raise ValueError(f"unknown route mode: {receipt.route_mode}")
+    if receipt.route_mode == "same_thread":
+        if receipt.receipt_source != "durable_rollout":
+            raise ValueError("same-thread route requires durable rollout metadata")
+        if not expected_thread_id:
+            raise ValueError("same-thread route requires an expected thread")
+        if receipt.thread_id != expected_thread_id:
+            raise ValueError(
+                "same-thread thread binding mismatch: "
+                f"expected={expected_thread_id} actual={receipt.thread_id}"
+            )
+        if not receipt.turn_id:
+            raise ValueError("same-thread route is missing durable turn identity")
+        if not expected_route_dispatch_id:
+            raise ValueError("same-thread route requires an expected route dispatch")
+        if receipt.route_dispatch_id != expected_route_dispatch_id:
+            raise ValueError(
+                "same-thread route dispatch mismatch: "
+                f"expected={expected_route_dispatch_id} actual={receipt.route_dispatch_id}"
+            )
+    elif receipt.action_class == "frozen_deterministic":
         if receipt.receipt_source != "durable_rollout":
             raise ValueError("Luna route requires durable rollout metadata")
         if receipt.route_mode == "named_child":
@@ -92,23 +123,6 @@ def validate_receipt(
                 raise ValueError(
                     "Luna parent binding mismatch: "
                     f"expected={expected_parent_thread_id} actual={receipt.parent_thread_id}"
-                )
-        elif receipt.route_mode == "same_thread":
-            if not expected_thread_id:
-                raise ValueError("Luna same-thread route requires an expected thread")
-            if receipt.thread_id != expected_thread_id:
-                raise ValueError(
-                    "Luna thread binding mismatch: "
-                    f"expected={expected_thread_id} actual={receipt.thread_id}"
-                )
-            if not receipt.turn_id:
-                raise ValueError("Luna same-thread route is missing durable turn identity")
-            if not expected_route_dispatch_id:
-                raise ValueError("Luna same-thread route requires an expected route dispatch")
-            if receipt.route_dispatch_id != expected_route_dispatch_id:
-                raise ValueError(
-                    "Luna route dispatch mismatch: "
-                    f"expected={expected_route_dispatch_id} actual={receipt.route_dispatch_id}"
                 )
         else:
             raise ValueError(f"unknown Luna route mode: {receipt.route_mode}")
@@ -141,11 +155,32 @@ def _user_message_text(event: dict[str, Any]) -> str:
     )
 
 
-def _has_exact_route_dispatch(text: str, route_dispatch_id: str) -> bool:
-    marker = rf"LUNA_ROUTE_DISPATCH_ID={re.escape(route_dispatch_id)}"
-    return re.search(
-        rf"(?m)^(?:{marker}|[ \t]*<input>{marker})$", text
-    ) is not None
+def _has_exact_route_dispatch(
+    text: str,
+    route_dispatch_id: str,
+    *,
+    action_class: str,
+    allow_legacy_luna: bool = False,
+) -> bool:
+    """Accept one exact marker, with read-only compatibility for old Luna receipts."""
+
+    if not isinstance(text, str):
+        return False
+    try:
+        validate_route_dispatch_id(route_dispatch_id)
+    except ValueError:
+        return False
+    generic_count = text.count(ROUTE_DISPATCH_MARKER)
+    legacy_count = text.count(LEGACY_ROUTE_DISPATCH_MARKER)
+    if generic_count:
+        if generic_count != 1 or legacy_count:
+            return False
+        marker = rf"{re.escape(ROUTE_DISPATCH_MARKER)}{re.escape(route_dispatch_id)}"
+    elif allow_legacy_luna and action_class == "frozen_deterministic" and legacy_count == 1:
+        marker = rf"{re.escape(LEGACY_ROUTE_DISPATCH_MARKER)}{re.escape(route_dispatch_id)}"
+    else:
+        return False
+    return re.search(rf"(?m)^(?:{marker}|[ \t]*<input>{marker})$", text) is not None
 
 
 def validate_route_dispatch_id(route_dispatch_id: str) -> str:
@@ -162,7 +197,10 @@ def validate_route_dispatch_id(route_dispatch_id: str) -> str:
 
 
 def validate_same_thread_prompt(
-    prompt: str | bytes, route_dispatch_id: str
+    prompt: str | bytes,
+    route_dispatch_id: str,
+    *,
+    action_class: str = "frozen_deterministic",
 ) -> None:
     """Fail closed unless *prompt* has one canonical first-line dispatch marker.
 
@@ -179,6 +217,9 @@ def validate_same_thread_prompt(
     if not isinstance(prompt, str):
         raise ValueError("same-thread prompt must be text or UTF-8 bytes")
 
+    canonical_prefix = _same_thread_prompt_preamble(action_class)
+    if LEGACY_ROUTE_DISPATCH_MARKER in prompt:
+        raise ValueError("legacy Luna route dispatch marker is not accepted")
     marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}"
     marker_count = prompt.count(ROUTE_DISPATCH_MARKER)
     if marker_count == 0:
@@ -191,7 +232,7 @@ def validate_same_thread_prompt(
         raise ValueError(
             "same-thread prompt marker must be the first standalone line"
         )
-    canonical_prefix = marker + "\n" + SAME_THREAD_PROMPT_PREAMBLE
+    canonical_prefix = marker + "\n" + canonical_prefix
     if not prompt.startswith(canonical_prefix):
         raise ValueError(
             "same-thread prompt observability preamble is missing or non-canonical"
@@ -225,29 +266,38 @@ def _read_capsule(capsule_path: str | Path) -> tuple[bytes, str]:
 
 
 def build_same_thread_prompt_bytes(
-    route_dispatch_id: str, capsule_path: str | Path
+    route_dispatch_id: str,
+    capsule_path: str | Path,
+    *,
+    action_class: str = "frozen_deterministic",
 ) -> bytes:
-    """Build the canonical stdout payload for one same-thread Luna turn."""
+    """Build the canonical stdout payload for one same-thread route turn."""
 
     route_dispatch_id = validate_route_dispatch_id(route_dispatch_id)
+    preamble = _same_thread_prompt_preamble(action_class)
     capsule_bytes, capsule_text = _read_capsule(capsule_path)
-    if ROUTE_DISPATCH_MARKER in capsule_text:
+    if ROUTE_DISPATCH_MARKER in capsule_text or LEGACY_ROUTE_DISPATCH_MARKER in capsule_text:
         raise ValueError("capsule already contains a route dispatch marker")
 
     marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
-    prompt_bytes = marker + SAME_THREAD_PROMPT_PREAMBLE.encode("utf-8") + capsule_bytes
-    validate_same_thread_prompt(prompt_bytes, route_dispatch_id)
+    prompt_bytes = marker + preamble.encode("utf-8") + capsule_bytes
+    validate_same_thread_prompt(
+        prompt_bytes, route_dispatch_id, action_class=action_class
+    )
     return prompt_bytes
 
 
 def build_same_thread_prompt(
-    route_dispatch_id: str, capsule_path: str | Path
+    route_dispatch_id: str,
+    capsule_path: str | Path,
+    *,
+    action_class: str = "frozen_deterministic",
 ) -> str:
-    """Build the canonical same-thread prompt while preserving capsule text."""
+    """Build the canonical same-thread route prompt while preserving capsule text."""
 
-    return build_same_thread_prompt_bytes(route_dispatch_id, capsule_path).decode(
-        "utf-8"
-    )
+    return build_same_thread_prompt_bytes(
+        route_dispatch_id, capsule_path, action_class=action_class
+    ).decode("utf-8")
 
 
 def load_rollout_receipt(
@@ -320,7 +370,16 @@ def load_rollout_receipt(
             line_number
             for line_number, text, message_turn_id in user_messages
             if message_turn_id == turn_id
-            and _has_exact_route_dispatch(text, expected_route_dispatch_id)
+            and _has_exact_route_dispatch(
+                text,
+                expected_route_dispatch_id,
+                action_class=action_class,
+                allow_legacy_luna=(
+                    action_class == "frozen_deterministic"
+                    and not decision_ambiguity
+                    and not protected_exposed
+                ),
+            )
         ]
         if len(matches) != 1:
             raise ValueError("same-thread route dispatch marker is missing or ambiguous")
@@ -381,7 +440,7 @@ def main() -> int:
     args = parse_args()
     try:
         if args.build_same_thread_prompt:
-            if args.action_class is not None or args.model is not None or args.effort is not None:
+            if args.model is not None or args.effort is not None:
                 raise ValueError(
                     "same-thread prompt mode cannot be combined with receipt arguments"
                 )
@@ -396,7 +455,9 @@ def main() -> int:
             if args.capsule_path is None:
                 raise ValueError("same-thread prompt mode requires --capsule-path")
             prompt_bytes = build_same_thread_prompt_bytes(
-                args.route_dispatch_id, args.capsule_path
+                args.route_dispatch_id,
+                args.capsule_path,
+                action_class=args.action_class or "frozen_deterministic",
             )
             sys.stdout.buffer.write(prompt_bytes)
             return 0

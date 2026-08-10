@@ -594,30 +594,29 @@ Program/Epoch budget. Use a persistent work session instead when the task needs
 owner-visible interaction, long-running jobs, repeated guidance, durable
 recovery, an isolated context, or an auditable evidence trail across turns.
 
-At each bounded runtime dispatch or continuation boundary, derive model family and
-reasoning effort from the remaining action and currently visible context. Pass
-both explicitly for Sol routes; omission or inheritance from the predecessor,
-candidate, role or reusable session fails admission. A role name never selects
-an effort tier by itself. Prefer frozen deterministic work through named-agent
-`agent_type=luna_worker` with a no-history fork and no direct model or effort
-override. Durable receipts may report `multi_agent_version=v1` or `v2`; the
-identity checks below are unchanged. A full-history fork inherits the parent
-agent type, and `task_name` alone does not load the custom profile. When the
-dispatcher lacks the `agent_type` field but exposes an
-explicit existing-thread model override, the Sol owner may instead dispatch one
-contiguous same-thread `gpt-5.6-luna/max` turn. That prompt must contain the
-complete frozen capsule and exactly one unique line
-`LUNA_ROUTE_DISPATCH_ID=<id>`; this fallback does not claim the custom profile
-loaded. Build the same-thread prompt with the existing canonical
-`scripts/validate_model_route.py` builder CLI
-`--build-same-thread-prompt --route-dispatch-id <id> --capsule-path <path>`
-using the existing capsule, and send its stdout verbatim only after the
-same-thread validator confirms exactly one marker. A missing or duplicate
-builder/marker fails before delivery. Before the action's first write, remote
-launch or protected read, run `scripts/validate_model_route.py` against durable rollout metadata, including
-the exact parent binding for a named child or the exact thread and route-dispatch
-binding for a same-thread turn. The check is ephemeral and writes no state or
-artifact; a mismatch returns to the Sol owner before effects or stops fail-closed:
+At each bounded runtime dispatch or continuation boundary, derive model/effort from
+the remaining work segment and visible context, never the umbrella candidate, role
+or predecessor. Pass both explicitly for Sol routes; omission or inheritance from
+the predecessor fails admission. A role name never selects effort by itself. After
+diagnosis freezes deterministic repair/tests, route the next safe turn to Luna; do
+not interrupt authentication UI/PTY or a real carrier. Prefer named
+`agent_type=luna_worker` with a no-history fork; receipts may report
+`multi_agent_version=v1` or `v2`. A full-history fork inherits the parent agent
+type, and `task_name` alone does not load the custom profile. If only an
+existing-thread model override is exposed, the Sol owner may dispatch one
+contiguous same-thread route turn. Its complete capsule has exactly one neutral
+`MODEL_ROUTE_DISPATCH_ID=<id>` line; old `LUNA_ROUTE_DISPATCH_ID` is read-only
+compatibility for immutable Luna receipts and is never a new prompt or Sol route.
+Build the prompt with the existing canonical `scripts/validate_model_route.py`
+builder CLI `--build-same-thread-prompt --route-dispatch-id <id> --capsule-path
+<path>` using the existing capsule (add `--action-class` for Sol). The builder
+emits the matching `PASS_MODEL_ROUTE` and `await-successor-activation` preamble;
+send its stdout verbatim only after the validator confirms exactly one marker.
+Missing, duplicate, hidden or legacy markers fail before delivery. Before the
+action's first write/remote launch/protected read, run the helper against durable
+rollout metadata, including exact parent binding for a named child or exact
+same-thread thread/turn/dispatch binding. The check writes no state or artifact;
+a mismatch returns to the Sol owner before effects or stops fail-closed.
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
   material contract/authority/claim choices, causal/statistical/algebraic
@@ -644,11 +643,12 @@ protected-result interpretation.
 
 The Luna receipt authority is durable rollout metadata, never worker prose. A
 named child requires `session_meta` plus current `turn_context` with
-`agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact
-`parent_thread_id`, and `multi_agent_version=v1|v2`. A same-thread fallback requires
-the exact `session_meta.id`, latest `turn_context` model/effort/turn ID, and
-exactly one matching `LUNA_ROUTE_DISPATCH_ID` user message whose durable message
-metadata carries that same turn ID. Do not infer turn ownership from file order:
+`agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact `parent_thread_id`, and
+`multi_agent_version=v1|v2`. A same-thread fallback requires the exact
+`session_meta.id`, latest `turn_context` model/effort/turn ID, and one matching
+`MODEL_ROUTE_DISPATCH_ID` user message (or old Luna marker only for frozen
+deterministic compatibility) whose durable message metadata carries that same
+turn ID. Do not infer turn ownership from file order:
 queued user input may be serialized before a same-turn context record. Inspect the
 dispatcher before spending a spawn: absence of `agent_type` makes only the named
 profile unavailable, not a separately exposed existing-thread Luna route. Do not

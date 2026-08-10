@@ -188,6 +188,9 @@ def observe_and_verify(path: Path, revision: int, objective_id: str = "objective
         terminal_body["startup_chain_authority"] = objective.get(
             "startup_chain_authority"
         )
+        terminal_body["executor_continuation_phase"] = objective.get(
+            "executor_continuation_phase", "NONE"
+        )
     terminal_data = canonical_bytes(terminal_body)
     terminal.write_bytes(terminal_data)
     terminal.chmod(0o444)
@@ -2284,6 +2287,20 @@ class ControllerControlStateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             directory = Path(tmp)
             authority = sealed_startup_authority(directory)
+            attestation_path = directory / "external-blocker-attestation.json"
+            attestation_data = canonical_bytes(
+                {
+                    "external_blocker_attestation": {
+                        "version": 1,
+                        "kind": "EXTERNAL_FACT",
+                        "reason_code": "REQUIRED_AUTHORITY_UNAVAILABLE",
+                        "external_fact": True,
+                        "owner_can_resolve": False,
+                    }
+                }
+            )
+            attestation_path.write_bytes(attestation_data)
+            attestation_path.chmod(0o444)
             state = base_state()
             state["objectives"][0]["startup_chain_authority"] = authority
             path = directory / "controller-state.json"
@@ -2297,7 +2314,7 @@ class ControllerControlStateTest(unittest.TestCase):
                 "resolution_deadline": "2026-08-09T00:00:00Z",
                 "reason_code": "REQUIRED_AUTHORITY_UNAVAILABLE",
                 "evidence_ref": (
-                    f"{authority['contract_path']}#sha256={authority['contract_sha256']}"
+                    f"{attestation_path}#sha256={hashlib.sha256(attestation_data).hexdigest()}"
                 ),
             }
             cmd_absorb_and_block(

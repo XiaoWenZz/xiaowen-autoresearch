@@ -25,6 +25,8 @@ LIFECYCLES = {"DELEGATED", "BLOCKED", "DONE"}
 CANDIDATE_STATES = {"OPEN", "BLOCKED", "CLOSED"}
 BLOCKER_KINDS = {"EXTERNAL_FACT", "UNAVAILABLE_AUTHORITY"}
 EXECUTOR_CONTINUATION_KINDS = {"CARRIER", "ZERO_UTILITY_IMPLEMENTATION"}
+EXECUTOR_CONTINUATION_PHASES = {"NONE", "ZERO_USED", "CARRIER_USED"}
+_EXECUTOR_PHASE_UNSPECIFIED = object()
 CLOSURE_BASES = {
     "VALID_SCIENTIFIC_NEGATIVE",
     "PROSPECTIVE_SCOPED_MPE_FAILURE",
@@ -251,6 +253,31 @@ def _verify_blocker_attestation(
     actual_digest = hashlib.sha256(data).hexdigest()
     if actual_digest != expected_digest:
         raise StateError(f"{where}.evidence_ref digest does not match immutable evidence")
+    attestation = _strict_json_document(data, f"{where}.evidence_ref")
+    nested = (
+        attestation.get("external_blocker_attestation")
+        if isinstance(attestation, dict)
+        else None
+    )
+    exact = (
+        isinstance(attestation, dict)
+        and set(attestation) == {"external_blocker_attestation"}
+        and isinstance(nested, dict)
+        and set(nested)
+        == {"version", "kind", "reason_code", "external_fact", "owner_can_resolve"}
+        and type(nested.get("version")) is int
+        and nested["version"] == 1
+        and type(nested.get("kind")) is str
+        and nested["kind"] == blocker["kind"]
+        and type(nested.get("reason_code")) is str
+        and nested["reason_code"] == blocker["reason_code"]
+        and nested.get("external_fact") is True
+        and nested.get("owner_can_resolve") is False
+    )
+    if not exact:
+        raise StateError(
+            f"{where}.evidence_ref must contain the exact external blocker attestation"
+        )
 
 
 def _terminal_path(value: Any, where: str) -> PurePosixPath:
@@ -587,6 +614,8 @@ def _read_bound_terminal(
     expected_startup_authority: Any = _STARTUP_AUTHORITY_UNSPECIFIED,
     *,
     require_startup_authority_mirror: bool = False,
+    expected_executor_continuation_phase: Any = _EXECUTOR_PHASE_UNSPECIFIED,
+    allow_executor_continuation_phase_mirror: bool = False,
 ) -> tuple[bytes, dict[str, Any]]:
     _validate_completion_binding(expected_binding, "expected_completion_binding")
     data = _read_immutable_terminal(path)
@@ -668,6 +697,34 @@ def _read_bound_terminal(
                     raise StateError(
                         "terminal startup_chain_authority does not match current objective authority"
                     )
+    if expected_executor_continuation_phase is not _EXECUTOR_PHASE_UNSPECIFIED:
+        expected_phase = _executor_continuation_phase(
+            expected_executor_continuation_phase,
+            "expected_executor_continuation_phase",
+        )
+        body_has_phase = "executor_continuation_phase" in terminal_body
+        if expected_phase == "NONE":
+            if body_has_phase and terminal_body["executor_continuation_phase"] != "NONE":
+                raise StateError(
+                    "terminal executor_continuation_phase does not match current objective phase"
+                )
+        else:
+            if not body_has_phase:
+                raise StateError(
+                    "Executor terminal must explicitly bind executor_continuation_phase"
+                )
+            body_phase = _executor_continuation_phase(
+                terminal_body["executor_continuation_phase"],
+                "terminal.executor_continuation_phase",
+            )
+            if body_phase != expected_phase:
+                raise StateError(
+                    "terminal executor_continuation_phase does not match current objective phase"
+                )
+    elif "executor_continuation_phase" in terminal_body and not allow_executor_continuation_phase_mirror:
+        raise StateError(
+            "non-Executor terminal must not carry executor_continuation_phase"
+        )
     return data, terminal_body
 
 
@@ -798,12 +855,14 @@ def _bound_terminal_envelope(
     expected_startup_authority: Any = _STARTUP_AUTHORITY_UNSPECIFIED,
     *,
     require_startup_authority_mirror: bool = False,
+    expected_executor_continuation_phase: Any = _EXECUTOR_PHASE_UNSPECIFIED,
 ) -> tuple[int, str]:
     data, _ = _read_bound_terminal(
         path,
         expected_binding,
         expected_startup_authority,
         require_startup_authority_mirror=require_startup_authority_mirror,
+        expected_executor_continuation_phase=expected_executor_continuation_phase,
     )
     return len(data), hashlib.sha256(data).hexdigest()
 
@@ -847,6 +906,22 @@ def _validate_owner_transition(
         raise StateError("WRITE_OWNERSHIP_TRANSFER requires a canonical role change")
 
 
+def _executor_continuation_phase(value: Any, where: str) -> str:
+    if not isinstance(value, str) or value not in EXECUTOR_CONTINUATION_PHASES:
+        raise StateError(
+            f"{where} must be one of {sorted(EXECUTOR_CONTINUATION_PHASES)}"
+        )
+    return value
+
+
+def _objective_executor_continuation_phase(
+    objective: dict[str, Any], where: str = "objective.executor_continuation_phase"
+) -> str:
+    if "executor_continuation_phase" not in objective:
+        return "NONE"
+    return _executor_continuation_phase(objective["executor_continuation_phase"], where)
+
+
 def _validate_executor_continuation(
     *,
     continuation_kind: Any,
@@ -859,23 +934,31 @@ def _validate_executor_continuation(
     new_remote_job: dict[str, Any] | None,
     previous_startup_authority: Any,
     resulting_startup_authority: dict[str, Any] | None,
-) -> None:
+    previous_continuation_phase: str,
+) -> str | None:
     """Enforce the non-persistent Executor successor continuation gate."""
     if new_owner_role != "Executor":
         if continuation_kind is not None:
             raise StateError(
                 "executor-continuation-kind is allowed only for an Executor successor"
             )
-        return
+        return None
     if continuation_kind not in EXECUTOR_CONTINUATION_KINDS:
         raise StateError(
             "Executor successor requires --executor-continuation-kind CARRIER or "
             "ZERO_UTILITY_IMPLEMENTATION"
         )
+    previous_continuation_phase = _executor_continuation_phase(
+        previous_continuation_phase, "existing executor_continuation_phase"
+    )
     if continuation_kind == "CARRIER":
         if resulting_startup_authority is None:
             raise StateError("CARRIER Executor successor requires startup_chain_authority")
-        return
+        if previous_continuation_phase == "CARRIER_USED":
+            raise StateError(
+                "CARRIER cannot follow executor_continuation_phase CARRIER_USED"
+            )
+        return "CARRIER_USED"
 
     if (
         new_owner_thread_id != old_owner_thread_id
@@ -906,6 +989,11 @@ def _validate_executor_continuation(
         raise StateError(
             "ZERO_UTILITY_IMPLEMENTATION may only retain the existing startup_chain_authority"
         )
+    if previous_continuation_phase != "NONE":
+        raise StateError(
+            "ZERO_UTILITY_IMPLEMENTATION requires executor_continuation_phase NONE"
+        )
+    return "ZERO_USED"
 
 
 def validate_state(state: Any) -> dict[str, Any]:
@@ -999,6 +1087,8 @@ def validate_state(state: Any) -> dict[str, Any]:
             raise StateError(f"{where} fresh-thread reason and evidence must appear together")
         if fresh_thread_evidence_ref is not None and not _nonempty(fresh_thread_evidence_ref):
             raise StateError(f"{where}.fresh_thread_evidence_ref must be non-empty")
+        continuation_phase_present = "executor_continuation_phase" in objective
+        continuation_phase = _objective_executor_continuation_phase(objective, f"{where}.executor_continuation_phase")
         owner_recovery_evidence_ref = objective.get("owner_recovery_evidence_ref")
         if owner_recovery_evidence_ref is not None and not _nonempty(owner_recovery_evidence_ref):
             raise StateError(f"{where}.owner_recovery_evidence_ref must be non-empty")
@@ -1010,6 +1100,10 @@ def validate_state(state: Any) -> dict[str, Any]:
                 raise StateError(f"{where} delegated owner fields must be non-empty")
             if objective["owner_state"] not in ROLE_STATES:
                 raise StateError(f"{where}.owner_state must be canonical")
+            if objective["owner_role"] != "Executor" and continuation_phase_present:
+                raise StateError(
+                    f"{where}.executor_continuation_phase requires an Executor owner"
+                )
             owner_thread_id = objective["owner_thread_id"]
             if owner_thread_id in delegated_owner_threads:
                 raise StateError(f"duplicate delegated owner_thread_id {owner_thread_id}")
@@ -1071,6 +1165,10 @@ def validate_state(state: Any) -> dict[str, Any]:
                 raise StateError(f"{where} completed objective cannot retain owner-transition metadata")
             if candidate_state != "CLOSED":
                 raise StateError(f"{where} DONE requires candidate_state CLOSED; OPEN/DONE is invalid")
+            if continuation_phase_present:
+                raise StateError(
+                    f"{where}.executor_continuation_phase is not valid for a completed objective"
+                )
 
         startup_authority = objective.get("startup_chain_authority")
         if startup_authority is not None:
@@ -1233,6 +1331,7 @@ def validate_state(state: Any) -> dict[str, Any]:
     if not isinstance(jobs, list):
         raise StateError("remote_jobs must be a list")
     job_ids: set[str] = set()
+    active_job_hosts: dict[tuple[str, str], set[str]] = {}
     for index, job in enumerate(jobs):
         where = f"remote_jobs[{index}]"
         if not isinstance(job, dict):
@@ -1277,6 +1376,10 @@ def validate_state(state: Any) -> dict[str, Any]:
             raise StateError(f"{where}.expected_files must be basenames")
         if job["monitor_state"] not in {"ACTIVE", "TERMINAL_OBSERVED"}:
             raise StateError(f"{where}.monitor_state is invalid")
+        if job["monitor_state"] == "ACTIVE":
+            active_job_hosts.setdefault(
+                (job["objective_id"], job["owner_thread_id"]), set()
+            ).add(job["host"])
         wake = job["wake_delivery"]
         if not isinstance(wake, dict):
             raise StateError(f"{where}.wake_delivery must be an object")
@@ -1288,6 +1391,13 @@ def validate_state(state: Any) -> dict[str, Any]:
                 raise StateError(f"{where}.wake_delivery NONE must have null identifiers")
         elif not _nonempty(wake["claim_token"]) or not _nonempty(wake["observation_id"]):
             raise StateError(f"{where}.wake_delivery claimed identifiers must be non-empty")
+
+    for (objective_id, owner_thread_id), hosts in active_job_hosts.items():
+        if len(hosts) > 1:
+            raise StateError(
+                "active remote jobs for the same objective/owner must use one host: "
+                f"{objective_id}/{owner_thread_id}"
+            )
 
     events = state["absorbed_terminal_event_ids"]
     if not isinstance(events, list) or not all(_nonempty(item) for item in events):
@@ -1659,6 +1769,7 @@ def _objective_guard_signature(objective: dict[str, Any]) -> tuple[Any, ...]:
         objective.get("owner_recovery_evidence_ref"),
         objective.get("completion_binding"),
         objective.get("startup_chain_authority"),
+        _objective_executor_continuation_phase(objective),
         objective.get("legacy_terminal_schema"),
         hashlib.sha256(canonical_bytes(objective.get("blocker"))).hexdigest(),
     )
@@ -1806,6 +1917,22 @@ def _validate_state_transition(
             raise StateError("generic replacement cannot change managed owner identities")
         if previous["absorbed_terminal_event_ids"] != updated["absorbed_terminal_event_ids"]:
             raise StateError("generic replacement cannot absorb terminal events")
+        previous_jobs = {job["job_id"]: job for job in previous["remote_jobs"]}
+        updated_jobs = {job["job_id"]: job for job in updated["remote_jobs"]}
+        if set(previous_jobs) != set(updated_jobs):
+            raise StateError("generic replacement cannot add or remove remote jobs")
+        identity_keys = (
+            "objective_id",
+            "owner_thread_id",
+            "host",
+            "unit",
+            "output_path",
+        )
+        for job_id, old_job in previous_jobs.items():
+            if any(old_job[key] != updated_jobs[job_id][key] for key in identity_keys):
+                raise StateError(
+                    f"generic replacement cannot change remote job identity for {job_id}"
+                )
     elif operation == "RECORD_STARTUP_ATTEMPT":
         if set(previous_objectives) != set(updated_objectives):
             raise StateError(
@@ -2054,6 +2181,11 @@ def _require_absorbable_pending(
         objective["completion_binding"],
         objective.get("startup_chain_authority"),
         require_startup_authority_mirror=_requires_startup_authority_mirror(objective),
+        expected_executor_continuation_phase=(
+            _objective_executor_continuation_phase(objective)
+            if objective.get("owner_role") == "Executor"
+            else _EXECUTOR_PHASE_UNSPECIFIED
+        ),
     )
     if size != pending["terminal_bytes"] or digest != pending["terminal_sha256"]:
         raise StateError("pending terminal immutable envelope changed")
@@ -2111,7 +2243,9 @@ def cmd_rebuild_add_objective(args: argparse.Namespace) -> None:
     ):
         raise StateError("terminal_event_id is already pending absorption")
     terminal_data, terminal_body = _read_bound_terminal(
-        Path(completion_binding["terminal_path"]), completion_binding
+        Path(completion_binding["terminal_path"]),
+        completion_binding,
+        allow_executor_continuation_phase_mirror=args.owner_role == "Executor",
     )
     terminal_bytes = len(terminal_data)
     terminal_sha256 = hashlib.sha256(terminal_data).hexdigest()
@@ -2138,6 +2272,11 @@ def cmd_rebuild_add_objective(args: argparse.Namespace) -> None:
     terminal_has_startup_authority = "startup_chain_authority" in terminal_body
     recovered_startup_authority = terminal_body.get("startup_chain_authority")
     if args.owner_role == "Executor":
+        recovered_continuation_phase = _executor_continuation_phase(
+            terminal_body.get("executor_continuation_phase", "NONE"),
+            "terminal.executor_continuation_phase",
+        )
+        objective["executor_continuation_phase"] = recovered_continuation_phase
         if not terminal_has_startup_authority:
             raise StateError(
                 "reconstructed Executor terminal must explicitly bind startup_chain_authority"
@@ -2502,6 +2641,9 @@ def cmd_reconcile_open(args: argparse.Namespace) -> None:
             )
         if transition["owner_role"] not in MANAGED_ROLE_KINDS:
             raise StateError(f"{where}.owner_role is invalid")
+        continuation_phase = _objective_executor_continuation_phase(
+            objective, f"{where}.executor_continuation_phase"
+        )
         if transition["owner_state"] not in ROLE_STATES:
             raise StateError(f"{where}.owner_state is invalid")
         if not TITLE_RE.fullmatch(transition["owner_title"]):
@@ -2552,6 +2694,10 @@ def cmd_reconcile_open(args: argparse.Namespace) -> None:
             "advisory_blocking_gate",
         ):
             objective.pop(stale_key, None)
+        if transition["owner_role"] == "Executor":
+            objective["executor_continuation_phase"] = continuation_phase
+        else:
+            objective.pop("executor_continuation_phase", None)
         if transition["owner_thread_id"] == state["controller"]["thread_id"]:
             raise StateError(f"{where}.owner_thread_id cannot be the Controller")
         roles_by_thread[transition["owner_thread_id"]] = {
@@ -2770,6 +2916,9 @@ def cmd_await_successor_activation(args: argparse.Namespace) -> None:
                 terminal_identity_projection["startup_chain_authority"] = copy.deepcopy(
                     objective.get("startup_chain_authority")
                 )
+                terminal_identity_projection["executor_continuation_phase"] = (
+                    _objective_executor_continuation_phase(objective)
+                )
             print(
                 json.dumps(
                     {
@@ -2917,6 +3066,11 @@ def cmd_prepare_terminal_callback(args: argparse.Namespace) -> None:
         binding,
         objective.get("startup_chain_authority"),
         require_startup_authority_mirror=_requires_startup_authority_mirror(objective),
+        expected_executor_continuation_phase=(
+            _objective_executor_continuation_phase(objective)
+            if objective.get("owner_role") == "Executor"
+            else _EXECUTOR_PHASE_UNSPECIFIED
+        ),
     )
 
     def compact_text(field: str) -> str | None:
@@ -2970,6 +3124,11 @@ def cmd_observe_terminal(args: argparse.Namespace) -> None:
         binding,
         objective.get("startup_chain_authority"),
         require_startup_authority_mirror=_requires_startup_authority_mirror(objective),
+        expected_executor_continuation_phase=(
+            _objective_executor_continuation_phase(objective)
+            if objective.get("owner_role") == "Executor"
+            else _EXECUTOR_PHASE_UNSPECIFIED
+        ),
     )
     expected_digest = _sha256(
         args.expected_terminal_sha256,
@@ -3073,6 +3232,11 @@ def cmd_verify_pending_terminal(args: argparse.Namespace) -> None:
         objective["completion_binding"],
         objective.get("startup_chain_authority"),
         require_startup_authority_mirror=_requires_startup_authority_mirror(objective),
+        expected_executor_continuation_phase=(
+            _objective_executor_continuation_phase(objective)
+            if objective.get("owner_role") == "Executor"
+            else _EXECUTOR_PHASE_UNSPECIFIED
+        ),
     )
     if size != pending["terminal_bytes"] or digest != pending["terminal_sha256"]:
         raise StateError("pending terminal immutable envelope changed before verification")
@@ -3400,6 +3564,7 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         requested_startup_authority,
         new_owner_role=args.new_owner_role,
     )
+    previous_continuation_phase = _objective_executor_continuation_phase(objective)
     new_remote_job_json = getattr(args, "new_remote_job_json", None)
     new_remote_job = None
     if new_remote_job_json is not None:
@@ -3458,7 +3623,7 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         fresh_thread_evidence_ref=fresh_thread_evidence_ref,
         controller_thread_id=state["controller"]["thread_id"],
     )
-    _validate_executor_continuation(
+    next_continuation_phase = _validate_executor_continuation(
         continuation_kind=executor_continuation_kind,
         old_owner_thread_id=args.old_owner_thread_id,
         new_owner_thread_id=args.new_owner_thread_id,
@@ -3469,6 +3634,7 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         new_remote_job=new_remote_job,
         previous_startup_authority=objective.get("startup_chain_authority"),
         resulting_startup_authority=startup_authority,
+        previous_continuation_phase=previous_continuation_phase,
     )
     if uses_fresh_thread and any(
         role["thread_id"] == args.new_owner_thread_id for role in roles
@@ -3498,6 +3664,10 @@ def cmd_activate_successor(args: argparse.Namespace) -> None:
         objective.pop("startup_chain_authority", None)
     else:
         objective["startup_chain_authority"] = startup_authority
+    if next_continuation_phase is None:
+        objective.pop("executor_continuation_phase", None)
+    else:
+        objective["executor_continuation_phase"] = next_continuation_phase
     for stale_key in (
         "blocker",
         "reopening_fact",
@@ -3659,6 +3829,7 @@ def cmd_close_objective(args: argparse.Namespace) -> None:
         "advisory_blocking_gate",
         "completion_binding",
         "startup_chain_authority",
+        "executor_continuation_phase",
         "legacy_terminal_schema",
     ):
         objective.pop(stale_key, None)
