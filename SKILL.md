@@ -165,16 +165,16 @@ Never default to
   integration, tests/docs from frozen oracles, package/sync/rehash,
   sealed reruns, and repairs.
 
-Choose cheapest capable; ties use Luna; role alone never selects effort. Freeze
-edits, acceptance, evidence/exposure, budget and stop. Prefer named no-history
-`agent_type=luna_worker`. If absent but an existing-thread model override exists,
-use one contiguous `luna/max` turn. Generate it with `python3
-scripts/validate_model_route.py --build-same-thread-prompt
---route-dispatch-id <id> --capsule-path <frozen-capsule>` and send stdout
-verbatim; the builder admits one first-line marker and otherwise fails before
-delivery. Then validate named-child parent or same-thread thread/turn/dispatch
-with the same helper; `task_name` is neither. Both preserve
-owner/objective/role/budget/terminal; no authority. One repair per fingerprint.
+Choose cheapest capable; ties use Luna; role never selects effort. Route remaining
+work; one continuous Sol owner retains objective/budget/effects/terminal. With edits/
+acceptance/exposure/budget/stop frozen, Sol may invoke one no-history named
+`agent_type=luna_worker`/max child for patch/tests. Returns diff+tests to Sol:
+no commit/deploy/authority/terminal or remote/GPU/model/data/protected/science access.
+Sol reruns acceptance. Same-thread is Sol-only; never interrupt auth/PTY/carrier.
+Use `scripts/validate_model_route.py --build-route-prompt` with explicit route
+mode/class/dispatch/capsule; send stdout verbatim. Receipts bind capsule/dispatch
+`--route-dispatch-id <id>`; named parent/child/first or same-thread Sol turn. One
+repair/fingerprint.
 Never route protected/scientific/authority/ambiguous decisions to Luna.
 
 ## 6. Preserve scientific hard controls
@@ -266,10 +266,9 @@ locally; batch only material science, acceptance, exposure, authority,
 irreversible/public/paid/permission or user-facing choices; add no self-trigger,
 science block, telemetry, watcher or lifecycle.
 
-Never emit `RETAIN|COMPLETE` from a candidate-only diff: live files must
-byte-match it, required checks pass, and the consumer/Controller receive the
-exact live hash plus reload instruction. Advisory may review the deployed diff
-later.
+Candidate diff is not `RETAIN|COMPLETE`: live files byte-match it, checks pass,
+and Controller gets exact hash/reload. Skill/AGENTS merge/deploy only after a
+fixed-SHA PR, local validation and Pro `ACCEPT`; Pro stays advisory.
 
 Use `R0`--`R3` as shorthand, never a lifecycle; follow
 [problem-space.md](references/problem-space.md). Keep at most one active `R1`

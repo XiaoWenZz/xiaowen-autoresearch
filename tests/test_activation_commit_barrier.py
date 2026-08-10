@@ -241,6 +241,7 @@ class ActivationCommitBarrierTest(unittest.TestCase):
                 {
                     "completion_binding": NEW_BINDING,
                     "startup_chain_authority": None,
+                    "executor_continuation_phase": "NONE",
                 },
             )
 

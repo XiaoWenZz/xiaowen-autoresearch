@@ -217,11 +217,15 @@ The cold `absorb-and-block` route requires a new blocker to carry both
 `EXTERNAL_IMPOSSIBILITY_REASONS`; the evidence reference is exactly
 `<allowlisted-absolute-immutable-path>#sha256=<64 lowercase hex>`. The command
 opens the evidence with the same no-symlink immutable reader, verifies its
-digest, and rejects a reference to the worker terminal being absorbed before
-the CAS. A legacy `BLOCKED` snapshot with both attestation fields absent
-remains readable and valid; supplying only one field is invalid. The blocker
-digest is covered by the objective guard, so generic replacement cannot migrate
-or rewrite it around this gate.
+digest, and strict-parses the immutable bytes as exactly
+`{"external_blocker_attestation":{"version":1,"kind":<blocker.kind>,"reason_code":<blocker.reason_code>,"external_fact":true,"owner_can_resolve":false}}`.
+It rejects a reference to the worker terminal being absorbed before the CAS.
+The attestation intentionally contains no observer, trigger, check/deadline or
+reopening-fact copy; those remain one state-local blocker record. A legacy
+`BLOCKED` snapshot with both attestation fields absent remains readable and
+valid; supplying only one field is invalid. The blocker digest is covered by
+the objective guard, so generic replacement cannot migrate or rewrite it around
+this gate.
 
 `await-successor-activation` is a prospective read-only startup barrier, not a
 state transition. Controller places the planned `activate-successor` revision,
@@ -240,7 +244,9 @@ dispatch ID without blind resend.
 
 On PASS the same command returns `terminal_identity_projection`, containing the
 exact nested `completion_binding`; for an Executor it also contains the current
-`startup_chain_authority` as the exact object or explicit JSON `null`. The
+`startup_chain_authority` as the exact object or explicit JSON `null`, plus the
+normalized objective-local `executor_continuation_phase` (`NONE`, `ZERO_USED`,
+or `CARRIER_USED`). The
 producer initializes its terminal from this projection rather than hand-writing
 the identity fields. This is a read-only projection of already committed state,
 not a second authority or artifact, and the sealed callback/observation parser
@@ -253,12 +259,20 @@ identity reconciliation without inventing a job or scientific outcome.
 
 Every `advance-cursors` update includes
 `source_turn_state=IN_PROGRESS|FINAL`. A `FINAL + NON_TERMINAL` Executor update
-is accepted only when exactly one matching `ACTIVE` remote job with `NONE` wake
-delivery already exists. Otherwise the CAS rejects without moving the cursor,
-preserving the prebound terminal and same-owner recovery path. This does not
-prevent a runtime from rendering a malformed final; it prevents Controller
-continuity from accepting that final as ordinary progress. Terminal cursors
-retain the separate absorbed-event barrier.
+is accepted as ordinary progress only when exactly one matching `ACTIVE` remote
+job with `NONE` wake delivery already exists. If no matching job, terminal, or
+pending absorption exists, the same-owner Controller recovery CAS instead keeps
+the cursor and objective/owner identity unchanged while encoding
+`SAME_OWNER_TERMINAL_RECOVERY:v1:<owner>:<source_cursor>:<base64url(previous_next_action)>`
+in the existing `next_action`. Exact replay is read-only and returns
+`RECOVERY_REQUIRED`; a different final cursor cannot overwrite the recovery.
+An exact writable regular single-link draft may use this recovery without
+changing its bytes or mode, but every parent and final path component is checked
+without following symlinks; any symlink or other unsafe existing path fails
+before CAS.
+The active projection exposes this existing `next_action`, so the same wake can
+send each returned recovery without adding an outbox, job, terminal, or
+lifecycle. Terminal cursors retain the separate absorbed-event barrier.
 
 For prospective budgets, the already-debited predecessor and governance cost
 remain cumulative. Only elapsed execution after durable successor activation
@@ -274,8 +288,14 @@ absorbed ID; adds exactly one `OPEN/DELEGATED/ACTIVE` objective plus its matchin
 role; requires an allowlisted immutable terminal path with exact byte count and
 SHA-256, exact body binding and mirrors; and records a nonempty recovery-evidence
 reference. An Executor terminal must carry `startup_chain_authority` explicitly
-as the exact object or `null`; rebuild restores and revalidates the object before
-CAS, while a missing field or digest drift fails with the snapshot unchanged. It
+as the exact object or `null`, and `rebuild-add-objective` requires an explicit
+`executor_continuation_phase` mirror (`NONE`, `ZERO_USED`, or `CARRIER_USED`).
+Missing phase is accepted only when the exact path and digest resolve to an
+entry in `LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS` whose
+`allow_missing_executor_continuation_phase_mirror` is explicitly `true` and the
+caller explicitly opts into that compatibility. Rebuild restores and
+revalidates these objects before CAS, while a missing required field or digest
+drift fails with the snapshot unchanged. It
 never absorbs the terminal: the Controller must still run `observe-terminal`,
 verify the pending identity, and complete one ordinary absorption transaction.
 This command cannot replace normal prospective completion binding or repair an
@@ -322,8 +342,13 @@ non-null resolved `startup_chain_authority`; `ZERO_UTILITY_IMPLEMENTATION`
 requires the same owner thread and role, an `OPEN` candidate,
 `scientific_outcome=UNOBSERVED`, and no new remote job, while retaining or
 leaving null any existing authority. Non-Executor successors may not pass this
-enum. The enum is never stored as a state field, lifecycle, artifact, role, or
-additional budget.
+enum. The objective-local phase is a finite monotone graph: `NONE` may advance
+once to either `ZERO_USED` or `CARRIER_USED`, and `ZERO_USED` may advance once to
+`CARRIER_USED`; all other continuation attempts fail before CAS. Non-Executor
+successors clear the phase, while a finite `BLOCKED` objective and an Executor
+reopen preserve it; scientific close clears it. The continuation-kind enum is
+CLI-only and never persists as a state field, lifecycle, artifact, role, or
+additional budget; only the objective-local phase persists.
 
 The delegated Executor alone may invoke this one matching-objective/owner
 `record-startup-attempt` CAS under the parent AGENTS chain. Every generic,
@@ -395,6 +420,11 @@ otherwise lifecycle is `DELEGATED` with a matching active owner, or finite
 fact, observer, trigger or `next_check_at`, and `resolution_deadline`.
 Each owner thread appears on at most one `DELEGATED` objective; sharing one
 thread across open objectives creates a terminal path that cannot close atomically.
+For one `(objective_id, owner_thread_id)`, concurrently `ACTIVE` remote jobs must
+share one host; multiple jobs on that same host remain valid. Generic state
+replacement preserves the remote-job ID set and each existing identity tuple
+`(objective_id, owner_thread_id, host, unit, output_path)`; only monitoring,
+wake-delivery and ETA fields may move through that route.
 Internal repair, constructability, contract, source/code/algebra,
 estimand/identification, weak-signal, or contribution work is never a durable
 blocker or inactive archive.

@@ -1,6 +1,9 @@
 import hashlib
 import json
 import os
+import shlex
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -90,7 +93,48 @@ def load(path: Path) -> dict:
         return tomllib.load(handle)
 
 
+def parse_bootstrap_commands(prompt: str) -> list[list[str]]:
+    return [
+        shlex.split(segment.strip())
+        for segment in prompt.split("`")
+        if segment.strip().startswith("python3 ")
+    ]
+
+
+def option_value(command: list[str], option: str) -> str:
+    index = command.index(option)
+    if index + 1 >= len(command):
+        raise AssertionError(f"missing value for {option}")
+    return command[index + 1]
+
+
+def expand_codex_home(command: list[str], codex_home: Path) -> list[str]:
+    return [token.replace("${CODEX_HOME}", str(codex_home)) for token in command]
+
+
 class ControllerHeartbeatAutomationTest(unittest.TestCase):
+    def test_recovery_consumer_fixture_drains_every_recovery_without_sending(self) -> None:
+        config = load(AUTOMATION)
+        fixture = config["recovery_consumer_fixture"]
+        cases = fixture["cases"]
+        self.assertEqual([case["name"] for case in cases], ["single", "double"])
+        for case in cases:
+            payload = json.loads(case["advance_cursors_output"])
+            recoveries = payload["recoveries"]
+            expected_messages = json.loads(case["expected_messages"])
+            self.assertEqual(
+                [
+                    {
+                        "owner_thread_id": item["owner_thread_id"],
+                        "source_cursor": item["source_cursor"],
+                        "message": "same-owner terminal-recovery",
+                    }
+                    for item in recoveries
+                ],
+                expected_messages,
+            )
+            self.assertEqual(payload["status"], "RECOVERY_REQUIRED")
+
     def test_frozen_singleton_fixture_uses_native_controller_recovery_contract(self) -> None:
         config = load(AUTOMATION)
         self.assertEqual(config["id"], AUTOMATION_ID)
@@ -103,21 +147,43 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
         self.assertLess(len(prompt), 2600)
         references = [item for item in STATE_TOOL_REFERENCES if item in prompt]
         self.assertEqual(len(references), 1)
+        bootstrap = parse_bootstrap_commands(prompt)
+        self.assertEqual(
+            bootstrap,
+            [
+                [
+                    "python3",
+                    "${CODEX_HOME}/skills/xiaowen-autoresearch/scripts/workflow_evolution_gate.py",
+                    "controller-context-window",
+                    "--thread-id",
+                    config["target_thread_id"],
+                ],
+                [
+                    "python3",
+                    "${CODEX_HOME}/skills/xiaowen-autoresearch/scripts/controller_control_state.py",
+                    "show",
+                    "--state",
+                    "/Users/xiaowen/Documents/Obsidian Vault/003_科研/experiments/control/controller-state.json",
+                    "--projection",
+                    "active",
+                ],
+            ],
+        )
+        self.assertEqual(option_value(bootstrap[0], "--thread-id"), config["target_thread_id"])
 
         for phrase in (
             "schema_version=5",
-            "workflow_evolution_gate.py controller-context-window",
-            "controller_control_state.py show --projection active",
-            "Do not preload the full Skill, full state, long references, remote/child AGENTS, or Workflow Evolution",
-            "no-effect never routes Workflow Evolution",
-            "Treat only callback, terminal/pending absorption or terminal-state, due blocker, missing/failed owner, failed/overdue job, state contradiction, or explicit new-objective admission as actionable",
-            "If none is present, return quietly",
-            "For an actionable obligation, reload the complete live Skill and only its directly triggered references before effects",
-            "use `show --projection full` only for migration, contradiction, rebuild, or replay",
+            'workflow_evolution_gate.py" controller-context-window --thread-id',
+            'controller_control_state.py" show --state',
+            "A no-effect check loads neither full Skill/state/references, remote/child AGENTS nor Workflow Evolution",
+            "Actionable means callback, terminal/pending, due blocker, missing/failed owner, failed/overdue job, contradiction, or explicit new-objective admission",
+            "otherwise return quietly",
+            "Before effects, actionable work reloads the complete live Skill and directly triggered references",
+            "full projection is only for migration, contradiction, rebuild or replay",
             "每次 wake 都是同一 Controller thread 的恢复事务",
             "final 前必须 drain terminal verify/absorb/route/dispatch/activation/close/finite-block/title/pin/state-CAS",
             "Callbacks are compact receipt-only envelopes",
-            "open immutable terminal bodies locally",
+            "Open immutable terminal bodies locally",
             "completion_binding",
             "pending_absorption",
             "observe-terminal",
@@ -125,22 +191,26 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             "activate-successor",
             "close-objective",
             "absorb-and-block",
-            "Terminal absorption, safety, existing-owner continuity, and blocker recovery remain nonblocking",
-            "REQUIRE_ROLLOVER and PAUSE_NEW_OBJECTIVE_ADMISSION block only new-objective admission",
-            "context pause never blocks terminal/safety/existing-owner recovery",
-            "Complete the runtime-supported compact/rollover before another new objective",
+            "Terminal/safety/owner/blocker recovery stays nonblocking",
+            "REQUIRE_ROLLOVER and PAUSE_NEW_OBJECTIVE_ADMISSION block only new admission",
+            "context pause never blocks recovery",
+            "Compact/rollover before a new objective",
             "this gate creates no state/artifact",
-            "require one successful receipt, then immediately CAS activate-successor",
-            "the destination awaits that minimum revision with the exact binding and remote-job projection or explicit no-remote-job",
-            "No final precedes the CAS",
+            "After one successful receipt, CAS activate-successor",
+            "the destination awaits the exact minimum revision, binding and remote-job-or-none",
+            "No final precedes CAS",
             "frozen deterministic work uses named Luna plus durable validator",
             "real carrier uses Sol/xhigh",
             "science/authority uses Sol/max",
             "source_turn_state=IN_PROGRESS|FINAL",
-            "FINAL+NON_TERMINAL",
-            "same-owner terminal-recovery wake",
+            "advance-cursors returns RECOVERY_REQUIRED",
+            "every `recoveries` owner_thread_id/source_cursor",
+            "Uncertain delivery stays REQUIRED",
+            "no final or blind resend",
+            "Never wait for heartbeat/user",
+            "never ignore the list because single-item compatibility fields exist",
             "interactive auth/credential/approval UI",
-            "30-minute cadence recovery-only",
+            "30-minute cadence is recovery-only",
             "Validate/deduplicate worker issue envelopes",
             "in Shadow Mode",
             "never infer science from activity",
@@ -226,6 +296,109 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             )
             self.assertEqual(full.returncode, 0, full.stderr.decode("utf-8"))
             self.assertEqual(full.stdout, data)
+
+    def test_prompt_bootstrap_commands_execute_with_temporary_runtime_inputs(self) -> None:
+        config = load(AUTOMATION)
+        bootstrap = parse_bootstrap_commands(config["prompt"])
+        self.assertEqual(len(bootstrap), 2)
+        self.assertEqual(
+            option_value(bootstrap[0], "--thread-id"),
+            config["target_thread_id"],
+        )
+        self.assertEqual(option_value(bootstrap[1], "--projection"), "active")
+
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            codex_home = root / "codex-home"
+            scripts = codex_home / "skills" / "xiaowen-autoresearch" / "scripts"
+            scripts.mkdir(parents=True)
+            for name in ("workflow_evolution_gate.py", "controller_control_state.py"):
+                shutil.copy2(SKILL_ROOT / "scripts" / name, scripts / name)
+
+            workspace = root / "workspace"
+            workspace.mkdir()
+            rollout = root / "controller-rollout.jsonl"
+            rollout.write_text(
+                json.dumps(
+                    {
+                        "type": "session_meta",
+                        "payload": {
+                            "id": config["target_thread_id"],
+                            "session_id": config["target_thread_id"],
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            state_db = root / "state.sqlite"
+            with sqlite3.connect(state_db) as connection:
+                connection.execute(
+                    "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT)"
+                )
+                connection.execute(
+                    "INSERT INTO threads VALUES (?, ?, ?)",
+                    (config["target_thread_id"], str(rollout), str(workspace)),
+                )
+
+            state = root / "controller-state.json"
+            data = (
+                json.dumps(
+                    SCHEMA_V5_FIXTURE,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode("utf-8")
+            state.write_bytes(data)
+            state.with_name(state.name + ".sha256").write_text(
+                f"{hashlib.sha256(data).hexdigest()}  {state.name}\n",
+                encoding="utf-8",
+            )
+
+            environment = os.environ.copy()
+            environment["CODEX_HOME"] = str(codex_home)
+            context_command = expand_codex_home(
+                bootstrap[0]
+                + ["--state-db", str(state_db), "--workspace-root", str(workspace)],
+                codex_home,
+            )
+            context_result = subprocess.run(
+                context_command,
+                cwd=workspace,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                context_result.returncode,
+                0,
+                context_result.stdout + context_result.stderr,
+            )
+            self.assertEqual(json.loads(context_result.stdout)["status"], "PASS")
+
+            state_command = list(bootstrap[1])
+            state_option = state_command.index("--state")
+            state_command[state_option + 1] = str(state)
+            state_result = subprocess.run(
+                expand_codex_home(state_command, codex_home),
+                cwd=workspace,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                state_result.returncode,
+                0,
+                state_result.stdout + state_result.stderr,
+            )
+            active = json.loads(state_result.stdout)
+            self.assertEqual(active["projection"], "active")
+            self.assertEqual(active["schema_version"], 5)
+            self.assertEqual(active["revision"], 0)
 
     def test_only_one_active_heartbeat_targets_the_controller(self) -> None:
         active = []

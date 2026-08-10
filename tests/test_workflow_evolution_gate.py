@@ -27,6 +27,7 @@ from scripts.workflow_evolution_gate import (
     scan_token_window,
     token_decision,
     validate_rule_chain_terminal,
+    _canonical_dispatch_marker,
 )
 
 
@@ -68,10 +69,9 @@ def dispatch_event(dispatch_id: str = "dispatch-1") -> dict:
                 {
                     "type": "input_text",
                     "text": (
+                        f"MODEL_ROUTE_DISPATCH_ID={dispatch_id}\n"
                         "PASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
-                        "python3 controller_control_state.py "
                         "await-successor-activation\n"
-                        f"dispatch_id={dispatch_id}"
                     ),
                 }
             ],
@@ -80,6 +80,45 @@ def dispatch_event(dispatch_id: str = "dispatch-1") -> dict:
 
 
 class TokenDetectorTest(unittest.TestCase):
+    def test_canonical_dispatch_marker_requires_neutral_standalone_marker(self) -> None:
+        dispatch_id = "dispatch-1"
+
+        def event(text: str) -> dict:
+            return {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": text}],
+                },
+            }
+
+        self.assertTrue(_canonical_dispatch_marker(dispatch_event(), dispatch_id))
+        self.assertTrue(
+            _canonical_dispatch_marker(
+                event(
+                    f"<input>MODEL_ROUTE_DISPATCH_ID={dispatch_id}\n"
+                    "PASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
+                    "await-successor-activation"
+                ),
+                dispatch_id,
+            )
+        )
+        invalid = (
+            f"LUNA_ROUTE_DISPATCH_ID={dispatch_id}\n"
+            "PASS_MODEL_ROUTE: gpt-5.6-luna/max\nawait-successor-activation",
+            f"dispatch_id={dispatch_id}\n"
+            "PASS_MODEL_ROUTE: gpt-5.6-sol/high\nawait-successor-activation",
+            f"MODEL_ROUTE_DISPATCH_ID={dispatch_id}\n"
+            f"body MODEL_ROUTE_DISPATCH_ID={dispatch_id}\n"
+            "PASS_MODEL_ROUTE: gpt-5.6-sol/high\nawait-successor-activation",
+            f"MODEL_ROUTE_DISPATCH_ID=other\n"
+            "PASS_MODEL_ROUTE: gpt-5.6-sol/high\nawait-successor-activation",
+        )
+        for text in invalid:
+            with self.subTest(text=text):
+                self.assertFalse(_canonical_dispatch_marker(event(text), dispatch_id))
+
     def test_soft_threshold_requires_two_token_bearing_turns(self) -> None:
         self.assertEqual(decision(token_turns=1)["trigger"], "NONE")
         self.assertEqual(decision(token_turns=2)["trigger"], "SOFT")
@@ -227,7 +266,9 @@ class TokenDetectorTest(unittest.TestCase):
             root = Path(raw)
             capsule = root / "capsule.txt"
             capsule.write_bytes(b"P59/SMI capsule bytes\r\n")
-            built = build_same_thread_prompt_bytes(route_dispatch_id, capsule)
+            built = build_same_thread_prompt_bytes(
+                route_dispatch_id, capsule, action_class="bounded_engineering"
+            )
             controller_prompt = {
                 "type": "response_item",
                 "payload": {

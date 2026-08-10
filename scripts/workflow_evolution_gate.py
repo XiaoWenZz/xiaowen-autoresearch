@@ -265,12 +265,17 @@ def _canonical_dispatch_marker(event: dict[str, Any], dispatch_id: str) -> bool:
         and item.get("type") in {"input_text", "text"}
         and isinstance(item.get("text"), str)
     )
-    boundary = r"[A-Za-z0-9_.:-]"
-    exact_dispatch = re.search(
-        rf"(?<!{boundary}){re.escape(dispatch_id)}(?!{boundary})", text
-    )
+    if not isinstance(dispatch_id, str) or not dispatch_id:
+        return False
+    if "LUNA_ROUTE_DISPATCH_ID" in text:
+        return False
+    marker_prefix = "MODEL_ROUTE_DISPATCH_ID="
+    if text.count(marker_prefix) != 1:
+        return False
+    marker = rf"{re.escape(marker_prefix + dispatch_id)}"
+    exact_marker = re.search(rf"(?m)^(?:[ \t]*{marker}|[ \t]*<input>{marker})$", text)
     return (
-        exact_dispatch is not None
+        exact_marker is not None
         and "PASS_MODEL_ROUTE:" in text
         and "await-successor-activation" in text
     )

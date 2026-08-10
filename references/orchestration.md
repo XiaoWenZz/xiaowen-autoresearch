@@ -594,30 +594,46 @@ Program/Epoch budget. Use a persistent work session instead when the task needs
 owner-visible interaction, long-running jobs, repeated guidance, durable
 recovery, an isolated context, or an auditable evidence trail across turns.
 
-At each bounded runtime dispatch or continuation boundary, derive model family and
-reasoning effort from the remaining action and currently visible context. Pass
-both explicitly for Sol routes; omission or inheritance from the predecessor,
-candidate, role or reusable session fails admission. A role name never selects
-an effort tier by itself. Prefer frozen deterministic work through named-agent
-`agent_type=luna_worker` with a no-history fork and no direct model or effort
-override. Durable receipts may report `multi_agent_version=v1` or `v2`; the
-identity checks below are unchanged. A full-history fork inherits the parent
-agent type, and `task_name` alone does not load the custom profile. When the
-dispatcher lacks the `agent_type` field but exposes an
-explicit existing-thread model override, the Sol owner may instead dispatch one
-contiguous same-thread `gpt-5.6-luna/max` turn. That prompt must contain the
-complete frozen capsule and exactly one unique line
-`LUNA_ROUTE_DISPATCH_ID=<id>`; this fallback does not claim the custom profile
-loaded. Build the same-thread prompt with the existing canonical
-`scripts/validate_model_route.py` builder CLI
-`--build-same-thread-prompt --route-dispatch-id <id> --capsule-path <path>`
-using the existing capsule, and send its stdout verbatim only after the
-same-thread validator confirms exactly one marker. A missing or duplicate
-builder/marker fails before delivery. Before the action's first write, remote
-launch or protected read, run `scripts/validate_model_route.py` against durable rollout metadata, including
-the exact parent binding for a named child or the exact thread and route-dispatch
-binding for a same-thread turn. The check is ephemeral and writes no state or
-artifact; a mismatch returns to the Sol owner before effects or stops fail-closed:
+At each bounded runtime dispatch or continuation boundary, derive model/effort from
+the remaining work segment and visible context, never the umbrella candidate, role
+or predecessor. Pass both explicitly for Sol routes; omission or inheritance from
+the predecessor fails admission. The validator never retiers an explicit action
+class from a boolean flag; the Sol owner changes class only at a safe turn boundary.
+A role name never selects effort by itself. Keep
+one continuous Sol owner for scientific/real-carrier work. After diagnosis freezes
+one deterministic edit/test surface, that Sol owner may invoke at most one short,
+no-history named `agent_type=luna_worker` at Luna/max; same-thread Luna is forbidden.
+The child returns only diff and validation evidence. It cannot commit, deploy, use
+remote/GPU/model/data/protected evidence, interpret science, change authority or
+seal a terminal. Sol reruns acceptance and retains objective, budget, effects and
+the sole terminal. Do not interrupt authentication UI/PTY or a real carrier.
+
+Every route operation requires an explicit action class. Build the exact prompt
+with `scripts/validate_model_route.py --build-route-prompt --route-mode
+<same_thread|named_child> --action-class <class> --route-dispatch-id <id>
+--capsule-path <path>` and send stdout verbatim. Its neutral
+`MODEL_ROUTE_DISPATCH_ID=<id>`, route preamble and capsule bytes are one authority;
+missing, duplicate, hidden or legacy markers fail before delivery.
+`LUNA_ROUTE_DISPATCH_ID` remains read-only historical diagnosis and never
+authorizes an effect. Only raw canonical bytes or the fixed two-field
+`codex_delegation(source_thread_id,input)` envelope are accepted; unknown tags,
+extra instructions/inputs, prefix or suffix fail closed.
+The same-thread preamble ends in `await-successor-activation`; the named-child
+preamble ends in `return-diff-and-validation-to-parent` and never enters the
+Managed successor lifecycle.
+
+Before any effect, validate durable rollout metadata with the same exact capsule.
+Same-thread is Sol-only and binds thread, current turn, dispatch and capsule.
+Named-child is only `frozen_deterministic` Luna/max and binds exact parent, child,
+first/current turn, dispatch and capsule while proving zero prior task history.
+Supply the applicable complete arguments: `--rollout-path`, `--route-mode`,
+`--expected-parent-thread-id` for named child, `--expected-thread-id`,
+`--expected-turn-id`, `--expected-first-turn-id` for named child,
+`--expected-route-dispatch-id`, `--expected-source-thread-id`, `--capsule-path`,
+and `--context-eligible` for Luna. Omission or mismatch fails before effects and
+returns to the Sol owner; the check writes no state or artifact.
+Same-thread receipt loading always requires the independently expected current
+turn; it never treats the latest durable turn as authority by omission.
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
   material contract/authority/claim choices, causal/statistical/algebraic
@@ -642,18 +658,19 @@ an exact edit surface, deterministic acceptance commands, frozen evidence,
 exposure, budget and stop boundaries, and no decision-critical ambiguity or
 protected-result interpretation.
 
-The Luna receipt authority is durable rollout metadata, never worker prose. A
-named child requires `session_meta` plus current `turn_context` with
+Route receipt authority is durable rollout metadata, never worker prose. A named
+Luna child requires `session_meta` plus its sole current `turn_context` with
 `agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact
-`parent_thread_id`, and `multi_agent_version=v1|v2`. A same-thread fallback requires
-the exact `session_meta.id`, latest `turn_context` model/effort/turn ID, and
-exactly one matching `LUNA_ROUTE_DISPATCH_ID` user message whose durable message
-metadata carries that same turn ID. Do not infer turn ownership from file order:
-queued user input may be serialized before a same-turn context record. Inspect the
-dispatcher before spending a spawn: absence of `agent_type` makes only the named
-profile unavailable, not a separately exposed existing-thread Luna route. Do not
-substitute `task_name` or create a user-visible task merely to change models. A
-failed exact dispatch or durable mismatch is `RULE_TOOLING_DRIFT`.
+`parent_thread_id`, child/first/current turn, `multi_agent_version=v1|v2`, dispatch
+and capsule. The continuous same-thread Sol owner separately binds exact
+`session_meta.id`, current turn, dispatch and capsule. A fresh
+`LUNA_ROUTE_DISPATCH_ID` is historical diagnosis only and never authorizes an
+effect or emits `PASS_MODEL_ROUTE`. Do not infer turn ownership from file order:
+queued user input may be serialized before its turn context. Inspect the dispatcher
+before spawning: absence of `agent_type` means the named Luna profile is unavailable;
+there is no same-thread Luna fallback. Do not substitute `task_name` or create a
+user-visible task merely to change models. A failed exact dispatch or durable
+mismatch is `RULE_TOOLING_DRIFT`.
 
 File or module count alone is not a Sol trigger. Deterministic multi-module
 work remains Luna-eligible when the edit surface, interactions, and acceptance
@@ -681,22 +698,19 @@ Explicit routing cases:
 - inspecting or interpreting protected rerun output -> Audit/Controller, not
   merely `sol/high`.
 
-Do not switch per microstep. One objective may contain at most one contiguous
-pre-release, outcome-blind Luna segment when the oracle and visible context are
-frozen. A named child or same-thread Luna turn is an execution layer under the
-same Sol owner: it preserves objective, scientific role, cumulative budget and
-final terminal, gains no science/authority, and creates no owner handoff,
-lifecycle or state field. It returns evidence to the exact Sol owner for
-real-carrier, evidence-bearing or decision work. For one failure fingerprint it
-may make at most one bounded mechanical repair, then returns the fingerprint,
-evidence and next diagnostic without another Luna loop. An already-running turn
-cannot switch model mid-turn; same-thread fallback is a new explicitly routed
-turn. The user-visible task, generic collaboration override, named-profile
-catalogs and existing-thread route may differ. Luna is unavailable only when
-neither exact route is exposed or durable validation fails. Then use the nearest
-allowed Sol tier, report
-`RULE_TOOLING_DRIFT` and its expected token-cost consequence, and never claim
-Luna executed. After
+Do not switch per microstep. One objective may contain at most one short,
+pre-release, outcome-blind named Luna child when the oracle and visible context are
+frozen. The child is an execution layer under the same Sol owner: it preserves
+objective, scientific role, cumulative budget and final terminal, gains no
+science/authority, and creates no owner handoff, lifecycle or state field. It
+returns evidence to the exact Sol owner for real-carrier, evidence-bearing or
+decision work. For one failure fingerprint it may make at most one bounded
+mechanical repair, then returns the fingerprint, evidence and next diagnostic
+without another Luna loop. An already-running Sol turn never changes model; Luna
+starts only at the explicit named-child handoff. If that exact route is unavailable
+or durable validation fails, use the nearest allowed Sol tier, report
+`RULE_TOOLING_DRIFT` and its expected token-cost consequence, and never claim Luna
+executed. After
 protected-result exposure, never downgrade to Luna. After
 decision-critical reasoning, Luna is allowed only when that decision has been
 frozen into a deterministic oracle which Luna cannot reinterpret. Ambiguity in
@@ -746,6 +760,11 @@ For Scout:
    Terminal only when the bounded inventory cannot identify a local fix, an
    external fact is required, or scientific identity, exposure, authority,
    budget, or protected-outcome state would change;
+   an expected-long local subprocess with verified liveness or growing durable
+   output remains `IN_PROGRESS` and must not be interrupted or terminalized
+   solely by an agent-turn duration. Before launch choose a command-native
+   checkpoint/resume path, preserve successful partial artifacts, and resume
+   the exact stage in the same owner after a tool/runtime return;
    this is a parent workflow invariant. Before Executor dispatch, project each
    child `AGENTS.md`, attempt contract, manifest, path policy and action table
    onto it. Preserve the original bytes and unsafe-state prohibitions, but do
@@ -765,7 +784,12 @@ For Scout:
    exact-path, carrier, environment, exposure, authority, and resource check
    into one whole-chain preflight. Prefer one coherent implementation/repair
    commit and, only when evidence must be committed separately, one final
-   evidence commit;
+   evidence commit. Include a closed grant-to-entrypoint constructability check:
+   the bound grant must be accepted by the exact production launcher/handler,
+   every required safe-output/schema function must exist, and every necessary
+   repair path must remain inside the same owner's reversible write surface. If
+   any predicate fails, stay in same-owner pre-release repair; do not emit a
+   terminal, dispatch an Audit, or create a new attempt;
 10. freeze scientific decision invariants before evidence, but record incidental
    implementation and host identity in the final launch manifest rather than
    promoting every filename, hash, schema label, readiness record, or verifier
@@ -974,9 +998,10 @@ required live replay/canary, byte-compare or hash the live read-back against the
 accepted candidate, and send the existing consumer/Controller one non-scientific
 completion message naming the exact live hash and reload instruction. If any
 step fails, remain active or roll back; never claim deployment from the candidate
-copy. Ordinary Pro review is nonblocking and may challenge the deployed diff
-later. This is an owner completion invariant, not a new callback, receipt family,
-state field, watcher, heartbeat, registry, role, or lifecycle.
+copy. Ordinary scientific Pro batches stay nonblocking. Skill/AGENTS changes
+require a fixed-SHA PR, local validation and Pro `ACCEPT` before merge/deploy;
+Pro remains advisory. This is an owner completion invariant, not a new callback,
+receipt family, state field, watcher, heartbeat, registry, role, or lifecycle.
 
 Scientific projection and operational overlay remain disabled until a
 deny-by-default field map, deterministic full-contract reconstruction, and

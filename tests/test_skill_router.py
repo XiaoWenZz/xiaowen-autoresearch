@@ -624,9 +624,17 @@ class SkillRouterTest(unittest.TestCase):
             with self.subTest(source="router", phrase=phrase):
                 self.assertIn(phrase, router)
         for phrase in (
-            "one contiguous pre-release, outcome-blind Luna segment",
+            "at most one short, pre-release, outcome-blind named Luna child",
             "same Sol owner",
             "one failure fingerprint",
+            "closed grant-to-entrypoint constructability",
+            "exact production launcher/handler",
+            "required safe-output/schema function must exist",
+            "same owner's reversible write surface",
+            "stay in same-owner pre-release repair",
+            "do not emit a terminal, dispatch an Audit, or create a new attempt",
+            "must not be interrupted or terminalized solely by an agent-turn duration",
+            "command-native checkpoint/resume path",
             "Do not make `Lead -> Builder -> Acceptance`",
             "Every cross-thread successor records exactly one structured",
             "Model switch, hash/path/schema/import or package checks",
@@ -931,8 +939,8 @@ class SkillRouterTest(unittest.TestCase):
             "`record-startup-attempt` is the sole same-objective CAS",
             "leaving terminal identity, roles, jobs, advisories and pending/absorbed IDs unchanged",
             "Every prospective Executor terminal mirrors the exact authority or explicit `null`",
-            "rebuild restores and revalidates the object before CAS",
-            "missing field or digest drift fails with the snapshot unchanged",
+            "Rebuild restores and revalidates these objects before CAS",
+            "missing required field or digest drift fails with the snapshot unchanged",
             "including while active with no observed terminal",
             "new v5 state cannot seed it",
         ):
@@ -1112,12 +1120,12 @@ class SkillRouterTest(unittest.TestCase):
             "default for frozen deterministic implementation",
             "Choose cheapest capable; ties use Luna",
             "file/module count is no trigger",
-            "role alone never selects effort",
-            "named no-history `agent_type=luna_worker`",
-            "existing-thread model override",
+            "role never selects effort",
+            "no-history named `agent_type=luna_worker`",
+            "Same-thread is Sol-only",
             "--route-dispatch-id <id>",
-            "named-child parent or same-thread thread/turn/dispatch",
-            "One repair per fingerprint",
+            "named parent/child/first or same-thread Sol turn",
+            "One repair/fingerprint",
             "Never route protected/scientific/authority/ambiguous decisions to Luna",
         ):
             with self.subTest(phrase=phrase):
@@ -1142,26 +1150,28 @@ class SkillRouterTest(unittest.TestCase):
             "At each bounded runtime dispatch or continuation boundary",
             "Pass both explicitly for Sol routes",
             "omission or inheritance from the predecessor",
-            "against durable rollout metadata",
+            "never retiers an explicit action class from a boolean flag",
+            "durable rollout metadata, never worker prose",
             "writes no state or artifact",
-            "returns to the Sol owner before effects",
+            "returns to the Sol owner",
             "Choose the cheapest capable route",
             "Code changes, test execution, or documentation alone",
             "Do not switch per microstep",
-            "one contiguous pre-release, outcome-blind Luna segment",
+            "at most one short, pre-release, outcome-blind named Luna child",
             "exact parent",
             "creates no owner handoff",
             "After protected-result exposure, never downgrade to Luna",
             "deterministic oracle which Luna cannot reinterpret",
             "model switching a persistent pipeline",
-            "named-profile catalogs and existing-thread route may differ",
+            "there is no same-thread Luna fallback",
+            "`return-diff-and-validation-to-parent`",
             "RULE_TOOLING_DRIFT",
             "never claim Luna executed",
             "never worker prose",
-            "with a no-history fork",
-            "`multi_agent_version=v1` or `v2`",
-            "A full-history fork inherits the parent agent type",
-            "absence of `agent_type` makes only the named profile unavailable",
+            "no-history named `agent_type=luna_worker`",
+            "`multi_agent_version=v1|v2`",
+            "the named Luna profile is unavailable",
+            "absence of `agent_type` means the named Luna profile is unavailable",
             "Do not substitute `task_name`",
         ):
             with self.subTest(orchestration_phrase=phrase):
@@ -1170,15 +1180,19 @@ class SkillRouterTest(unittest.TestCase):
         self.assertNotIn("simple outcome-invariant repair only", router)
         self.assertNotIn("simple outcome-invariant repair only", orchestration)
 
-    def test_same_thread_luna_prompt_uses_canonical_builder_before_delivery(self) -> None:
+    def test_route_prompt_uses_canonical_builder_before_delivery(self) -> None:
         orchestration = flat(ORCHESTRATION)
         for phrase in (
-            "existing canonical `scripts/validate_model_route.py` builder CLI",
-            "--build-same-thread-prompt --route-dispatch-id <id> --capsule-path <path>",
-            "using the existing capsule",
-            "send its stdout verbatim",
-            "exactly one marker",
-            "missing or duplicate builder/marker fails before delivery",
+            "Every route operation requires an explicit action class",
+            "--build-route-prompt --route-mode <same_thread|named_child>",
+            "send stdout verbatim",
+            "neutral `MODEL_ROUTE_DISPATCH_ID=<id>`",
+            "missing, duplicate, hidden or legacy markers fail before delivery",
+            "validate durable rollout metadata with the same exact capsule",
+            "--expected-first-turn-id` for named child",
+            "Omission or mismatch fails before effects",
+            "historical diagnosis",
+            "never authorizes an effect",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, orchestration)
@@ -1225,10 +1239,11 @@ class SkillRouterTest(unittest.TestCase):
         orchestration = flat(ORCHESTRATION)
 
         for phrase in (
-            "Never emit `RETAIN|COMPLETE` from a candidate-only diff",
-            "live files must byte-match it",
-            "consumer/Controller receive the exact live hash plus reload instruction",
-            "Advisory may review the deployed diff later",
+            "Candidate diff is not `RETAIN|COMPLETE`",
+            "live files byte-match it",
+            "Controller gets exact hash/reload",
+            "Skill/AGENTS merge/deploy only after a fixed-SHA PR, local validation and Pro `ACCEPT`",
+            "Pro stays advisory",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
@@ -1239,7 +1254,9 @@ class SkillRouterTest(unittest.TestCase):
             "run the required live replay/canary",
             "hash the live read-back against the accepted candidate",
             "one non-scientific completion message",
-            "Ordinary Pro review is nonblocking",
+            "Ordinary scientific Pro batches stay nonblocking",
+            "Skill/AGENTS changes require a fixed-SHA PR, local validation and Pro `ACCEPT` before merge/deploy",
+            "Pro remains advisory",
             "not a new callback, receipt family, state field, watcher, heartbeat, registry, role, or lifecycle",
         ):
             with self.subTest(orchestration_phrase=phrase):
@@ -1306,10 +1323,10 @@ class SkillRouterTest(unittest.TestCase):
             "defining or changing an oracle, threshold, test semantics, contract, claim",
             "sealed unchanged rerun with identity/hash-only acceptance -> `luna/max`",
             "inspecting or interpreting protected rerun output -> Audit/Controller",
-            "session_meta` plus current `turn_context",
-            "same-thread fallback",
-            "exact `session_meta.id`, latest `turn_context` model/effort",
-            "durable message metadata carries that same turn ID",
+            "`session_meta` plus its sole current `turn_context`",
+            "same-thread Luna is forbidden",
+            "Named-child is only `frozen_deterministic` Luna/max",
+            "zero prior task history",
             "preserves objective, scientific role, cumulative budget and final terminal",
             "After protected-result exposure, never downgrade to Luna",
             "decision has been frozen into a deterministic oracle",

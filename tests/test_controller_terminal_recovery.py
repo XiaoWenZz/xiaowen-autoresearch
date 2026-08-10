@@ -31,6 +31,7 @@ from scripts.controller_control_state import (
     validate_state,
     write_state,
 )
+from tests.test_controller_control_state import observe_and_verify
 
 
 def args(**values: object) -> object:
@@ -336,7 +337,10 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
             write_state(state_path, base_state(terminal), -1)
 
             def write_recovery_terminal(authority_value: object = ...):
-                body = {"completion_binding": recovered_binding}
+                body = {
+                    "completion_binding": recovered_binding,
+                    "executor_continuation_phase": "NONE",
+                }
                 if authority_value is not ...:
                     body["startup_chain_authority"] = authority_value
                 if recovered_terminal.exists():
@@ -404,7 +408,12 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
             missing_terminal = directory / "executor-missing-authority.json"
             missing_binding = binding(missing_terminal, "missing-authority")
             missing_terminal.write_bytes(
-                canonical_bytes({"completion_binding": missing_binding})
+                canonical_bytes(
+                    {
+                        "completion_binding": missing_binding,
+                        "executor_continuation_phase": "NONE",
+                    }
+                )
             )
             missing_terminal.chmod(0o444)
             missing_data = missing_terminal.read_bytes()
@@ -431,6 +440,255 @@ class ControllerTerminalRecoveryTest(unittest.TestCase):
                     )
                 )
             self.assertEqual(read_state(state_path)["revision"], 1)
+
+    def test_rebuild_executor_requires_explicit_phase_and_exact_legacy_override(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            state_path = directory / "state.json"
+            initial_terminal = frozen_terminal(directory, "initial-terminal.json")
+            write_state(state_path, base_state(initial_terminal), -1)
+
+            def write_terminal(path: Path, terminal_binding: dict, phase: str | None) -> tuple[int, str]:
+                body = {
+                    "completion_binding": terminal_binding,
+                    "startup_chain_authority": None,
+                }
+                if phase is not None:
+                    body["executor_continuation_phase"] = phase
+                if path.exists():
+                    path.chmod(0o644)
+                path.write_bytes(canonical_bytes(body))
+                path.chmod(0o444)
+                data = path.read_bytes()
+                return len(data), hashlib.sha256(data).hexdigest()
+
+            def command(
+                terminal_binding: dict,
+                size: int,
+                digest: str,
+                *,
+                owner_suffix: str,
+                allow_missing: bool = False,
+                expected_revision: int,
+            ) -> object:
+                return args(
+                    state=str(state_path),
+                    expected_revision=expected_revision,
+                    objective_id=f"objective-phase-{owner_suffix}",
+                    candidate_id=f"candidate-phase-{owner_suffix}",
+                    stage="EXECUTOR_PHASE_RECOVERY",
+                    scientific_outcome="UNOBSERVED",
+                    next_action="WAIT_TERMINAL",
+                    owner_thread_id=f"worker-phase-{owner_suffix}",
+                    owner_role="Executor",
+                    owner_title=f"Executor · Phase {owner_suffix} · ACTIVE",
+                    cursor=None,
+                    recovery_evidence_ref=f"thread://phase-{owner_suffix}/final",
+                    completion_binding_json=json.dumps(terminal_binding),
+                    terminal_bytes=size,
+                    terminal_sha256=digest,
+                    allow_missing_executor_continuation_phase_mirror=allow_missing,
+                )
+
+            missing_path = directory / "missing-phase.json"
+            missing_binding = binding(missing_path, "missing-phase")
+            size, digest = write_terminal(missing_path, missing_binding, None)
+            with self.assertRaisesRegex(StateError, "executor_continuation_phase"):
+                cmd_rebuild_add_objective(
+                    command(
+                        missing_binding,
+                        size,
+                        digest,
+                        owner_suffix="missing",
+                        expected_revision=0,
+                    )
+                )
+            self.assertEqual(read_state(state_path)["revision"], 0)
+
+            for phase in ("NONE", "ZERO_USED", "CARRIER_USED"):
+                phase_path = directory / f"phase-{phase}.json"
+                phase_binding = binding(phase_path, f"phase-{phase}")
+                size, digest = write_terminal(phase_path, phase_binding, phase)
+                current_revision = read_state(state_path)["revision"]
+                cmd_rebuild_add_objective(
+                    command(
+                        phase_binding,
+                        size,
+                        digest,
+                        owner_suffix=phase,
+                        expected_revision=current_revision,
+                    )
+                )
+                recovered = next(
+                    objective
+                    for objective in read_state(state_path)["objectives"]
+                    if objective["objective_id"] == f"objective-phase-{phase}"
+                )
+                self.assertEqual(recovered["executor_continuation_phase"], phase)
+
+            unknown_path = directory / "unknown-legacy.json"
+            unknown_binding = binding(unknown_path, "unknown-legacy")
+            size, digest = write_terminal(unknown_path, unknown_binding, None)
+            before_unknown = read_state(state_path)
+            with self.assertRaisesRegex(StateError, "executor_continuation_phase"):
+                cmd_rebuild_add_objective(
+                    command(
+                        unknown_binding,
+                        size,
+                        digest,
+                        owner_suffix="unknown",
+                        allow_missing=True,
+                        expected_revision=before_unknown["revision"],
+                    )
+                )
+            self.assertEqual(read_state(state_path), before_unknown)
+
+            legacy_without_flag_path = directory / "legacy-without-phase-flag.json"
+            legacy_without_flag_binding = binding(
+                legacy_without_flag_path, "legacy-without-phase-flag"
+            )
+            size, digest = write_terminal(
+                legacy_without_flag_path,
+                legacy_without_flag_binding,
+                None,
+            )
+            before_legacy_without_flag = read_state(state_path)
+            with mock.patch.dict(
+                controller_state.LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS,
+                {
+                    str(legacy_without_flag_path): {
+                        "bytes": size,
+                        "sha256": digest,
+                        "missing_from_binding": frozenset(),
+                        "allow_missing_startup_authority_mirror": True,
+                    }
+                },
+            ):
+                with self.assertRaisesRegex(StateError, "executor_continuation_phase"):
+                    cmd_rebuild_add_objective(
+                        command(
+                            legacy_without_flag_binding,
+                            size,
+                            digest,
+                            owner_suffix="legacy-without-phase-flag",
+                            allow_missing=True,
+                            expected_revision=before_legacy_without_flag["revision"],
+                        )
+                    )
+            self.assertEqual(read_state(state_path), before_legacy_without_flag)
+
+            legacy_path = directory / "exact-legacy.json"
+            legacy_binding = binding(legacy_path, "exact-legacy")
+            size, digest = write_terminal(legacy_path, legacy_binding, None)
+            compatibility = {
+                str(legacy_path): {
+                    "bytes": size,
+                    "sha256": digest,
+                    "missing_from_binding": frozenset(),
+                    "allow_missing_startup_authority_mirror": True,
+                    "allow_missing_executor_continuation_phase_mirror": True,
+                }
+            }
+            with mock.patch.dict(
+                controller_state.LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS,
+                compatibility,
+            ):
+                current_revision = read_state(state_path)["revision"]
+                cmd_rebuild_add_objective(
+                    command(
+                        legacy_binding,
+                        size,
+                        digest,
+                        owner_suffix="exact-legacy",
+                        allow_missing=True,
+                        expected_revision=current_revision,
+                    )
+                )
+            recovered = next(
+                objective
+                for objective in read_state(state_path)["objectives"]
+                if objective["objective_id"] == "objective-phase-exact-legacy"
+            )
+            self.assertEqual(recovered["executor_continuation_phase"], "NONE")
+
+    def test_rebuild_executor_phase_preserves_repeat_edge_rejection(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            state_path = directory / "state.json"
+            initial_terminal = frozen_terminal(directory, "initial-terminal.json")
+            write_state(state_path, base_state(initial_terminal), -1)
+            recovered_terminal = directory / "recovered-carrier-terminal.json"
+            recovered_binding = binding(recovered_terminal, "rebuild-carrier")
+            authority = sealed_startup_authority(directory)
+            recovered_body = {
+                "completion_binding": recovered_binding,
+                "startup_chain_authority": authority,
+                "executor_continuation_phase": "CARRIER_USED",
+            }
+            recovered_terminal.write_bytes(canonical_bytes(recovered_body))
+            recovered_terminal.chmod(0o444)
+            recovered_data = recovered_terminal.read_bytes()
+            cmd_rebuild_add_objective(
+                args(
+                    state=str(state_path),
+                    expected_revision=0,
+                    objective_id="objective-rebuild-carrier",
+                    candidate_id="candidate-rebuild-carrier",
+                    stage="EXECUTOR_PHASE_RECOVERY",
+                    scientific_outcome="UNOBSERVED",
+                    next_action="WAIT_TERMINAL",
+                    owner_thread_id="rebuild-carrier-worker",
+                    owner_role="Executor",
+                    owner_title="Executor · Rebuild Carrier · ACTIVE",
+                    cursor=None,
+                    recovery_evidence_ref="thread://rebuild-carrier/final",
+                    completion_binding_json=json.dumps(recovered_binding),
+                    terminal_bytes=len(recovered_data),
+                    terminal_sha256=hashlib.sha256(recovered_data).hexdigest(),
+                )
+            )
+            recovered_terminal.chmod(0o644)
+            observed_revision = observe_and_verify(
+                state_path,
+                1,
+                "objective-rebuild-carrier",
+            )
+            before_repeat = read_state(state_path)
+            successor_binding = binding(
+                directory / "rebuild-carrier-successor.json",
+                "rebuild-carrier-successor",
+            )
+            with self.assertRaisesRegex(
+                StateError,
+                "CARRIER cannot follow executor_continuation_phase CARRIER_USED",
+            ):
+                cmd_activate_successor(
+                    args(
+                        state=str(state_path),
+                        expected_revision=observed_revision,
+                        objective_id="objective-rebuild-carrier",
+                        new_objective_id="objective-rebuild-carrier-successor",
+                        terminal_event_id=recovered_binding["terminal_event_id"],
+                        old_owner_thread_id="rebuild-carrier-worker",
+                        new_owner_thread_id="rebuild-carrier-worker",
+                        fresh_thread_reason=None,
+                        fresh_thread_evidence_ref=None,
+                        new_owner_role="Executor",
+                        executor_continuation_kind="CARRIER",
+                        new_owner_state="ACTIVE",
+                        new_owner_title="Executor · Rebuild Carrier Successor · ACTIVE",
+                        new_cursor=None,
+                        new_candidate_state="OPEN",
+                        new_stage="R3_ACTIVE",
+                        new_scientific_outcome="UNOBSERVED",
+                        new_next_action="WAIT_EXECUTOR_TERMINAL",
+                        new_completion_binding_json=json.dumps(successor_binding),
+                        new_remote_job_json=None,
+                        clear_remote_job_id=[],
+                        clear_advisory_id=[],
+                    )
+                )
+            self.assertEqual(read_state(state_path), before_repeat)
 
     def test_rebuild_add_objective_rejects_terminal_envelope_mismatch(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
