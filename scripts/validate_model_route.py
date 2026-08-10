@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -20,6 +21,10 @@ ROUTES = {
     "real_carrier": ("gpt-5.6-sol", "xhigh"),
     "scientific_decision": ("gpt-5.6-sol", "max"),
 }
+
+SAME_THREAD_ACTION_CLASSES = frozenset(
+    {"bounded_engineering", "real_carrier", "scientific_decision"}
+)
 
 
 ROUTE_DISPATCH_MARKER = "MODEL_ROUTE_DISPATCH_ID="
@@ -55,6 +60,9 @@ class RouteReceipt:
     multi_agent_version: str | None = None
     thread_id: str | None = None
     turn_id: str | None = None
+    first_turn_id: str | None = None
+    capsule_bytes: int | None = None
+    capsule_sha256: str | None = None
     route_dispatch_id: str | None = None
 
 
@@ -75,8 +83,25 @@ def validate_receipt(
     *,
     expected_parent_thread_id: str | None = None,
     expected_thread_id: str | None = None,
+    expected_turn_id: str | None = None,
+    expected_first_turn_id: str | None = None,
     expected_route_dispatch_id: str | None = None,
 ) -> tuple[str, str]:
+    if receipt.route_mode not in {"named_child", "same_thread"}:
+        raise ValueError(f"unknown route mode: {receipt.route_mode}")
+    if (
+        receipt.route_mode == "same_thread"
+        and receipt.action_class == "frozen_deterministic"
+    ):
+        raise ValueError(
+            "same-thread frozen_deterministic route must fail before effects"
+        )
+    if receipt.route_mode == "same_thread" and receipt.action_class not in SAME_THREAD_ACTION_CLASSES:
+        raise ValueError(
+            "same-thread route requires explicit bounded_engineering, real_carrier, or scientific_decision action_class"
+        )
+    if receipt.route_mode == "named_child" and receipt.action_class != "frozen_deterministic":
+        raise ValueError("named-child route is reserved for frozen_deterministic")
     expected = expected_route(receipt)
     actual = (receipt.model, receipt.effort)
     if actual != expected:
@@ -84,8 +109,6 @@ def validate_receipt(
             "runtime route mismatch: "
             f"expected={expected[0]}/{expected[1]} actual={actual[0]}/{actual[1]}"
         )
-    if receipt.route_mode not in {"named_child", "same_thread"}:
-        raise ValueError(f"unknown route mode: {receipt.route_mode}")
     if receipt.route_mode == "same_thread":
         if receipt.receipt_source != "durable_rollout":
             raise ValueError("same-thread route requires durable rollout metadata")
@@ -98,6 +121,11 @@ def validate_receipt(
             )
         if not receipt.turn_id:
             raise ValueError("same-thread route is missing durable turn identity")
+        if expected_turn_id is not None and receipt.turn_id != expected_turn_id:
+            raise ValueError(
+                "same-thread turn binding mismatch: "
+                f"expected={expected_turn_id} actual={receipt.turn_id}"
+            )
         if not expected_route_dispatch_id:
             raise ValueError("same-thread route requires an expected route dispatch")
         validate_route_dispatch_id(expected_route_dispatch_id)
@@ -125,6 +153,43 @@ def validate_receipt(
                     "Luna parent binding mismatch: "
                     f"expected={expected_parent_thread_id} actual={receipt.parent_thread_id}"
                 )
+            if not expected_thread_id:
+                raise ValueError("Luna named-child route requires an independently expected child thread")
+            if receipt.thread_id != expected_thread_id:
+                raise ValueError(
+                    "Luna child binding mismatch: "
+                    f"expected={expected_thread_id} actual={receipt.thread_id}"
+                )
+            if not receipt.turn_id or not receipt.first_turn_id:
+                raise ValueError("Luna named-child route requires current and first turn identity")
+            if receipt.turn_id != receipt.first_turn_id:
+                raise ValueError("Luna named-child route requires a no-history first task turn")
+            if not expected_turn_id:
+                raise ValueError("Luna named-child route requires an expected current turn")
+            if receipt.turn_id != expected_turn_id:
+                raise ValueError(
+                    "Luna child turn binding mismatch: "
+                    f"expected={expected_turn_id} actual={receipt.turn_id}"
+                )
+            if not expected_first_turn_id:
+                raise ValueError("Luna named-child route requires an expected first turn")
+            if receipt.first_turn_id != expected_first_turn_id:
+                raise ValueError(
+                    "Luna first-turn binding mismatch: "
+                    f"expected={expected_first_turn_id} actual={receipt.first_turn_id}"
+                )
+            if not receipt.route_dispatch_id:
+                raise ValueError("Luna named-child route requires an exact route dispatch")
+            if not expected_route_dispatch_id:
+                raise ValueError("Luna named-child route requires an expected route dispatch")
+            validate_route_dispatch_id(expected_route_dispatch_id)
+            if receipt.route_dispatch_id != expected_route_dispatch_id:
+                raise ValueError(
+                    "Luna route dispatch mismatch: "
+                    f"expected={expected_route_dispatch_id} actual={receipt.route_dispatch_id}"
+                )
+            if receipt.capsule_bytes is None or receipt.capsule_sha256 is None:
+                raise ValueError("Luna named-child route requires exact capsule bytes")
         else:
             raise ValueError(f"unknown Luna route mode: {receipt.route_mode}")
     return expected
@@ -159,67 +224,58 @@ def _user_message_bytes(event: dict[str, Any]) -> bytes | None:
     return item["text"].encode("utf-8")
 
 
-_ENVELOPE_ELEMENT_PATTERN = re.compile(
-    r"<(?P<tag>[A-Za-z_][A-Za-z0-9_.:-]*)>(?P<body>[^<>]*)</(?P=tag)>"
-)
+def _skip_envelope_whitespace(text: str, cursor: int) -> int:
+    while cursor < len(text) and text[cursor] in " \t\r\n":
+        cursor += 1
+    return cursor
 
 
-def _envelope_metadata_only(text: str) -> bool:
-    """Accept only whitespace and closed non-reserved metadata elements."""
+def _matches_supported_envelope(
+    text: str,
+    canonical_prompt: bytes,
+    *,
+    expected_source_thread_id: str | None,
+) -> bool:
+    """Match one exact source-thread/input delegation envelope.
 
-    cursor = 0
-    while cursor < len(text):
-        if text[cursor].isspace():
-            cursor += 1
-            continue
-        match = _ENVELOPE_ELEMENT_PATTERN.match(text, cursor)
-        if match is None or match.group("tag") in {"input", "codex_delegation"}:
-            return False
-        cursor = match.end()
-    return True
+    The envelope intentionally has no extensibility surface: only the two
+    fields below, in this order, are accepted.  This prevents an instruction,
+    metadata element, second input, or arbitrary prefix/suffix from becoming
+    part of a route receipt.
+    """
 
-
-def _matches_supported_envelope(text: str, canonical_prompt: bytes) -> bool:
-    """Match the only supported delegation envelope around exact canonical bytes."""
-
-    opening = "<codex_delegation>"
-    closing = "</codex_delegation>"
-    if (
-        text.count(opening) != 1
-        or text.count(closing) != 1
-        or text.count(ROUTE_DISPATCH_MARKER) != 1
-        or text.count(LEGACY_ROUTE_DISPATCH_MARKER) != 0
-    ):
+    if expected_source_thread_id is None or not isinstance(expected_source_thread_id, str):
         return False
-    left_trimmed = text.lstrip()
-    if not left_trimmed.startswith(opening):
-        return False
-    prefix_length = len(text) - len(left_trimmed)
-    start = prefix_length + len(opening)
-    end = text.rfind(closing)
-    if end < start or text[end + len(closing) :].strip():
-        return False
-    interior = text[start:end]
+    outer = text.strip(" \t\r\n")
+    root_open = "<codex_delegation>"
+    root_close = "</codex_delegation>"
+    source_open = "<source_thread_id>"
+    source_close = "</source_thread_id>"
     input_open = "<input>"
     input_close = "</input>"
-    if interior.count(input_open) != 1 or interior.count(input_close) != 1:
+    if not outer.startswith(root_open) or not outer.endswith(root_close):
         return False
-    input_start = interior.find(input_open)
-    input_end = interior.find(input_close)
-    if input_end < input_start:
+    interior = outer[len(root_open) : -len(root_close)]
+    cursor = _skip_envelope_whitespace(interior, 0)
+    if not interior.startswith(source_open, cursor):
         return False
-    before = interior[:input_start]
-    after = interior[input_end + len(input_close) :]
-    if not _envelope_metadata_only(before) or not _envelope_metadata_only(after):
+    source_start = cursor + len(source_open)
+    source_end = interior.find(source_close, source_start)
+    if source_end < 0:
         return False
-    if (
-        ROUTE_DISPATCH_MARKER in before
-        or ROUTE_DISPATCH_MARKER in after
-        or LEGACY_ROUTE_DISPATCH_MARKER in before
-        or LEGACY_ROUTE_DISPATCH_MARKER in after
-    ):
+    source = interior[source_start:source_end]
+    if source != expected_source_thread_id:
         return False
-    body = interior[input_start + len(input_open) : input_end]
+    cursor = _skip_envelope_whitespace(interior, source_end + len(source_close))
+    if not interior.startswith(input_open, cursor):
+        return False
+    body_start = cursor + len(input_open)
+    body_end = interior.rfind(input_close)
+    if body_end < body_start:
+        return False
+    if interior[body_end + len(input_close) :].strip(" \t\r\n"):
+        return False
+    body = interior[body_start:body_end]
     try:
         return body.encode("utf-8") == canonical_prompt
     except UnicodeEncodeError:
@@ -227,7 +283,10 @@ def _matches_supported_envelope(text: str, canonical_prompt: bytes) -> bool:
 
 
 def _matches_canonical_user_message(
-    event: dict[str, Any], canonical_prompt: bytes
+    event: dict[str, Any],
+    canonical_prompt: bytes,
+    *,
+    expected_source_thread_id: str | None = None,
 ) -> bool:
     """Accept raw canonical bytes or one exact supported delegation envelope."""
 
@@ -240,7 +299,11 @@ def _matches_canonical_user_message(
         text = body.decode("utf-8")
     except UnicodeDecodeError:
         return False
-    return _matches_supported_envelope(text, canonical_prompt)
+    return _matches_supported_envelope(
+        text,
+        canonical_prompt,
+        expected_source_thread_id=expected_source_thread_id,
+    )
 
 
 def _has_exact_route_dispatch(
@@ -284,11 +347,11 @@ def validate_route_dispatch_id(route_dispatch_id: str) -> str:
     return route_dispatch_id
 
 
-def validate_same_thread_prompt(
+def _validate_same_thread_prompt_any(
     prompt: str | bytes,
     route_dispatch_id: str,
     *,
-    action_class: str = "frozen_deterministic",
+    action_class: str,
 ) -> None:
     """Fail closed unless *prompt* has one canonical first-line dispatch marker.
 
@@ -327,6 +390,23 @@ def validate_same_thread_prompt(
         )
 
 
+def validate_same_thread_prompt(
+    prompt: str | bytes,
+    route_dispatch_id: str,
+    *,
+    action_class: str,
+) -> None:
+    """Validate a public same-thread Sol prompt with an explicit action class."""
+
+    if action_class not in SAME_THREAD_ACTION_CLASSES:
+        raise ValueError(
+            "same-thread prompt requires explicit bounded_engineering, real_carrier, or scientific_decision action_class"
+        )
+    _validate_same_thread_prompt_any(
+        prompt, route_dispatch_id, action_class=action_class
+    )
+
+
 def _read_capsule(capsule_path: str | Path) -> tuple[bytes, str]:
     """Read one existing, real regular UTF-8 capsule without transforming it."""
 
@@ -353,11 +433,11 @@ def _read_capsule(capsule_path: str | Path) -> tuple[bytes, str]:
     return capsule_bytes, capsule_text
 
 
-def build_same_thread_prompt_bytes(
+def _build_same_thread_prompt_bytes(
     route_dispatch_id: str,
     capsule_path: str | Path,
     *,
-    action_class: str = "frozen_deterministic",
+    action_class: str,
 ) -> bytes:
     """Build the canonical stdout payload for one same-thread route turn."""
 
@@ -369,17 +449,34 @@ def build_same_thread_prompt_bytes(
 
     marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
     prompt_bytes = marker + preamble.encode("utf-8") + capsule_bytes
-    validate_same_thread_prompt(
+    _validate_same_thread_prompt_any(
         prompt_bytes, route_dispatch_id, action_class=action_class
     )
     return prompt_bytes
+
+
+def build_same_thread_prompt_bytes(
+    route_dispatch_id: str,
+    capsule_path: str | Path,
+    *,
+    action_class: str,
+) -> bytes:
+    """Build a public same-thread prompt for an explicit Sol action class."""
+
+    if action_class not in SAME_THREAD_ACTION_CLASSES:
+        raise ValueError(
+            "same-thread prompt requires explicit bounded_engineering, real_carrier, or scientific_decision action_class"
+        )
+    return _build_same_thread_prompt_bytes(
+        route_dispatch_id, capsule_path, action_class=action_class
+    )
 
 
 def build_same_thread_prompt(
     route_dispatch_id: str,
     capsule_path: str | Path,
     *,
-    action_class: str = "frozen_deterministic",
+    action_class: str,
 ) -> str:
     """Build the canonical same-thread route prompt while preserving capsule text."""
 
@@ -396,7 +493,12 @@ def load_rollout_receipt(
     protected_exposed: bool,
     decision_ambiguity: bool,
     route_mode: str = "named_child",
+    expected_parent_thread_id: str | None = None,
+    expected_thread_id: str | None = None,
+    expected_turn_id: str | None = None,
+    expected_first_turn_id: str | None = None,
     expected_route_dispatch_id: str | None = None,
+    expected_source_thread_id: str | None = None,
     capsule_path: str | Path | None = None,
 ) -> RouteReceipt:
     """Read only durable routing fields; never trust worker prose."""
@@ -406,20 +508,44 @@ def load_rollout_receipt(
     if route_mode not in {"named_child", "same_thread"}:
         raise ValueError(f"unknown route mode: {route_mode}")
     if route_mode == "same_thread":
+        if action_class == "frozen_deterministic":
+            raise ValueError(
+                "same-thread frozen_deterministic route must fail before effects"
+            )
+        if action_class not in SAME_THREAD_ACTION_CLASSES:
+            raise ValueError(
+                "same-thread route requires explicit bounded_engineering, real_carrier, or scientific_decision action_class"
+            )
         if expected_route_dispatch_id is None:
             raise ValueError("same-thread rollout load requires an expected route dispatch")
         if capsule_path is None:
             raise ValueError("same-thread rollout load requires --capsule-path")
-        canonical_prompt = build_same_thread_prompt_bytes(
+        canonical_prompt = _build_same_thread_prompt_bytes(
             expected_route_dispatch_id,
             capsule_path,
             action_class=action_class,
         )
-    elif capsule_path is not None:
-        raise ValueError("capsule path is forbidden for named-child route")
+    else:
+        if action_class != "frozen_deterministic":
+            raise ValueError("named-child route is reserved for frozen_deterministic")
+        if expected_route_dispatch_id is None:
+            raise ValueError("Luna named-child route requires an expected route dispatch")
+        if capsule_path is None:
+            raise ValueError("Luna named-child route requires --capsule-path")
+        canonical_prompt = _build_same_thread_prompt_bytes(
+            expected_route_dispatch_id,
+            capsule_path,
+            action_class=action_class,
+        )
+    capsule_bytes: int | None = None
+    capsule_sha256: str | None = None
+    if capsule_path is not None:
+        capsule_data, _ = _read_capsule(capsule_path)
+        capsule_bytes = len(capsule_data)
+        capsule_sha256 = hashlib.sha256(capsule_data).hexdigest()
 
     session_meta: dict[str, Any] | None = None
-    turn_context: dict[str, Any] | None = None
+    turn_contexts: list[dict[str, Any]] = []
     user_messages: list[tuple[int, dict[str, Any], str | None]] = []
     with rollout_path.open("r", encoding="utf-8") as handle:
         for line_number, raw in enumerate(handle, start=1):
@@ -441,7 +567,7 @@ def load_rollout_receipt(
                     raise ValueError("rollout contains multiple session_meta records")
                 session_meta = payload
             elif event.get("type") == "turn_context":
-                turn_context = payload
+                turn_contexts.append(payload)
             elif event.get("type") == "response_item":
                 if payload.get("type") != "message" or payload.get("role") != "user":
                     continue
@@ -450,9 +576,10 @@ def load_rollout_receipt(
                     metadata.get("turn_id") if isinstance(metadata, dict) else None
                 )
                 user_messages.append((line_number, event, message_turn_id))
-    if session_meta is None or turn_context is None:
+    if session_meta is None or not turn_contexts:
         raise ValueError("rollout is missing session_meta or turn_context routing metadata")
 
+    turn_context = turn_contexts[-1]
     model = turn_context.get("model")
     effort = turn_context.get("effort")
     turn_id = turn_context.get("turn_id")
@@ -460,7 +587,13 @@ def load_rollout_receipt(
         raise ValueError("turn_context.model is missing")
     if not isinstance(effort, str) or not effort:
         raise ValueError("turn_context.effort is missing")
+    if "context_eligible" in turn_context:
+        if type(turn_context["context_eligible"]) is not bool:
+            raise ValueError("turn_context.context_eligible is invalid")
+        if turn_context["context_eligible"] != context_eligible:
+            raise ValueError("turn_context.context_eligible does not match receipt")
     route_dispatch_id: str | None = None
+    first_turn_id: str | None = None
     if route_mode == "same_thread":
         if not isinstance(turn_id, str) or not turn_id:
             raise ValueError("same-thread turn_context.turn_id is missing")
@@ -468,7 +601,11 @@ def load_rollout_receipt(
             line_number
             for line_number, event, message_turn_id in user_messages
             if message_turn_id == turn_id
-            and _matches_canonical_user_message(event, canonical_prompt)
+            and _matches_canonical_user_message(
+                event,
+                canonical_prompt,
+                expected_source_thread_id=expected_source_thread_id,
+            )
         ]
         current_turn_messages = [
             line_number
@@ -478,6 +615,85 @@ def load_rollout_receipt(
         if len(current_turn_messages) != 1 or len(matches) != 1:
             raise ValueError("same-thread route dispatch marker is missing or ambiguous")
         route_dispatch_id = expected_route_dispatch_id
+    else:
+        if len(turn_contexts) != 1 or len(user_messages) != 1:
+            raise ValueError(
+                "Luna named-child route requires a no-history first task turn"
+            )
+        if not expected_turn_id or not expected_first_turn_id:
+            raise ValueError(
+                "Luna named-child route requires expected current and first turns"
+            )
+        if not isinstance(turn_id, str) or not turn_id:
+            raise ValueError("Luna named-child turn_context.turn_id is missing")
+        first_turn_id = turn_context.get("first_turn_id", turn_id)
+        if not isinstance(first_turn_id, str) or not first_turn_id:
+            raise ValueError("Luna named-child first turn identity is missing")
+        if first_turn_id != turn_id:
+            raise ValueError("Luna named-child route requires current and first turn to match")
+        if turn_id != expected_turn_id:
+            raise ValueError("Luna named-child turn binding mismatch")
+        if first_turn_id != expected_first_turn_id:
+            raise ValueError("Luna named-child first-turn binding mismatch")
+        if "is_first_turn" in turn_context and turn_context["is_first_turn"] is not True:
+            raise ValueError("Luna named-child turn is not marked as first")
+        if "history_count" in turn_context:
+            history_count = turn_context["history_count"]
+            if type(history_count) is not int or history_count != 0:
+                raise ValueError("Luna named-child route requires zero history")
+        if "previous_turn_id" in turn_context and turn_context["previous_turn_id"] is not None:
+            raise ValueError("Luna named-child route has a previous turn")
+        if type(turn_context.get("context_eligible")) is not bool:
+            raise ValueError("Luna named-child route requires durable context eligibility")
+        if capsule_bytes is None or capsule_sha256 is None:
+            raise ValueError("Luna named-child route requires exact capsule bytes")
+        if (
+            "capsule_bytes" in turn_context
+            and turn_context.get("capsule_bytes") != capsule_bytes
+        ):
+            raise ValueError("Luna named-child capsule byte count mismatch")
+        if (
+            "capsule_sha256" in turn_context
+            and turn_context.get("capsule_sha256") != capsule_sha256
+        ):
+            raise ValueError("Luna named-child capsule digest mismatch")
+        metadata_dispatch_id = turn_context.get("route_dispatch_id")
+        if (
+            metadata_dispatch_id is not None
+            and metadata_dispatch_id != expected_route_dispatch_id
+        ):
+            raise ValueError("Luna named-child route dispatch metadata mismatch")
+        matches = [
+            line_number
+            for line_number, event, message_turn_id in user_messages
+            if message_turn_id == turn_id
+            and _matches_canonical_user_message(
+                event,
+                canonical_prompt,
+                expected_source_thread_id=(
+                    expected_source_thread_id or expected_parent_thread_id
+                ),
+            )
+        ]
+        if len(matches) != 1:
+            raise ValueError("Luna named-child canonical capsule message is missing or ambiguous")
+        route_dispatch_id = expected_route_dispatch_id
+    agent_role = session_meta.get("agent_role")
+    parent_thread_id = session_meta.get("parent_thread_id")
+    thread_id = session_meta.get("id")
+    if route_mode == "named_child":
+        if agent_role != "luna_worker":
+            raise ValueError("Luna named-child route requires agent_role=luna_worker")
+        if expected_parent_thread_id is None:
+            raise ValueError("Luna named-child route requires an expected parent thread")
+        if parent_thread_id != expected_parent_thread_id:
+            raise ValueError("Luna parent binding mismatch")
+        if expected_thread_id is None:
+            raise ValueError("Luna named-child route requires an expected child thread")
+        if thread_id != expected_thread_id:
+            raise ValueError("Luna child binding mismatch")
+    elif expected_source_thread_id is not None and not isinstance(expected_source_thread_id, str):
+        raise ValueError("expected source thread identity is invalid")
     return RouteReceipt(
         action_class=action_class,
         model=model,
@@ -487,11 +703,14 @@ def load_rollout_receipt(
         decision_ambiguity=decision_ambiguity,
         receipt_source="durable_rollout",
         route_mode=route_mode,
-        agent_role=session_meta.get("agent_role"),
-        parent_thread_id=session_meta.get("parent_thread_id"),
+        agent_role=agent_role,
+        parent_thread_id=parent_thread_id,
         multi_agent_version=session_meta.get("multi_agent_version"),
-        thread_id=session_meta.get("id"),
+        thread_id=thread_id,
         turn_id=turn_id if isinstance(turn_id, str) else None,
+        first_turn_id=first_turn_id,
+        capsule_bytes=capsule_bytes,
+        capsule_sha256=capsule_sha256,
         route_dispatch_id=route_dispatch_id,
     )
 
@@ -509,6 +728,12 @@ def parse_args() -> argparse.Namespace:
         help="write the canonical same-thread prompt to stdout",
     )
     parser.add_argument(
+        "--build-route-prompt",
+        dest="build_route_prompt",
+        action="store_true",
+        help="write one canonical route prompt to stdout",
+    )
+    parser.add_argument(
         "--route-dispatch-id",
         dest="route_dispatch_id",
         help="opaque ID for --build-same-thread-prompt",
@@ -518,12 +743,13 @@ def parse_args() -> argparse.Namespace:
         dest="capsule_path",
         help="existing UTF-8 capsule file for --build-same-thread-prompt",
     )
-    parser.add_argument(
-        "--route-mode", choices=("named_child", "same_thread"), default="named_child"
-    )
+    parser.add_argument("--route-mode", choices=("named_child", "same_thread"))
     parser.add_argument("--expected-parent-thread-id")
     parser.add_argument("--expected-thread-id")
+    parser.add_argument("--expected-turn-id")
+    parser.add_argument("--expected-first-turn-id")
     parser.add_argument("--expected-route-dispatch-id")
+    parser.add_argument("--expected-source-thread-id")
     parser.add_argument("--context-eligible", action="store_true")
     parser.add_argument("--protected-exposed", action="store_true")
     parser.add_argument("--decision-ambiguity", action="store_true")
@@ -533,7 +759,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        if args.build_same_thread_prompt:
+        if args.action_class is None:
+            raise ValueError("--action-class is required for every route operation")
+        if args.build_same_thread_prompt and args.build_route_prompt:
+            raise ValueError(
+                "--build-same-thread-prompt and --build-route-prompt are mutually exclusive"
+            )
+        if args.build_same_thread_prompt or args.build_route_prompt:
             if args.model is not None or args.effort is not None:
                 raise ValueError(
                     "same-thread prompt mode cannot be combined with receipt arguments"
@@ -548,19 +780,37 @@ def main() -> int:
                 )
             if args.capsule_path is None:
                 raise ValueError("same-thread prompt mode requires --capsule-path")
-            prompt_bytes = build_same_thread_prompt_bytes(
+            if args.build_same_thread_prompt and args.route_mode not in {
+                None,
+                "same_thread",
+            }:
+                raise ValueError(
+                    "--build-same-thread-prompt is a same_thread compatibility alias"
+                )
+            if args.build_route_prompt and args.route_mode is None:
+                raise ValueError("--build-route-prompt requires --route-mode")
+            build_route_mode = (
+                args.route_mode if args.build_route_prompt else "same_thread"
+            )
+            if build_route_mode == "same_thread":
+                if args.action_class not in SAME_THREAD_ACTION_CLASSES:
+                    raise ValueError(
+                        "same-thread prompt requires explicit bounded_engineering, real_carrier, or scientific_decision action_class"
+                    )
+            elif args.action_class != "frozen_deterministic":
+                raise ValueError(
+                    "named-child prompt requires frozen_deterministic action_class"
+                )
+            prompt_bytes = _build_same_thread_prompt_bytes(
                 args.route_dispatch_id,
                 args.capsule_path,
-                action_class=args.action_class or "frozen_deterministic",
+                action_class=args.action_class,
             )
             sys.stdout.buffer.write(prompt_bytes)
             return 0
-        if args.action_class is None:
-            raise ValueError("--action-class is required for receipt validation")
         if args.route_dispatch_id is not None:
             raise ValueError("--route-dispatch-id requires same-thread prompt mode")
-        if args.capsule_path is not None and args.route_mode != "same_thread":
-            raise ValueError("--capsule-path is forbidden for named-child route")
+        route_mode = args.route_mode or "named_child"
         if args.rollout_path:
             if args.model is not None or args.effort is not None:
                 raise ValueError("rollout metadata and direct model/effort are mutually exclusive")
@@ -570,8 +820,13 @@ def main() -> int:
                 context_eligible=args.context_eligible,
                 protected_exposed=args.protected_exposed,
                 decision_ambiguity=args.decision_ambiguity,
-                route_mode=args.route_mode,
+                route_mode=route_mode,
+                expected_parent_thread_id=args.expected_parent_thread_id,
+                expected_thread_id=args.expected_thread_id,
+                expected_turn_id=args.expected_turn_id,
+                expected_first_turn_id=args.expected_first_turn_id,
                 expected_route_dispatch_id=args.expected_route_dispatch_id,
+                expected_source_thread_id=args.expected_source_thread_id,
                 capsule_path=args.capsule_path,
             )
         else:
@@ -584,12 +839,14 @@ def main() -> int:
                 context_eligible=args.context_eligible,
                 protected_exposed=args.protected_exposed,
                 decision_ambiguity=args.decision_ambiguity,
-                route_mode=args.route_mode,
+                route_mode=route_mode,
             )
         model, effort = validate_receipt(
             receipt,
             expected_parent_thread_id=args.expected_parent_thread_id,
             expected_thread_id=args.expected_thread_id,
+            expected_turn_id=args.expected_turn_id,
+            expected_first_turn_id=args.expected_first_turn_id,
             expected_route_dispatch_id=args.expected_route_dispatch_id,
         )
     except (OSError, ValueError) as exc:

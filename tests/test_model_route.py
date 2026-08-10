@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -11,7 +12,7 @@ from scripts.validate_model_route import (
     LEGACY_ROUTE_DISPATCH_MARKER,
     ROUTE_DISPATCH_MARKER,
     RouteReceipt,
-    SAME_THREAD_PROMPT_PREAMBLE,
+    _build_same_thread_prompt_bytes,
     build_same_thread_prompt,
     build_same_thread_prompt_bytes,
     load_rollout_receipt,
@@ -36,11 +37,21 @@ class ModelRouteTest(unittest.TestCase):
             "agent_role": "luna_worker",
             "parent_thread_id": "parent-1",
             "multi_agent_version": "v1",
+            "thread_id": "child-1",
+            "turn_id": "turn-1",
+            "first_turn_id": "turn-1",
+            "route_dispatch_id": "luna-route-1",
+            "capsule_bytes": 1,
+            "capsule_sha256": "0" * 64,
         }
         values.update(overrides)
         return RouteReceipt(**values)  # type: ignore[arg-type]
 
     def write_rollout(self, root: Path, **overrides: object) -> Path:
+        route_dispatch_id = str(overrides.pop("route_dispatch_id", "named-child-route-1"))
+        capsule_path = root / "capsule.txt"
+        capsule_path.write_bytes(b"capsule body\n")
+        capsule_bytes = capsule_path.read_bytes()
         session = {
             "id": "child-1",
             "parent_thread_id": "parent-1",
@@ -48,26 +59,61 @@ class ModelRouteTest(unittest.TestCase):
             "agent_nickname": "Popper",
             "multi_agent_version": "v1",
         }
-        turn = {"model": "gpt-5.6-luna", "effort": "max"}
+        turn = {
+            "model": "gpt-5.6-luna",
+            "effort": "max",
+            "turn_id": "turn-1",
+            "first_turn_id": "turn-1",
+            "context_eligible": True,
+            "capsule_bytes": len(capsule_bytes),
+            "capsule_sha256": hashlib.sha256(capsule_bytes).hexdigest(),
+            "route_dispatch_id": route_dispatch_id,
+        }
         for key, value in overrides.items():
             if key in turn:
                 turn[key] = value
             else:
                 session[key] = value
         path = root / "rollout.jsonl"
+        canonical = _build_same_thread_prompt_bytes(
+            route_dispatch_id,
+            capsule_path,
+            action_class="frozen_deterministic",
+        ).decode("utf-8")
+        events = (
+            {"type": "session_meta", "payload": session},
+            {"type": "event_msg", "payload": {"type": "task_started"}},
+            {"type": "turn_context", "payload": turn},
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "internal_chat_message_metadata_passthrough": {"turn_id": "turn-1"},
+                    "content": [{"type": "input_text", "text": canonical}],
+                },
+            },
+        )
         path.write_text(
-            "\n".join(
-                json.dumps(event)
-                for event in (
-                    {"type": "session_meta", "payload": session},
-                    {"type": "event_msg", "payload": {"type": "task_started"}},
-                    {"type": "turn_context", "payload": turn},
-                )
-            )
-            + "\n",
+            "\n".join(json.dumps(event) for event in events) + "\n",
             encoding="utf-8",
         )
         return path
+
+    def load_named_rollout_for_test(self, rollout: Path, capsule: Path) -> RouteReceipt:
+        return load_rollout_receipt(
+            rollout,
+            action_class="frozen_deterministic",
+            context_eligible=True,
+            protected_exposed=False,
+            decision_ambiguity=False,
+            expected_parent_thread_id="parent-1",
+            expected_thread_id="child-1",
+            expected_turn_id="turn-1",
+            expected_first_turn_id="turn-1",
+            expected_route_dispatch_id="named-child-route-1",
+            capsule_path=capsule,
+        )
 
     def write_same_thread_rollout(
         self,
@@ -87,7 +133,7 @@ class ModelRouteTest(unittest.TestCase):
     ) -> Path:
         capsule_path = root / "capsule.txt"
         capsule_path.write_text("capsule body\n", encoding="utf-8")
-        canonical = build_same_thread_prompt_bytes(
+        canonical = _build_same_thread_prompt_bytes(
             route_dispatch_id, capsule_path, action_class=action_class
         ).decode("utf-8")
         marker = {
@@ -168,19 +214,25 @@ class ModelRouteTest(unittest.TestCase):
         )
         route_dispatch_id = "DISPATCH-PR8-SAME-THREAD-20260810-001"
         marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
-        preamble = SAME_THREAD_PROMPT_PREAMBLE.encode("utf-8")
+        preamble = "PASS_MODEL_ROUTE: gpt-5.6-sol/high\nawait-successor-activation\n".encode()
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
             for name, capsule in capsules:
                 with self.subTest(name=name):
                     path, capsule_bytes = self.write_capsule(root, name, capsule)
-                    built_bytes = build_same_thread_prompt_bytes(route_dispatch_id, path)
+                    built_bytes = build_same_thread_prompt_bytes(
+                        route_dispatch_id, path, action_class="bounded_engineering"
+                    )
                     self.assertEqual(built_bytes, marker + preamble + capsule_bytes)
                     self.assertEqual(
-                        build_same_thread_prompt(route_dispatch_id, path),
+                        build_same_thread_prompt(
+                            route_dispatch_id, path, action_class="bounded_engineering"
+                        ),
                         (marker + preamble + capsule_bytes).decode("utf-8"),
                     )
-                    validate_same_thread_prompt(built_bytes, route_dispatch_id)
+                    validate_same_thread_prompt(
+                        built_bytes, route_dispatch_id, action_class="bounded_engineering"
+                    )
                     self.assertEqual(
                         built_bytes.count(ROUTE_DISPATCH_MARKER.encode("utf-8")), 1
                     )
@@ -189,7 +241,6 @@ class ModelRouteTest(unittest.TestCase):
         routes = (
             ("bounded_engineering", "gpt-5.6-sol/high"),
             ("real_carrier", "gpt-5.6-sol/xhigh"),
-            ("frozen_deterministic", "gpt-5.6-luna/max"),
             ("scientific_decision", "gpt-5.6-sol/max"),
         )
         route_dispatch_id = "DISPATCH-PR8-ROUTE-PREAMBLE-20260810-001"
@@ -223,14 +274,41 @@ class ModelRouteTest(unittest.TestCase):
             "not first": f"capsule body\n{marker}\n",
             "missing preamble": f"{marker}\ncapsule body",
             "wrong preamble": (
-                f"{marker}\nPASS_MODEL_ROUTE: gpt-5.6-sol/high\n"
+                f"{marker}\nPASS_MODEL_ROUTE: gpt-5.6-sol/xhigh\n"
                 "await-successor-activation\ncapsule body"
             ),
             "legacy": f"{LEGACY_ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n",
         }
         for name, prompt in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
-                validate_same_thread_prompt(prompt, route_dispatch_id)
+                validate_same_thread_prompt(
+                    prompt, route_dispatch_id, action_class="bounded_engineering"
+                )
+
+    def test_public_same_thread_helpers_require_sol_action_class(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            capsule = Path(raw) / "capsule.txt"
+            capsule.write_text("capsule body\n", encoding="utf-8")
+            with self.assertRaises(TypeError):
+                build_same_thread_prompt_bytes("route-1", capsule)  # type: ignore[call-arg]
+            with self.assertRaises(TypeError):
+                build_same_thread_prompt("route-1", capsule)  # type: ignore[call-arg]
+            with self.assertRaises(TypeError):
+                validate_same_thread_prompt("prompt", "route-1")  # type: ignore[call-arg]
+            for helper in (
+                build_same_thread_prompt_bytes,
+                build_same_thread_prompt,
+            ):
+                with self.subTest(helper=helper.__name__), self.assertRaisesRegex(
+                    ValueError, "same-thread prompt"
+                ):
+                    helper(
+                        "route-1", capsule, action_class="frozen_deterministic"
+                    )
+            with self.assertRaisesRegex(ValueError, "same-thread prompt"):
+                validate_same_thread_prompt(
+                    "prompt", "route-1", action_class="frozen_deterministic"
+                )
 
     def test_same_thread_prompt_builder_rejects_invalid_ids_and_capsules(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
@@ -246,7 +324,9 @@ class ModelRouteTest(unittest.TestCase):
                 with self.subTest(route_dispatch_id=route_dispatch_id), self.assertRaises(
                     ValueError
                 ):
-                    build_same_thread_prompt(route_dispatch_id, path)
+                    build_same_thread_prompt(
+                        route_dispatch_id, path, action_class="bounded_engineering"
+                    )
 
             for name, content in (
                 ("marker-right.txt", "body LUNA_ROUTE_DISPATCH_ID=luna-route-1\n"),
@@ -256,27 +336,37 @@ class ModelRouteTest(unittest.TestCase):
                 with self.subTest(name=name), self.assertRaisesRegex(
                     ValueError, "route dispatch marker"
                 ):
-                    build_same_thread_prompt("luna-route-1", marker_path)
+                    build_same_thread_prompt(
+                        "luna-route-1", marker_path, action_class="bounded_engineering"
+                    )
 
             directory = root / "capsule-directory"
             directory.mkdir()
             with self.assertRaisesRegex(ValueError, "regular"):
-                build_same_thread_prompt("luna-route-1", directory)
+                build_same_thread_prompt(
+                    "luna-route-1", directory, action_class="bounded_engineering"
+                )
 
             symlink = root / "capsule-link"
             symlink.symlink_to(path)
             with self.assertRaisesRegex(ValueError, "regular"):
-                build_same_thread_prompt("luna-route-1", symlink)
+                build_same_thread_prompt(
+                    "luna-route-1", symlink, action_class="bounded_engineering"
+                )
 
             invalid_utf8, _ = self.write_capsule(root, "invalid-utf8", b"\xff\xfe")
             with self.assertRaisesRegex(ValueError, "UTF-8"):
-                build_same_thread_prompt("luna-route-1", invalid_utf8)
+                build_same_thread_prompt(
+                    "luna-route-1", invalid_utf8, action_class="bounded_engineering"
+                )
 
             unreadable, _ = self.write_capsule(root, "unreadable", b"body")
             unreadable.chmod(0)
             try:
                 with self.assertRaisesRegex(ValueError, "readable"):
-                    build_same_thread_prompt("luna-route-1", unreadable)
+                    build_same_thread_prompt(
+                        "luna-route-1", unreadable, action_class="bounded_engineering"
+                    )
             finally:
                 unreadable.chmod(0o600)
 
@@ -287,11 +377,13 @@ class ModelRouteTest(unittest.TestCase):
             root = Path(raw)
             path, _ = self.write_capsule(root, "capsule.txt", capsule_bytes)
             before = path.read_bytes()
-            result = subprocess.run(
+            luna_result = subprocess.run(
                 [
                     sys.executable,
                     str(VALIDATOR),
                     "--build-same-thread-prompt",
+                    "--action-class",
+                    "frozen_deterministic",
                     "--route-dispatch-id",
                     route_dispatch_id,
                     "--capsule-path",
@@ -300,13 +392,8 @@ class ModelRouteTest(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr.decode())
-            expected = (
-                f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n"
-                f"{SAME_THREAD_PROMPT_PREAMBLE}"
-            ).encode()
-            self.assertEqual(result.stdout, expected + capsule_bytes)
-            self.assertEqual(result.stderr, b"")
+            self.assertEqual(luna_result.returncode, 1)
+            self.assertIn("same-thread prompt", luna_result.stdout.decode())
             self.assertEqual(path.read_bytes(), before)
             sol_result = subprocess.run(
                 [
@@ -338,10 +425,68 @@ class ModelRouteTest(unittest.TestCase):
             self.assertEqual(sol_result.stderr, b"")
             self.assertEqual(path.read_bytes(), before)
 
+    def test_cli_build_route_prompt_replays_exact_bytes_for_both_modes(self) -> None:
+        route_dispatch_id = "XAR-PR9-CANONICAL-BUILD-20260810-001"
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            path, _ = self.write_capsule(root, "capsule.txt", b"child capsule\n")
+            cases = (
+                ("same_thread", "bounded_engineering"),
+                ("named_child", "frozen_deterministic"),
+            )
+            for route_mode, action_class in cases:
+                with self.subTest(route_mode=route_mode):
+                    expected = _build_same_thread_prompt_bytes(
+                        route_dispatch_id, path, action_class=action_class
+                    )
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(VALIDATOR),
+                            "--build-route-prompt",
+                            "--route-mode",
+                            route_mode,
+                            "--action-class",
+                            action_class,
+                            "--route-dispatch-id",
+                            route_dispatch_id,
+                            "--capsule-path",
+                            str(path),
+                        ],
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr.decode())
+                    self.assertEqual(result.stdout, expected)
+                    self.assertEqual(result.stderr, b"")
+            missing_action = subprocess.run(
+                [
+                    sys.executable,
+                    str(VALIDATOR),
+                    "--build-route-prompt",
+                    "--route-mode",
+                    "named_child",
+                    "--route-dispatch-id",
+                    route_dispatch_id,
+                    "--capsule-path",
+                    str(path),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(missing_action.returncode, 1)
+            self.assertIn("action-class is required", missing_action.stdout)
+
     def test_frozen_deterministic_route_requires_luna_max(self) -> None:
         self.assertEqual(
             validate_receipt(
-                self.luna_receipt(), expected_parent_thread_id="parent-1"
+                self.luna_receipt(),
+                expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_turn_id="turn-1",
+                expected_first_turn_id="turn-1",
+                expected_route_dispatch_id="luna-route-1",
             ),
             ("gpt-5.6-luna", "max"),
         )
@@ -349,15 +494,45 @@ class ModelRouteTest(unittest.TestCase):
             validate_receipt(
                 self.luna_receipt(model="gpt-5.6-sol", effort="xhigh"),
                 expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_turn_id="turn-1",
+                expected_first_turn_id="turn-1",
+                expected_route_dispatch_id="luna-route-1",
             )
 
     def test_real_carrier_requires_sol_xhigh(self) -> None:
         self.assertEqual(
-            validate_receipt(RouteReceipt("real_carrier", "gpt-5.6-sol", "xhigh")),
+            validate_receipt(
+                RouteReceipt(
+                    "real_carrier",
+                    "gpt-5.6-sol",
+                    "xhigh",
+                    receipt_source="durable_rollout",
+                    route_mode="same_thread",
+                    thread_id="thread-1",
+                    turn_id="turn-1",
+                    route_dispatch_id="dispatch-1",
+                ),
+                expected_thread_id="thread-1",
+                expected_route_dispatch_id="dispatch-1",
+            ),
             ("gpt-5.6-sol", "xhigh"),
         )
         with self.assertRaisesRegex(ValueError, "runtime route mismatch"):
-            validate_receipt(RouteReceipt("real_carrier", "gpt-5.6-luna", "max"))
+            validate_receipt(
+                RouteReceipt(
+                    "real_carrier",
+                    "gpt-5.6-luna",
+                    "max",
+                    receipt_source="durable_rollout",
+                    route_mode="same_thread",
+                    thread_id="thread-1",
+                    turn_id="turn-1",
+                    route_dispatch_id="dispatch-1",
+                ),
+                expected_thread_id="thread-1",
+                expected_route_dispatch_id="dispatch-1",
+            )
 
     def test_decision_ambiguity_forces_sol_max(self) -> None:
         self.assertEqual(
@@ -367,7 +542,14 @@ class ModelRouteTest(unittest.TestCase):
                     "gpt-5.6-sol",
                     "max",
                     decision_ambiguity=True,
-                )
+                    receipt_source="durable_rollout",
+                    route_mode="same_thread",
+                    thread_id="thread-1",
+                    turn_id="turn-1",
+                    route_dispatch_id="dispatch-1",
+                ),
+                expected_thread_id="thread-1",
+                expected_route_dispatch_id="dispatch-1",
             ),
             ("gpt-5.6-sol", "max"),
         )
@@ -378,7 +560,14 @@ class ModelRouteTest(unittest.TestCase):
             self.luna_receipt(context_eligible=False),
         ):
             with self.subTest(receipt=receipt), self.assertRaises(ValueError):
-                validate_receipt(receipt, expected_parent_thread_id="parent-1")
+                validate_receipt(
+                    receipt,
+                    expected_parent_thread_id="parent-1",
+                    expected_thread_id="child-1",
+                    expected_turn_id="turn-1",
+                    expected_first_turn_id="turn-1",
+                    expected_route_dispatch_id="luna-route-1",
+                )
 
     def test_luna_requires_named_durable_role_parent_and_supported_version(self) -> None:
         cases = (
@@ -392,26 +581,126 @@ class ModelRouteTest(unittest.TestCase):
         )
         for receipt, message in cases:
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
-                validate_receipt(receipt, expected_parent_thread_id="parent-1")
+                validate_receipt(
+                    receipt,
+                    expected_parent_thread_id="parent-1",
+                    expected_thread_id="child-1",
+                    expected_turn_id="turn-1",
+                    expected_first_turn_id="turn-1",
+                    expected_route_dispatch_id="luna-route-1",
+                )
+
+    def test_named_child_requires_exact_expected_current_and_first_turns(self) -> None:
+        with self.assertRaisesRegex(ValueError, "expected current turn"):
+            validate_receipt(
+                self.luna_receipt(),
+                expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_first_turn_id="turn-1",
+                expected_route_dispatch_id="luna-route-1",
+            )
+        with self.assertRaisesRegex(ValueError, "expected first turn"):
+            validate_receipt(
+                self.luna_receipt(),
+                expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_turn_id="turn-1",
+                expected_route_dispatch_id="luna-route-1",
+            )
+        with self.assertRaisesRegex(ValueError, "turn binding"):
+            validate_receipt(
+                self.luna_receipt(),
+                expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_turn_id="other-turn",
+                expected_first_turn_id="turn-1",
+                expected_route_dispatch_id="luna-route-1",
+            )
 
     def test_luna_named_child_accepts_v2_with_same_identity(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
-            path = self.write_rollout(Path(raw), multi_agent_version="v2")
-            receipt = load_rollout_receipt(
-                path,
-                action_class="frozen_deterministic",
-                context_eligible=True,
-                protected_exposed=False,
-                decision_ambiguity=False,
+            for version in ("v1", "v2"):
+                with self.subTest(version=version):
+                    path = self.write_rollout(
+                        Path(raw), multi_agent_version=version, name=f"{version}.jsonl"
+                    )
+                    receipt = load_rollout_receipt(
+                        path,
+                        action_class="frozen_deterministic",
+                        context_eligible=True,
+                        protected_exposed=False,
+                        decision_ambiguity=False,
+                        expected_parent_thread_id="parent-1",
+                        expected_thread_id="child-1",
+                        expected_turn_id="turn-1",
+                        expected_first_turn_id="turn-1",
+                        expected_route_dispatch_id="named-child-route-1",
+                        capsule_path=Path(raw) / "capsule.txt",
+                    )
+                    self.assertEqual(receipt.multi_agent_version, version)
+                    self.assertEqual(receipt.agent_role, "luna_worker")
+                    self.assertEqual(receipt.model, "gpt-5.6-luna")
+                    self.assertEqual(receipt.effort, "max")
+                    self.assertEqual(
+                        validate_receipt(
+                            receipt,
+                            expected_parent_thread_id="parent-1",
+                            expected_thread_id="child-1",
+                            expected_turn_id="turn-1",
+                            expected_first_turn_id="turn-1",
+                            expected_route_dispatch_id="named-child-route-1",
+                        ),
+                        ("gpt-5.6-luna", "max"),
+                    )
+
+    def test_named_child_binds_child_turn_and_capsule_and_rejects_history_or_truncation(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
+            root = Path(raw)
+            capsule = root / "capsule.txt"
+            capsule.write_bytes(b"capsule body\n")
+            base = self.write_rollout(root, name="base.jsonl")
+            with self.assertRaisesRegex(ValueError, "child binding"):
+                load_rollout_receipt(
+                    base,
+                    action_class="frozen_deterministic",
+                    context_eligible=True,
+                    protected_exposed=False,
+                    decision_ambiguity=False,
+                    expected_parent_thread_id="parent-1",
+                    expected_thread_id="wrong-child",
+                    expected_turn_id="turn-1",
+                    expected_first_turn_id="turn-1",
+                    expected_route_dispatch_id="named-child-route-1",
+                    capsule_path=capsule,
+                )
+
+            truncated = root / "truncated.jsonl"
+            lines = base.read_text(encoding="utf-8").splitlines()
+            response = json.loads(lines[-1])
+            response["payload"]["content"][0]["text"] = response["payload"]["content"][0]["text"][:-1]
+            lines[-1] = json.dumps(response)
+            truncated.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                self.load_named_rollout_for_test(truncated, capsule)
+
+            history = root / "history.jsonl"
+            history.write_text(
+                base.read_text(encoding="utf-8")
+                + json.dumps(
+                    {
+                        "type": "turn_context",
+                        "payload": {
+                            "model": "gpt-5.6-luna",
+                            "effort": "max",
+                            "turn_id": "old-turn",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
             )
-            self.assertEqual(receipt.multi_agent_version, "v2")
-            self.assertEqual(receipt.agent_role, "luna_worker")
-            self.assertEqual(receipt.model, "gpt-5.6-luna")
-            self.assertEqual(receipt.effort, "max")
-            self.assertEqual(
-                validate_receipt(receipt, expected_parent_thread_id="parent-1"),
-                ("gpt-5.6-luna", "max"),
-            )
+            with self.assertRaisesRegex(ValueError, "no-history"):
+                self.load_named_rollout_for_test(history, capsule)
 
     def test_luna_v2_named_child_rejects_wrong_role_model_and_parent(self) -> None:
         cases = (
@@ -426,61 +715,78 @@ class ModelRouteTest(unittest.TestCase):
                     path = self.write_rollout(
                         root, multi_agent_version="v2", **overrides
                     )
-                    receipt = load_rollout_receipt(
-                        path,
-                        action_class="frozen_deterministic",
-                        context_eligible=True,
-                        protected_exposed=False,
-                        decision_ambiguity=False,
-                    )
-                    with self.assertRaisesRegex(ValueError, message):
-                        validate_receipt(
-                            receipt, expected_parent_thread_id="parent-1"
+                    if message != "runtime route mismatch":
+                        with self.assertRaisesRegex(ValueError, message):
+                            load_rollout_receipt(
+                                path,
+                                action_class="frozen_deterministic",
+                                context_eligible=True,
+                                protected_exposed=False,
+                                decision_ambiguity=False,
+                                expected_parent_thread_id="parent-1",
+                                expected_thread_id="child-1",
+                                expected_turn_id="turn-1",
+                                expected_first_turn_id="turn-1",
+                                expected_route_dispatch_id="named-child-route-1",
+                                capsule_path=root / "capsule.txt",
+                            )
+                    else:
+                        receipt = load_rollout_receipt(
+                            path,
+                            action_class="frozen_deterministic",
+                            context_eligible=True,
+                            protected_exposed=False,
+                            decision_ambiguity=False,
+                            expected_parent_thread_id="parent-1",
+                            expected_thread_id="child-1",
+                            expected_turn_id="turn-1",
+                            expected_first_turn_id="turn-1",
+                            expected_route_dispatch_id="named-child-route-1",
+                            capsule_path=root / "capsule.txt",
                         )
+                        with self.assertRaisesRegex(ValueError, message):
+                            validate_receipt(
+                                receipt,
+                                    expected_parent_thread_id="parent-1",
+                                    expected_thread_id="child-1",
+                                    expected_turn_id="turn-1",
+                                    expected_first_turn_id="turn-1",
+                                    expected_route_dispatch_id="named-child-route-1",
+                            )
 
-    def test_same_thread_luna_binds_current_thread_and_exact_dispatch(self) -> None:
+    def test_same_thread_luna_fails_before_effects(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             path = self.write_same_thread_rollout(Path(raw))
-            receipt = load_rollout_receipt(
-                path,
-                action_class="frozen_deterministic",
-                context_eligible=True,
-                protected_exposed=False,
-                decision_ambiguity=False,
-                route_mode="same_thread",
-                expected_route_dispatch_id="luna-route-1",
-                capsule_path=Path(raw) / "capsule.txt",
-            )
-            self.assertEqual(
-                validate_receipt(
-                    receipt,
-                    expected_thread_id="executor-1",
+            with self.assertRaisesRegex(ValueError, "before effects"):
+                load_rollout_receipt(
+                    path,
+                    action_class="frozen_deterministic",
+                    context_eligible=True,
+                    protected_exposed=False,
+                    decision_ambiguity=False,
+                    route_mode="same_thread",
                     expected_route_dispatch_id="luna-route-1",
-                ),
-                ("gpt-5.6-luna", "max"),
-            )
-            self.assertEqual(receipt.thread_id, "executor-1")
-            self.assertEqual(receipt.turn_id, "turn-1")
-            self.assertIsNone(receipt.agent_role)
+                    capsule_path=Path(raw) / "capsule.txt",
+                )
 
-    def test_same_thread_luna_accepts_marker_before_context_in_same_turn(self) -> None:
+    def test_same_thread_luna_marker_before_context_fails_before_effects(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             path = self.write_same_thread_rollout(
                 Path(raw), marker_before_context=True
             )
-            receipt = load_rollout_receipt(
-                path,
-                action_class="frozen_deterministic",
-                context_eligible=True,
-                protected_exposed=False,
-                decision_ambiguity=False,
-                route_mode="same_thread",
-                expected_route_dispatch_id="luna-route-1",
-                capsule_path=Path(raw) / "capsule.txt",
-            )
-            self.assertEqual(receipt.turn_id, "turn-1")
+            with self.assertRaisesRegex(ValueError, "before effects"):
+                load_rollout_receipt(
+                    path,
+                    action_class="frozen_deterministic",
+                    context_eligible=True,
+                    protected_exposed=False,
+                    decision_ambiguity=False,
+                    route_mode="same_thread",
+                    expected_route_dispatch_id="luna-route-1",
+                    capsule_path=Path(raw) / "capsule.txt",
+                )
 
-    def test_same_thread_luna_accepts_codex_delegation_envelope(self) -> None:
+    def test_same_thread_sol_accepts_codex_delegation_envelope(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
             route_dispatch_id = "XAR-PR3-LIVE-CANARY-20260809-001"
@@ -489,21 +795,26 @@ class ModelRouteTest(unittest.TestCase):
             path = self.write_same_thread_rollout(
                 root,
                 route_dispatch_id=route_dispatch_id,
+                action_class="bounded_engineering",
+                model="gpt-5.6-sol",
+                effort="high",
                 marker_text=self.observed_codex_delegation_envelope(
                     build_same_thread_prompt_bytes(
                         route_dispatch_id,
                         capsule_path,
+                        action_class="bounded_engineering",
                     ).decode("utf-8")
                 ),
             )
             receipt = load_rollout_receipt(
                 path,
-                action_class="frozen_deterministic",
-                context_eligible=True,
+                action_class="bounded_engineering",
+                context_eligible=False,
                 protected_exposed=False,
                 decision_ambiguity=False,
                 route_mode="same_thread",
                 expected_route_dispatch_id=route_dispatch_id,
+                expected_source_thread_id="019fdcaf-75b6-7603-9519-31f49789ee29",
                 capsule_path=capsule_path,
             )
             self.assertEqual(receipt.route_dispatch_id, route_dispatch_id)
@@ -514,7 +825,9 @@ class ModelRouteTest(unittest.TestCase):
             root = Path(raw)
             capsule = root / "capsule.txt"
             capsule.write_bytes(b"capsule body\n")
-            canonical = build_same_thread_prompt_bytes(route_dispatch_id, capsule)
+            canonical = build_same_thread_prompt_bytes(
+                route_dispatch_id, capsule, action_class="bounded_engineering"
+            )
             envelope = self.observed_codex_delegation_envelope(canonical.decode())
 
             def assert_rejected(body: str, name: str) -> None:
@@ -529,19 +842,20 @@ class ModelRouteTest(unittest.TestCase):
                 ):
                     load_rollout_receipt(
                         rollout,
-                        action_class="frozen_deterministic",
-                        context_eligible=True,
+                        action_class="bounded_engineering",
+                        context_eligible=False,
                         protected_exposed=False,
                         decision_ambiguity=False,
                         route_mode="same_thread",
                         expected_route_dispatch_id=route_dispatch_id,
+                        expected_source_thread_id="019fdcaf-75b6-7603-9519-31f49789ee29",
                         capsule_path=capsule,
                     )
 
             wrong_capsule = root / "wrong-capsule.txt"
             wrong_capsule.write_bytes(b"different body\n")
             wrong_capsule_prompt = build_same_thread_prompt_bytes(
-                route_dispatch_id, wrong_capsule
+                route_dispatch_id, wrong_capsule, action_class="bounded_engineering"
             ).decode()
             assert_rejected(wrong_capsule_prompt, "wrong-capsule.jsonl")
             assert_rejected(
@@ -549,8 +863,8 @@ class ModelRouteTest(unittest.TestCase):
             )
             assert_rejected(
                 canonical.decode().replace(
-                    "PASS_MODEL_ROUTE: gpt-5.6-luna/max",
                     "PASS_MODEL_ROUTE: gpt-5.6-sol/high",
+                    "PASS_MODEL_ROUTE: gpt-5.6-sol/xhigh",
                 ),
                 "wrong-preamble.jsonl",
             )
@@ -581,6 +895,30 @@ class ModelRouteTest(unittest.TestCase):
                 ),
                 "envelope-extra-legacy.jsonl",
             )
+            assert_rejected(
+                envelope.replace(
+                    "<source_thread_id>",
+                    "<instruction>ignored</instruction><source_thread_id>",
+                ),
+                "envelope-instruction.jsonl",
+            )
+            assert_rejected(
+                envelope.replace(
+                    "<source_thread_id>",
+                    "<unknown>ignored</unknown><source_thread_id>",
+                ),
+                "envelope-unknown-tag.jsonl",
+            )
+            assert_rejected(
+                envelope.replace("</input>", "</input><input>second</input>"),
+                "envelope-second-input.jsonl",
+            )
+            assert_rejected(
+                envelope.replace(
+                    "019fdcaf-75b6-7603-9519-31f49789ee29", "wrong-source"
+                ),
+                "envelope-wrong-source.jsonl",
+            )
 
     def test_historical_legacy_marker_never_authorizes_effect(self) -> None:
         route_dispatch_id = "legacy-audit-1"
@@ -601,13 +939,12 @@ class ModelRouteTest(unittest.TestCase):
             )
         )
 
-    def test_named_child_receipt_forbids_capsule_path(self) -> None:
+    def test_named_child_receipt_accepts_capsule_path(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
             rollout = self.write_rollout(root)
             capsule = root / "capsule.txt"
-            capsule.write_text("body\n", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "forbidden"):
+            self.assertEqual(
                 load_rollout_receipt(
                     rollout,
                     action_class="frozen_deterministic",
@@ -615,8 +952,15 @@ class ModelRouteTest(unittest.TestCase):
                     protected_exposed=False,
                     decision_ambiguity=False,
                     route_mode="named_child",
+                    expected_parent_thread_id="parent-1",
+                    expected_thread_id="child-1",
+                    expected_turn_id="turn-1",
+                    expected_first_turn_id="turn-1",
+                    expected_route_dispatch_id="named-child-route-1",
                     capsule_path=capsule,
-                )
+                ).route_dispatch_id,
+                "named-child-route-1",
+            )
 
     def test_same_thread_sol_accepts_generic_marker_and_rejects_legacy_marker(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
@@ -668,7 +1012,7 @@ class ModelRouteTest(unittest.TestCase):
                     expected_route_dispatch_id=route_dispatch_id,
                     capsule_path=root / "capsule.txt",
                 )
-            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+            with self.assertRaisesRegex(ValueError, "before effects"):
                 load_rollout_receipt(
                     legacy,
                     action_class="frozen_deterministic",
@@ -768,13 +1112,13 @@ class ModelRouteTest(unittest.TestCase):
                 ("gpt-5.6-sol", "max"),
             )
 
-    def test_same_thread_luna_rejects_arbitrary_prose_prefix(self) -> None:
+    def test_same_thread_luna_rejects_arbitrary_prose_prefix_before_effects(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             path = self.write_same_thread_rollout(
                 Path(raw),
                 marker_text="Prompt: LUNA_ROUTE_DISPATCH_ID=luna-route-1",
             )
-            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+            with self.assertRaisesRegex(ValueError, "before effects"):
                 load_rollout_receipt(
                     path,
                     action_class="frozen_deterministic",
@@ -786,27 +1130,13 @@ class ModelRouteTest(unittest.TestCase):
                     capsule_path=Path(raw) / "capsule.txt",
                 )
 
-    def test_same_thread_luna_rejects_wrong_thread_and_dispatch(self) -> None:
-        receipt = self.luna_receipt(
-            route_mode="same_thread",
-            agent_role=None,
-            parent_thread_id=None,
-            multi_agent_version="v2",
-            thread_id="executor-1",
-            turn_id="turn-1",
-            route_dispatch_id="luna-route-1",
-        )
-        with self.assertRaisesRegex(ValueError, "thread binding mismatch"):
+    def test_same_thread_luna_wrong_thread_and_dispatch_fail_before_effects(self) -> None:
+        receipt = self.luna_receipt(route_mode="same_thread")
+        with self.assertRaisesRegex(ValueError, "before effects"):
             validate_receipt(
                 receipt,
                 expected_thread_id="executor-2",
                 expected_route_dispatch_id="luna-route-1",
-            )
-        with self.assertRaisesRegex(ValueError, "route dispatch mismatch"):
-            validate_receipt(
-                receipt,
-                expected_thread_id="executor-1",
-                expected_route_dispatch_id="luna-route-2",
             )
 
     def test_same_thread_luna_rejects_stale_or_duplicate_marker(self) -> None:
@@ -839,7 +1169,7 @@ class ModelRouteTest(unittest.TestCase):
                 ),
             ):
                 with self.subTest(path=path), self.assertRaisesRegex(
-                    ValueError, "missing or ambiguous"
+                    ValueError, "before effects"
                 ):
                     load_rollout_receipt(
                         path,
@@ -873,11 +1203,24 @@ class ModelRouteTest(unittest.TestCase):
                 context_eligible=True,
                 protected_exposed=False,
                 decision_ambiguity=False,
+                expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_turn_id="turn-1",
+                expected_first_turn_id="turn-1",
+                expected_route_dispatch_id="named-child-route-1",
+                capsule_path=Path(raw) / "capsule.txt",
             )
             self.assertEqual(receipt.agent_role, "luna_worker")
             self.assertEqual(receipt.model, "gpt-5.6-luna")
             self.assertEqual(
-                validate_receipt(receipt, expected_parent_thread_id="parent-1"),
+                validate_receipt(
+                    receipt,
+                    expected_parent_thread_id="parent-1",
+                    expected_thread_id="child-1",
+                    expected_turn_id="turn-1",
+                    expected_first_turn_id="turn-1",
+                    expected_route_dispatch_id="named-child-route-1",
+                ),
                 ("gpt-5.6-luna", "max"),
             )
 
@@ -914,6 +1257,16 @@ class ModelRouteTest(unittest.TestCase):
                     str(path),
                     "--expected-parent-thread-id",
                     "parent-1",
+                    "--expected-thread-id",
+                    "child-1",
+                    "--expected-turn-id",
+                    "turn-1",
+                    "--expected-first-turn-id",
+                    "turn-1",
+                    "--expected-route-dispatch-id",
+                    "named-child-route-1",
+                    "--capsule-path",
+                    str(Path(raw) / "capsule.txt"),
                     "--context-eligible",
                 ],
                 text=True,
@@ -924,7 +1277,7 @@ class ModelRouteTest(unittest.TestCase):
             self.assertIn("PASS_MODEL_ROUTE: gpt-5.6-luna/max", result.stdout)
             self.assertIn("agent_role=luna_worker", result.stdout)
 
-    def test_cli_accepts_exact_same_thread_luna_rollout(self) -> None:
+    def test_cli_rejects_same_thread_frozen_luna_before_effects(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
             path = self.write_same_thread_rollout(root)
@@ -950,20 +1303,24 @@ class ModelRouteTest(unittest.TestCase):
                 capture_output=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("PASS_MODEL_ROUTE: gpt-5.6-luna/max", result.stdout)
-            self.assertIn("route_mode=same_thread", result.stdout)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("before effects", result.stdout)
 
     def test_cli_same_thread_rollout_requires_capsule(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as raw:
             root = Path(raw)
-            path = self.write_same_thread_rollout(root)
+            path = self.write_same_thread_rollout(
+                root,
+                action_class="bounded_engineering",
+                model="gpt-5.6-sol",
+                effort="high",
+            )
             result = subprocess.run(
                 [
                     sys.executable,
                     str(VALIDATOR),
                     "--action-class",
-                    "frozen_deterministic",
+                    "bounded_engineering",
                     "--rollout-path",
                     str(path),
                     "--route-mode",

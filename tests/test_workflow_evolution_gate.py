@@ -266,7 +266,9 @@ class TokenDetectorTest(unittest.TestCase):
             root = Path(raw)
             capsule = root / "capsule.txt"
             capsule.write_bytes(b"P59/SMI capsule bytes\r\n")
-            built = build_same_thread_prompt_bytes(route_dispatch_id, capsule)
+            built = build_same_thread_prompt_bytes(
+                route_dispatch_id, capsule, action_class="bounded_engineering"
+            )
             controller_prompt = {
                 "type": "response_item",
                 "payload": {

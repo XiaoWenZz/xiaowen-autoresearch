@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import multiprocessing
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -1637,6 +1638,64 @@ class ControllerControlStateTest(unittest.TestCase):
                 )
             self.assertEqual(read_state(path), first)
 
+    def test_executor_final_writable_draft_is_preserved_during_recovery_cas(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            draft = directory / "draft-terminal.json"
+            draft_bytes = b"unfinished draft bytes\n"
+            draft.write_bytes(draft_bytes)
+            draft.chmod(0o640)
+            state_path = directory / "controller-state.json"
+            state = base_state(str(draft))
+            state["objectives"][0]["owner_state"] = "ACTIVE"
+            state["managed_roles"][0].update(
+                {"state": "ACTIVE", "title": "Executor · Candidate One · ACTIVE"}
+            )
+            state["remote_jobs"] = []
+            write_state(state_path, state, -1)
+            update = {
+                "thread_id": "worker-1",
+                "expected_cursor": None,
+                "new_cursor": "cursor:draft-final",
+                "observation_kind": "NON_TERMINAL",
+                "source_turn_state": "FINAL",
+            }
+            args = type(
+                "Args",
+                (),
+                {
+                    "state": str(state_path),
+                    "expected_revision": 0,
+                    "updates_json": json.dumps([update]),
+                },
+            )()
+            before_stat = draft.stat()
+            output = io.StringIO()
+            with redirect_stdout(output):
+                cmd_advance_cursors(args)
+            first = read_state(state_path)
+            self.assertEqual(json.loads(output.getvalue())["status"], "RECOVERY_REQUIRED")
+            self.assertEqual(first["managed_roles"][0]["cursor"], None)
+            self.assertEqual(draft.read_bytes(), draft_bytes)
+            after_stat = draft.stat()
+            self.assertEqual(after_stat.st_mode, before_stat.st_mode)
+            self.assertEqual(after_stat.st_nlink, 1)
+            self.assertEqual(
+                first["objectives"][0]["completion_binding"]["terminal_path"],
+                str(draft),
+            )
+            self.assertTrue(
+                first["objectives"][0]["next_action"].startswith(
+                    "SAME_OWNER_TERMINAL_RECOVERY:v1:worker-1:cursor:draft-final:"
+                )
+            )
+            replay = io.StringIO()
+            args.expected_revision = 0
+            with redirect_stdout(replay):
+                cmd_advance_cursors(args)
+            self.assertEqual(json.loads(replay.getvalue())["status"], "RECOVERY_REQUIRED")
+            self.assertEqual(read_state(state_path), first)
+
     def test_executor_final_recovery_batch_returns_every_same_owner_recovery(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
             path = Path(tmp) / "controller-state.json"
@@ -1845,6 +1904,90 @@ class ControllerControlStateTest(unittest.TestCase):
                     )()
                 )
             self.assertEqual(read_state(malformed_path)["revision"], 0)
+
+    def test_executor_final_unsafe_or_sealed_malformed_paths_never_downgrade_to_draft(self) -> None:
+        with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:
+            directory = Path(tmp)
+            update = {
+                "thread_id": "worker-1",
+                "expected_cursor": None,
+                "new_cursor": "cursor:unsafe-final",
+                "observation_kind": "NON_TERMINAL",
+                "source_turn_state": "FINAL",
+            }
+
+            def invoke(state_path: Path) -> None:
+                cmd_advance_cursors(
+                    type(
+                        "Args",
+                        (),
+                        {
+                            "state": str(state_path),
+                            "expected_revision": 0,
+                            "updates_json": json.dumps([update]),
+                        },
+                    )()
+                )
+
+            target = directory / "target.json"
+            target.write_bytes(b"draft target\n")
+            symlink = directory / "terminal-symlink.json"
+            symlink.symlink_to(target)
+            fifo = directory / "terminal-fifo.json"
+            os.mkfifo(fifo)
+            hard_target = directory / "hard-target.json"
+            hard_target.write_bytes(canonical_bytes({"not": "sealed"}))
+            hardlink = directory / "terminal-hardlink.json"
+            os.link(hard_target, hardlink)
+
+            try:
+                for index, terminal_path in enumerate((symlink, fifo, hardlink)):
+                    with self.subTest(terminal_path=terminal_path):
+                        state_path = directory / f"unsafe-{index}.json"
+                        state = base_state(str(terminal_path))
+                        state["objectives"][0]["owner_state"] = "ACTIVE"
+                        state["managed_roles"][0].update(
+                            {"state": "ACTIVE", "title": "Executor · Candidate One · ACTIVE"}
+                        )
+                        state["remote_jobs"] = []
+                        write_state(state_path, state, -1)
+                        with self.assertRaises(StateError):
+                            invoke(state_path)
+                        self.assertEqual(read_state(state_path)["revision"], 0)
+
+                malformed = directory / "sealed-malformed.json"
+                malformed.write_bytes(
+                    canonical_bytes(
+                        {
+                            "completion_binding": completion_binding(
+                                str(malformed), "wrong-binding"
+                            ),
+                            "startup_chain_authority": None,
+                            "executor_continuation_phase": "NONE",
+                        }
+                    )
+                )
+                malformed.chmod(0o444)
+                state_path = directory / "sealed-malformed-state.json"
+                state = base_state(str(malformed))
+                state["objectives"][0]["owner_state"] = "ACTIVE"
+                state["managed_roles"][0].update(
+                    {"state": "ACTIVE", "title": "Executor · Candidate One · ACTIVE"}
+                )
+                state["remote_jobs"] = []
+                write_state(state_path, state, -1)
+                with self.assertRaisesRegex(StateError, "binding|terminal"):
+                    invoke(state_path)
+                self.assertEqual(read_state(state_path)["revision"], 0)
+            finally:
+                malformed = directory / "sealed-malformed.json"
+                if malformed.exists() or malformed.is_symlink():
+                    malformed.chmod(0o644)
+                fifo.unlink(missing_ok=True)
+                symlink.unlink(missing_ok=True)
+                hardlink.unlink(missing_ok=True)
+                hard_target.unlink(missing_ok=True)
+                target.unlink(missing_ok=True)
 
     def test_executor_final_recovery_does_not_bypass_matching_pending_absorption(self) -> None:
         with tempfile.TemporaryDirectory(dir="/private/tmp") as tmp:

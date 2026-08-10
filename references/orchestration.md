@@ -597,38 +597,36 @@ recovery, an isolated context, or an auditable evidence trail across turns.
 At each bounded runtime dispatch or continuation boundary, derive model/effort from
 the remaining work segment and visible context, never the umbrella candidate, role
 or predecessor. Pass both explicitly for Sol routes; omission or inheritance from
-the predecessor fails admission. A role name never selects effort by itself. After
-diagnosis freezes deterministic repair/tests, route the next safe turn to Luna; do
-not interrupt authentication UI/PTY or a real carrier. Prefer named
-`agent_type=luna_worker` with a no-history fork; receipts may report
-`multi_agent_version=v1` or `v2`. A full-history fork inherits the parent agent
-type, and `task_name` alone does not load the custom profile. If only an
-existing-thread model override is exposed, the Sol owner may dispatch one
-contiguous same-thread route turn. Its complete capsule has exactly one neutral
-`MODEL_ROUTE_DISPATCH_ID=<id>` line; a fresh `LUNA_ROUTE_DISPATCH_ID` is never a
-new prompt or effect authorization. Keep the old marker only for historical
-diagnostics of immutable receipts; it never yields `PASS_MODEL_ROUTE` or a new
-Sol route.
-Build the prompt with the existing canonical `scripts/validate_model_route.py`
-builder CLI `--build-same-thread-prompt --route-dispatch-id <id> --capsule-path
-<path>` using the existing capsule (add `--action-class` for Sol). The builder
-emits the matching `PASS_MODEL_ROUTE` and `await-successor-activation` preamble;
-send its stdout verbatim only after the validator confirms exactly one marker.
-Missing, duplicate, hidden or legacy markers fail before delivery. The builder
-capsule and receipt capsule must be the same exact file. Before the action's
-first write/remote launch/protected read, run this complete same-thread effect
-receipt command (the `frozen_deterministic` route must include
-`--context-eligible`) against durable rollout metadata:
+the predecessor fails admission. A role name never selects effort by itself. Keep
+one continuous Sol owner for scientific/real-carrier work. After diagnosis freezes
+one deterministic edit/test surface, that Sol owner may invoke at most one short,
+no-history named `agent_type=luna_worker` at Luna/max; same-thread Luna is forbidden.
+The child returns only diff and validation evidence. It cannot commit, deploy, use
+remote/GPU/model/data/protected evidence, interpret science, change authority or
+seal a terminal. Sol reruns acceptance and retains objective, budget, effects and
+the sole terminal. Do not interrupt authentication UI/PTY or a real carrier.
 
-```text
-python3 scripts/validate_model_route.py --action-class frozen_deterministic --rollout-path <rollout-path> --route-mode same_thread --expected-thread-id <thread-id> --expected-route-dispatch-id <id> --capsule-path <capsule-path> --context-eligible
-```
+Every route operation requires an explicit action class. Build the exact prompt
+with `scripts/validate_model_route.py --build-route-prompt --route-mode
+<same_thread|named_child> --action-class <class> --route-dispatch-id <id>
+--capsule-path <path>` and send stdout verbatim. Its neutral
+`MODEL_ROUTE_DISPATCH_ID=<id>`, route preamble and capsule bytes are one authority;
+missing, duplicate, hidden or legacy markers fail before delivery.
+`LUNA_ROUTE_DISPATCH_ID` remains read-only historical diagnosis and never
+authorizes an effect. Only raw canonical bytes or the fixed two-field
+`codex_delegation(source_thread_id,input)` envelope are accepted; unknown tags,
+extra instructions/inputs, prefix or suffix fail closed.
 
-Every listed flag is required for this effect receipt; a missing flag, capsule,
-or exact file match fails closed before effects. The check writes no state or
-artifact; named-child validation still binds the exact parent, while same-thread
-validation binds the exact thread/turn/dispatch. A mismatch returns to the Sol
-owner before effects or stops fail-closed.
+Before any effect, validate durable rollout metadata with the same exact capsule.
+Same-thread is Sol-only and binds thread, current turn, dispatch and capsule.
+Named-child is only `frozen_deterministic` Luna/max and binds exact parent, child,
+first/current turn, dispatch and capsule while proving zero prior task history.
+Supply the applicable complete arguments: `--rollout-path`, `--route-mode`,
+`--expected-parent-thread-id` for named child, `--expected-thread-id`,
+`--expected-turn-id`, `--expected-first-turn-id` for named child,
+`--expected-route-dispatch-id`, `--expected-source-thread-id`, `--capsule-path`,
+and `--context-eligible` for Luna. Omission or mismatch fails before effects and
+returns to the Sol owner; the check writes no state or artifact.
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
   material contract/authority/claim choices, causal/statistical/algebraic
@@ -653,20 +651,19 @@ an exact edit surface, deterministic acceptance commands, frozen evidence,
 exposure, budget and stop boundaries, and no decision-critical ambiguity or
 protected-result interpretation.
 
-The Luna receipt authority is durable rollout metadata, never worker prose. A
-named child requires `session_meta` plus current `turn_context` with
-`agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact `parent_thread_id`, and
-`multi_agent_version=v1|v2`. A same-thread fallback requires the exact
-`session_meta.id`, latest `turn_context` model/effort/turn ID, and one matching
-`MODEL_ROUTE_DISPATCH_ID` user message whose durable message metadata carries that
-same turn ID. A fresh `LUNA_ROUTE_DISPATCH_ID` can only be retained for historical
-diagnostics and never authorizes an effect or emits `PASS_MODEL_ROUTE`. Do not
-infer turn ownership from file order:
-queued user input may be serialized before a same-turn context record. Inspect the
-dispatcher before spending a spawn: absence of `agent_type` makes only the named
-profile unavailable, not a separately exposed existing-thread Luna route. Do not
-substitute `task_name` or create a user-visible task merely to change models. A
-failed exact dispatch or durable mismatch is `RULE_TOOLING_DRIFT`.
+Route receipt authority is durable rollout metadata, never worker prose. A named
+Luna child requires `session_meta` plus its sole current `turn_context` with
+`agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact
+`parent_thread_id`, child/first/current turn, `multi_agent_version=v1|v2`, dispatch
+and capsule. The continuous same-thread Sol owner separately binds exact
+`session_meta.id`, current turn, dispatch and capsule. A fresh
+`LUNA_ROUTE_DISPATCH_ID` is historical diagnosis only and never authorizes an
+effect or emits `PASS_MODEL_ROUTE`. Do not infer turn ownership from file order:
+queued user input may be serialized before its turn context. Inspect the dispatcher
+before spawning: absence of `agent_type` means the named Luna profile is unavailable;
+there is no same-thread Luna fallback. Do not substitute `task_name` or create a
+user-visible task merely to change models. A failed exact dispatch or durable
+mismatch is `RULE_TOOLING_DRIFT`.
 
 File or module count alone is not a Sol trigger. Deterministic multi-module
 work remains Luna-eligible when the edit surface, interactions, and acceptance
@@ -694,22 +691,19 @@ Explicit routing cases:
 - inspecting or interpreting protected rerun output -> Audit/Controller, not
   merely `sol/high`.
 
-Do not switch per microstep. One objective may contain at most one contiguous
-pre-release, outcome-blind Luna segment when the oracle and visible context are
-frozen. A named child or same-thread Luna turn is an execution layer under the
-same Sol owner: it preserves objective, scientific role, cumulative budget and
-final terminal, gains no science/authority, and creates no owner handoff,
-lifecycle or state field. It returns evidence to the exact Sol owner for
-real-carrier, evidence-bearing or decision work. For one failure fingerprint it
-may make at most one bounded mechanical repair, then returns the fingerprint,
-evidence and next diagnostic without another Luna loop. An already-running turn
-cannot switch model mid-turn; same-thread fallback is a new explicitly routed
-turn. The user-visible task, generic collaboration override, named-profile
-catalogs and existing-thread route may differ. Luna is unavailable only when
-neither exact route is exposed or durable validation fails. Then use the nearest
-allowed Sol tier, report
-`RULE_TOOLING_DRIFT` and its expected token-cost consequence, and never claim
-Luna executed. After
+Do not switch per microstep. One objective may contain at most one short,
+pre-release, outcome-blind named Luna child when the oracle and visible context are
+frozen. The child is an execution layer under the same Sol owner: it preserves
+objective, scientific role, cumulative budget and final terminal, gains no
+science/authority, and creates no owner handoff, lifecycle or state field. It
+returns evidence to the exact Sol owner for real-carrier, evidence-bearing or
+decision work. For one failure fingerprint it may make at most one bounded
+mechanical repair, then returns the fingerprint, evidence and next diagnostic
+without another Luna loop. An already-running Sol turn never changes model; Luna
+starts only at the explicit named-child handoff. If that exact route is unavailable
+or durable validation fails, use the nearest allowed Sol tier, report
+`RULE_TOOLING_DRIFT` and its expected token-cost consequence, and never claim Luna
+executed. After
 protected-result exposure, never downgrade to Luna. After
 decision-critical reasoning, Luna is allowed only when that decision has been
 frozen into a deterministic oracle which Luna cannot reinterpret. Ambiguity in

@@ -165,16 +165,16 @@ Never default to
   integration, tests/docs from frozen oracles, package/sync/rehash,
   sealed reruns, and repairs.
 
-Choose cheapest capable; ties use Luna; role never selects effort. Safe turns route
-work, not umbrella; after diagnosis freezes repair, Luna next; never interrupt
-auth/PTY/carrier. Freeze edits/acceptance/exposure/budget/stop. Prefer named
-no-history `agent_type=luna_worker`; else one existing-thread model override uses
-`luna/max`. Run `python3
-scripts/validate_model_route.py --build-same-thread-prompt --route-dispatch-id <id>
---capsule-path <frozen-capsule>` (+ `--action-class` for Sol), send stdout verbatim;
-builder emits neutral marker+preamble or fails. Validate named-child parent or same-thread
-thread/turn/dispatch. Old markers load only immutable Luna receipts. Keep
-owner/objective/role/budget/terminal; One repair per fingerprint.
+Choose cheapest capable; ties use Luna; role never selects effort. Route remaining
+work; one continuous Sol owner retains objective/budget/effects/terminal. With edits/
+acceptance/exposure/budget/stop frozen, Sol may invoke one no-history named
+`agent_type=luna_worker`/max child for patch/tests. Returns diff+tests:
+no commit/deploy/authority/terminal or remote/GPU/model/data/protected/science access.
+Sol reruns acceptance. Same-thread is Sol-only; never interrupt auth/PTY/carrier.
+Use `scripts/validate_model_route.py --build-route-prompt` with explicit route
+mode/class/dispatch/capsule; send stdout verbatim. Receipts bind capsule/dispatch
+`--route-dispatch-id <id>`; named parent/child/first or same-thread Sol turn. One
+repair/fingerprint.
 Never route protected/scientific/authority/ambiguous decisions to Luna.
 
 ## 6. Preserve scientific hard controls

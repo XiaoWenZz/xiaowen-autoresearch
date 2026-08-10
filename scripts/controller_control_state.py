@@ -3480,6 +3480,46 @@ def cmd_absorb_nonblocking_advisory(args: argparse.Namespace) -> None:
     )
 
 
+def _validate_existing_executor_terminal_for_cursor(
+    objective: dict[str, Any],
+    terminal_path: Path,
+) -> str:
+    """Classify one prebound path before FINAL cursor recovery.
+
+    A regular single-link path that is still writable is an unsealed draft and
+    must remain byte-for-byte untouched while the existing same-owner recovery
+    CAS is materialized.  Every other existing path goes through the complete
+    immutable-terminal validator; malformed, wrong-bound, or unsafe paths fail
+    closed rather than being downgraded to draft recovery.
+    """
+
+    try:
+        metadata = terminal_path.lstat()
+    except FileNotFoundError:
+        return "missing"
+    except OSError as exc:
+        raise StateError(
+            "FINAL NON_TERMINAL Executor terminal path cannot be checked"
+        ) from exc
+    if (
+        stat.S_ISREG(metadata.st_mode)
+        and metadata.st_nlink == 1
+        and metadata.st_mode & 0o222
+    ):
+        return "draft"
+    binding = objective["completion_binding"]
+    _read_bound_terminal(
+        terminal_path,
+        binding,
+        objective.get("startup_chain_authority"),
+        require_startup_authority_mirror=_requires_startup_authority_mirror(objective),
+        expected_executor_continuation_phase=_objective_executor_continuation_phase(
+            objective
+        ),
+    )
+    return "sealed"
+
+
 def cmd_advance_cursors(args: argparse.Namespace) -> None:
     path = Path(args.state)
     state = read_state(path)
@@ -3571,16 +3611,11 @@ def cmd_advance_cursors(args: argparse.Namespace) -> None:
                     raise StateError(
                         f"{where} FINAL NON_TERMINAL Executor has a matching terminal pending absorption"
                     )
-                terminal_path = objective["completion_binding"]["terminal_path"]
-                try:
-                    Path(terminal_path).lstat()
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    raise StateError(
-                        f"{where} FINAL NON_TERMINAL Executor terminal path cannot be checked"
-                    ) from exc
-                else:
+                terminal_state = _validate_existing_executor_terminal_for_cursor(
+                    objective,
+                    Path(objective["completion_binding"]["terminal_path"]),
+                )
+                if terminal_state == "sealed":
                     raise StateError(
                         f"{where} FINAL NON_TERMINAL Executor has a matching terminal; observe-terminal first"
                     )
