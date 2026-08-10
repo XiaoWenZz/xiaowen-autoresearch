@@ -633,6 +633,8 @@ class SkillRouterTest(unittest.TestCase):
             "same owner's reversible write surface",
             "stay in same-owner pre-release repair",
             "do not emit a terminal, dispatch an Audit, or create a new attempt",
+            "must not be interrupted or terminalized solely by an agent-turn duration",
+            "command-native checkpoint/resume path",
             "Do not make `Lead -> Builder -> Acceptance`",
             "Every cross-thread successor records exactly one structured",
             "Model switch, hash/path/schema/import or package checks",

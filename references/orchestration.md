@@ -760,6 +760,11 @@ For Scout:
    Terminal only when the bounded inventory cannot identify a local fix, an
    external fact is required, or scientific identity, exposure, authority,
    budget, or protected-outcome state would change;
+   an expected-long local subprocess with verified liveness or growing durable
+   output remains `IN_PROGRESS` and must not be interrupted or terminalized
+   solely by an agent-turn duration. Before launch choose a command-native
+   checkpoint/resume path, preserve successful partial artifacts, and resume
+   the exact stage in the same owner after a tool/runtime return;
    this is a parent workflow invariant. Before Executor dispatch, project each
    child `AGENTS.md`, attempt contract, manifest, path policy and action table
    onto it. Preserve the original bytes and unsafe-state prohibitions, but do
