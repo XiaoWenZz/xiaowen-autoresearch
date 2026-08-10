@@ -1239,11 +1239,12 @@ class SkillRouterTest(unittest.TestCase):
         orchestration = flat(ORCHESTRATION)
 
         for phrase in (
-            "Candidate diff is not `RETAIN|COMPLETE`",
-            "live files byte-match it",
-            "Controller gets exact hash/reload",
-            "Skill/AGENTS merge/deploy only after a fixed-SHA PR, local validation and Pro `ACCEPT`",
-            "Pro stays advisory",
+            "`RETAIN|COMPLETE` needs live parity",
+            "Controller hash/reload",
+            "Skill/AGENTS use fixed-SHA PR + checks",
+            "Pro `ACCEPT` is required only for broad, refactor/root-cause or hard-boundary change",
+            "narrow reversible fixes skip it",
+            "Pro remains advisory only",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
@@ -1255,7 +1256,12 @@ class SkillRouterTest(unittest.TestCase):
             "hash the live read-back against the accepted candidate",
             "one non-scientific completion message",
             "Ordinary scientific Pro batches stay nonblocking",
-            "Skill/AGENTS changes require a fixed-SHA PR, local validation and Pro `ACCEPT` before merge/deploy",
+            "Skill/AGENTS changes always require a fixed-SHA PR and local validation",
+            "Require Pro `ACCEPT` before merge/deploy only when a review trigger is present",
+            "refactor, full-scope audit, or root-cause efficiency/ reliability redesign",
+            "Skip Pro only when all are true",
+            "unchanged hard boundaries and authority",
+            "Judge by semantics and blast radius, not line/file count",
             "Pro remains advisory",
             "not a new callback, receipt family, state field, watcher, heartbeat, registry, role, or lifecycle",
         ):
