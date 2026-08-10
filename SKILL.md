@@ -266,9 +266,9 @@ locally; batch only material science, acceptance, exposure, authority,
 irreversible/public/paid/permission or user-facing choices; add no self-trigger,
 science block, telemetry, watcher or lifecycle.
 
-Candidate diff is not `RETAIN|COMPLETE`: live files byte-match it, checks pass,
-and Controller gets exact hash/reload. Skill/AGENTS merge/deploy only after a
-fixed-SHA PR, local validation and Pro `ACCEPT`; Pro stays advisory.
+`RETAIN|COMPLETE` needs live parity, PASS and Controller hash/reload.
+Skill/AGENTS use fixed-SHA PR + checks. Pro `ACCEPT` is required only for broad,
+refactor/root-cause or hard-boundary change; narrow reversible fixes skip it.
 
 Use `R0`--`R3` as shorthand, never a lifecycle; follow
 [problem-space.md](references/problem-space.md). Keep at most one active `R1`

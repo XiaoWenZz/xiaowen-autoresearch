@@ -999,9 +999,18 @@ accepted candidate, and send the existing consumer/Controller one non-scientific
 completion message naming the exact live hash and reload instruction. If any
 step fails, remain active or roll back; never claim deployment from the candidate
 copy. Ordinary scientific Pro batches stay nonblocking. Skill/AGENTS changes
-require a fixed-SHA PR, local validation and Pro `ACCEPT` before merge/deploy;
-Pro remains advisory. This is an owner completion invariant, not a new callback,
-receipt family, state field, watcher, heartbeat, registry, role, or lifecycle.
+always require a fixed-SHA PR and local validation. Require Pro `ACCEPT` before
+merge/deploy only when a review trigger is present: a broad cross-module or
+multi-stage update; refactor, full-scope audit, or root-cause efficiency/
+reliability redesign; a scientific, exposure, authority, role, state, schema,
+lifecycle, terminal, callback, resource, public, paid or permission boundary
+change; nonlocal migration/rollback; unresolved decision-critical uncertainty;
+or an explicit user request. Skip Pro only when all are true: one bounded defect,
+a local reversible diff, unchanged hard boundaries and authority, exact regression
+and rollback, and passing local checks/CI. Judge by semantics and blast radius,
+not line/file count; uncertainty is material. Pro remains advisory. This is an
+owner completion invariant, not a new callback, receipt family, state field,
+watcher, heartbeat, registry, role, or lifecycle.
 
 Scientific projection and operational overlay remain disabled until a
 deny-by-default field map, deterministic full-contract reconstruction, and
