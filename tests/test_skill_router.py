@@ -1199,6 +1199,7 @@ class SkillRouterTest(unittest.TestCase):
 
     def test_readiness_replay_keeps_whole_chain_and_byte_digest_boundaries(self) -> None:
         router = flat(SKILL)
+        orchestration = flat(ORCHESTRATION)
         for phrase in (
             "`IMPLEMENTATION_READY`/whole-chain readiness",
             "production entrypoint -> productive carrier -> protected sealing -> analysis -> action routing",
@@ -1209,6 +1210,13 @@ class SkillRouterTest(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, router)
+        for phrase in (
+            "every pre-utility branch/operator",
+            "exact production object types",
+            "Synthetic container or shape substitutes do not close a runtime adapter",
+        ):
+            with self.subTest(orchestration_phrase=phrase):
+                self.assertIn(phrase, orchestration)
 
     def test_remote_overlay_selects_one_host_and_launcher_before_utility(self) -> None:
         if not REMOTE_EXECUTION_OVERLAY.is_file():
