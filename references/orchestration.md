@@ -605,18 +605,30 @@ not interrupt authentication UI/PTY or a real carrier. Prefer named
 type, and `task_name` alone does not load the custom profile. If only an
 existing-thread model override is exposed, the Sol owner may dispatch one
 contiguous same-thread route turn. Its complete capsule has exactly one neutral
-`MODEL_ROUTE_DISPATCH_ID=<id>` line; old `LUNA_ROUTE_DISPATCH_ID` is read-only
-compatibility for immutable Luna receipts and is never a new prompt or Sol route.
+`MODEL_ROUTE_DISPATCH_ID=<id>` line; a fresh `LUNA_ROUTE_DISPATCH_ID` is never a
+new prompt or effect authorization. Keep the old marker only for historical
+diagnostics of immutable receipts; it never yields `PASS_MODEL_ROUTE` or a new
+Sol route.
 Build the prompt with the existing canonical `scripts/validate_model_route.py`
 builder CLI `--build-same-thread-prompt --route-dispatch-id <id> --capsule-path
 <path>` using the existing capsule (add `--action-class` for Sol). The builder
 emits the matching `PASS_MODEL_ROUTE` and `await-successor-activation` preamble;
 send its stdout verbatim only after the validator confirms exactly one marker.
-Missing, duplicate, hidden or legacy markers fail before delivery. Before the
-action's first write/remote launch/protected read, run the helper against durable
-rollout metadata, including exact parent binding for a named child or exact
-same-thread thread/turn/dispatch binding. The check writes no state or artifact;
-a mismatch returns to the Sol owner before effects or stops fail-closed.
+Missing, duplicate, hidden or legacy markers fail before delivery. The builder
+capsule and receipt capsule must be the same exact file. Before the action's
+first write/remote launch/protected read, run this complete same-thread effect
+receipt command (the `frozen_deterministic` route must include
+`--context-eligible`) against durable rollout metadata:
+
+```text
+python3 scripts/validate_model_route.py --action-class frozen_deterministic --rollout-path <rollout-path> --route-mode same_thread --expected-thread-id <thread-id> --expected-route-dispatch-id <id> --capsule-path <capsule-path> --context-eligible
+```
+
+Every listed flag is required for this effect receipt; a missing flag, capsule,
+or exact file match fails closed before effects. The check writes no state or
+artifact; named-child validation still binds the exact parent, while same-thread
+validation binds the exact thread/turn/dispatch. A mismatch returns to the Sol
+owner before effects or stops fail-closed.
 
 - `gpt-5.6-sol` + `max`: formulation, Opportunity Search, sources/neighbors,
   material contract/authority/claim choices, causal/statistical/algebraic
@@ -646,9 +658,10 @@ named child requires `session_meta` plus current `turn_context` with
 `agent_role=luna_worker`, `model=gpt-5.6-luna`, `effort=max`, exact `parent_thread_id`, and
 `multi_agent_version=v1|v2`. A same-thread fallback requires the exact
 `session_meta.id`, latest `turn_context` model/effort/turn ID, and one matching
-`MODEL_ROUTE_DISPATCH_ID` user message (or old Luna marker only for frozen
-deterministic compatibility) whose durable message metadata carries that same
-turn ID. Do not infer turn ownership from file order:
+`MODEL_ROUTE_DISPATCH_ID` user message whose durable message metadata carries that
+same turn ID. A fresh `LUNA_ROUTE_DISPATCH_ID` can only be retained for historical
+diagnostics and never authorizes an effect or emits `PASS_MODEL_ROUTE`. Do not
+infer turn ownership from file order:
 queued user input may be serialized before a same-turn context record. Inspect the
 dispatcher before spending a spawn: absence of `agent_type` makes only the named
 profile unavailable, not a separately exposed existing-thread Luna route. Do not
@@ -765,7 +778,12 @@ For Scout:
    exact-path, carrier, environment, exposure, authority, and resource check
    into one whole-chain preflight. Prefer one coherent implementation/repair
    commit and, only when evidence must be committed separately, one final
-   evidence commit;
+   evidence commit. Include a closed grant-to-entrypoint constructability check:
+   the bound grant must be accepted by the exact production launcher/handler,
+   every required safe-output/schema function must exist, and every necessary
+   repair path must remain inside the same owner's reversible write surface. If
+   any predicate fails, stay in same-owner pre-release repair; do not emit a
+   terminal, dispatch an Audit, or create a new attempt;
 10. freeze scientific decision invariants before evidence, but record incidental
    implementation and host identity in the final launch manifest rather than
    promoting every filename, hash, schema label, readiness record, or verifier
@@ -974,9 +992,10 @@ required live replay/canary, byte-compare or hash the live read-back against the
 accepted candidate, and send the existing consumer/Controller one non-scientific
 completion message naming the exact live hash and reload instruction. If any
 step fails, remain active or roll back; never claim deployment from the candidate
-copy. Ordinary Pro review is nonblocking and may challenge the deployed diff
-later. This is an owner completion invariant, not a new callback, receipt family,
-state field, watcher, heartbeat, registry, role, or lifecycle.
+copy. Ordinary scientific Pro batches stay nonblocking. Skill/AGENTS changes
+require a fixed-SHA PR, local validation and Pro `ACCEPT` before merge/deploy;
+Pro remains advisory. This is an owner completion invariant, not a new callback,
+receipt family, state field, watcher, heartbeat, registry, role, or lifecycle.
 
 Scientific projection and operational overlay remain disabled until a
 deny-by-default field map, deterministic full-contract reconstruction, and

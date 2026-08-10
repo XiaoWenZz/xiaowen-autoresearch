@@ -113,6 +113,28 @@ def expand_codex_home(command: list[str], codex_home: Path) -> list[str]:
 
 
 class ControllerHeartbeatAutomationTest(unittest.TestCase):
+    def test_recovery_consumer_fixture_drains_every_recovery_without_sending(self) -> None:
+        config = load(AUTOMATION)
+        fixture = config["recovery_consumer_fixture"]
+        cases = fixture["cases"]
+        self.assertEqual([case["name"] for case in cases], ["single", "double"])
+        for case in cases:
+            payload = json.loads(case["advance_cursors_output"])
+            recoveries = payload["recoveries"]
+            expected_messages = json.loads(case["expected_messages"])
+            self.assertEqual(
+                [
+                    {
+                        "owner_thread_id": item["owner_thread_id"],
+                        "source_cursor": item["source_cursor"],
+                        "message": "same-owner terminal-recovery",
+                    }
+                    for item in recoveries
+                ],
+                expected_messages,
+            )
+            self.assertEqual(payload["status"], "RECOVERY_REQUIRED")
+
     def test_frozen_singleton_fixture_uses_native_controller_recovery_contract(self) -> None:
         config = load(AUTOMATION)
         self.assertEqual(config["id"], AUTOMATION_ID)
@@ -153,16 +175,15 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             "schema_version=5",
             'workflow_evolution_gate.py" controller-context-window --thread-id',
             'controller_control_state.py" show --state',
-            "Do not preload the full Skill, full state, long references, remote/child AGENTS, or Workflow Evolution",
-            "no-effect never routes Workflow Evolution",
-            "Treat only callback, terminal/pending absorption or terminal-state, due blocker, missing/failed owner, failed/overdue job, state contradiction, or explicit new-objective admission as actionable",
-            "If none is present, return quietly",
-            "For an actionable obligation, reload the complete live Skill and only its directly triggered references before effects",
-            "use `show --projection full` only for migration, contradiction, rebuild, or replay",
+            "A no-effect check loads neither full Skill/state/references, remote/child AGENTS nor Workflow Evolution",
+            "Actionable means callback, terminal/pending, due blocker, missing/failed owner, failed/overdue job, contradiction, or explicit new-objective admission",
+            "otherwise return quietly",
+            "Before effects, actionable work reloads the complete live Skill and directly triggered references",
+            "full projection is only for migration, contradiction, rebuild or replay",
             "每次 wake 都是同一 Controller thread 的恢复事务",
             "final 前必须 drain terminal verify/absorb/route/dispatch/activation/close/finite-block/title/pin/state-CAS",
             "Callbacks are compact receipt-only envelopes",
-            "open immutable terminal bodies locally",
+            "Open immutable terminal bodies locally",
             "completion_binding",
             "pending_absorption",
             "observe-terminal",
@@ -170,22 +191,26 @@ class ControllerHeartbeatAutomationTest(unittest.TestCase):
             "activate-successor",
             "close-objective",
             "absorb-and-block",
-            "Terminal absorption, safety, existing-owner continuity, and blocker recovery remain nonblocking",
-            "REQUIRE_ROLLOVER and PAUSE_NEW_OBJECTIVE_ADMISSION block only new-objective admission",
-            "context pause never blocks terminal/safety/existing-owner recovery",
-            "Complete the runtime-supported compact/rollover before another new objective",
+            "Terminal/safety/owner/blocker recovery stays nonblocking",
+            "REQUIRE_ROLLOVER and PAUSE_NEW_OBJECTIVE_ADMISSION block only new admission",
+            "context pause never blocks recovery",
+            "Compact/rollover before a new objective",
             "this gate creates no state/artifact",
-            "require one successful receipt, then immediately CAS activate-successor",
-            "the destination awaits that minimum revision with the exact binding and remote-job projection or explicit no-remote-job",
-            "No final precedes the CAS",
+            "After one successful receipt, CAS activate-successor",
+            "the destination awaits the exact minimum revision, binding and remote-job-or-none",
+            "No final precedes CAS",
             "frozen deterministic work uses named Luna plus durable validator",
             "real carrier uses Sol/xhigh",
             "science/authority uses Sol/max",
             "source_turn_state=IN_PROGRESS|FINAL",
-            "FINAL+NON_TERMINAL",
-            "same-owner terminal-recovery wake",
+            "advance-cursors returns RECOVERY_REQUIRED",
+            "every `recoveries` owner_thread_id/source_cursor",
+            "Uncertain delivery stays REQUIRED",
+            "no final or blind resend",
+            "Never wait for heartbeat/user",
+            "never ignore the list because single-item compatibility fields exist",
             "interactive auth/credential/approval UI",
-            "30-minute cadence recovery-only",
+            "30-minute cadence is recovery-only",
             "Validate/deduplicate worker issue envelopes",
             "in Shadow Mode",
             "never infer science from activity",

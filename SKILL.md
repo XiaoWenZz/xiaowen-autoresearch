@@ -266,10 +266,9 @@ locally; batch only material science, acceptance, exposure, authority,
 irreversible/public/paid/permission or user-facing choices; add no self-trigger,
 science block, telemetry, watcher or lifecycle.
 
-Never emit `RETAIN|COMPLETE` from a candidate-only diff: live files must
-byte-match it, required checks pass, and the consumer/Controller receive the
-exact live hash plus reload instruction. Advisory may review the deployed diff
-later.
+Candidate diff is not `RETAIN|COMPLETE`: live files byte-match it, checks pass,
+and Controller gets exact hash/reload. Skill/AGENTS merge/deploy only after a
+fixed-SHA PR, local validation and Pro `ACCEPT`; Pro stays advisory.
 
 Use `R0`--`R3` as shorthand, never a lifecycle; follow
 [problem-space.md](references/problem-space.md). Keep at most one active `R1`

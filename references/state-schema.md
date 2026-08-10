@@ -259,12 +259,16 @@ identity reconciliation without inventing a job or scientific outcome.
 
 Every `advance-cursors` update includes
 `source_turn_state=IN_PROGRESS|FINAL`. A `FINAL + NON_TERMINAL` Executor update
-is accepted only when exactly one matching `ACTIVE` remote job with `NONE` wake
-delivery already exists. Otherwise the CAS rejects without moving the cursor,
-preserving the prebound terminal and same-owner recovery path. This does not
-prevent a runtime from rendering a malformed final; it prevents Controller
-continuity from accepting that final as ordinary progress. Terminal cursors
-retain the separate absorbed-event barrier.
+is accepted as ordinary progress only when exactly one matching `ACTIVE` remote
+job with `NONE` wake delivery already exists. If no matching job, terminal, or
+pending absorption exists, the same-owner Controller recovery CAS instead keeps
+the cursor and objective/owner identity unchanged while encoding
+`SAME_OWNER_TERMINAL_RECOVERY:v1:<owner>:<source_cursor>:<base64url(previous_next_action)>`
+in the existing `next_action`. Exact replay is read-only and returns
+`RECOVERY_REQUIRED`; a different final cursor cannot overwrite the recovery.
+The active projection exposes this existing `next_action`, so the same wake can
+send each returned recovery without adding an outbox, job, terminal, or
+lifecycle. Terminal cursors retain the separate absorbed-event barrier.
 
 For prospective budgets, the already-debited predecessor and governance cost
 remain cumulative. Only elapsed execution after durable successor activation
@@ -280,8 +284,12 @@ absorbed ID; adds exactly one `OPEN/DELEGATED/ACTIVE` objective plus its matchin
 role; requires an allowlisted immutable terminal path with exact byte count and
 SHA-256, exact body binding and mirrors; and records a nonempty recovery-evidence
 reference. An Executor terminal must carry `startup_chain_authority` explicitly
-as the exact object or `null`; its `executor_continuation_phase` mirror is
-recovered when present and defaults to `NONE` when absent. Rebuild restores and
+as the exact object or `null`, and `rebuild-add-objective` requires an explicit
+`executor_continuation_phase` mirror (`NONE`, `ZERO_USED`, or `CARRIER_USED`).
+Missing phase is accepted only when the exact path and digest resolve to an
+entry in `LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS` whose
+`allow_missing_executor_continuation_phase_mirror` is explicitly `true` and the
+caller explicitly opts into that compatibility. Rebuild restores and
 revalidates these objects before CAS, while a missing required field or digest
 drift fails with the snapshot unchanged. It
 never absorbs the terminal: the Controller must still run `observe-terminal`,

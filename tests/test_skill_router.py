@@ -627,6 +627,12 @@ class SkillRouterTest(unittest.TestCase):
             "one contiguous pre-release, outcome-blind Luna segment",
             "same Sol owner",
             "one failure fingerprint",
+            "closed grant-to-entrypoint constructability",
+            "exact production launcher/handler",
+            "required safe-output/schema function must exist",
+            "same owner's reversible write surface",
+            "stay in same-owner pre-release repair",
+            "do not emit a terminal, dispatch an Audit, or create a new attempt",
             "Do not make `Lead -> Builder -> Acceptance`",
             "Every cross-thread successor records exactly one structured",
             "Model switch, hash/path/schema/import or package checks",
@@ -1179,6 +1185,11 @@ class SkillRouterTest(unittest.TestCase):
             "send its stdout verbatim",
             "exactly one marker",
             "Missing, duplicate, hidden or legacy markers fail before delivery",
+            "builder capsule and receipt capsule must be the same exact file",
+            "python3 scripts/validate_model_route.py --action-class frozen_deterministic --rollout-path <rollout-path> --route-mode same_thread --expected-thread-id <thread-id> --expected-route-dispatch-id <id> --capsule-path <capsule-path> --context-eligible",
+            "Every listed flag is required for this effect receipt",
+            "historical diagnostics",
+            "never authorizes an effect or emits `PASS_MODEL_ROUTE`",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, orchestration)
@@ -1225,10 +1236,11 @@ class SkillRouterTest(unittest.TestCase):
         orchestration = flat(ORCHESTRATION)
 
         for phrase in (
-            "Never emit `RETAIN|COMPLETE` from a candidate-only diff",
-            "live files must byte-match it",
-            "consumer/Controller receive the exact live hash plus reload instruction",
-            "Advisory may review the deployed diff later",
+            "Candidate diff is not `RETAIN|COMPLETE`",
+            "live files byte-match it",
+            "Controller gets exact hash/reload",
+            "Skill/AGENTS merge/deploy only after a fixed-SHA PR, local validation and Pro `ACCEPT`",
+            "Pro stays advisory",
         ):
             with self.subTest(router_phrase=phrase):
                 self.assertIn(phrase, router)
@@ -1239,7 +1251,9 @@ class SkillRouterTest(unittest.TestCase):
             "run the required live replay/canary",
             "hash the live read-back against the accepted candidate",
             "one non-scientific completion message",
-            "Ordinary Pro review is nonblocking",
+            "Ordinary scientific Pro batches stay nonblocking",
+            "Skill/AGENTS changes require a fixed-SHA PR, local validation and Pro `ACCEPT` before merge/deploy",
+            "Pro remains advisory",
             "not a new callback, receipt family, state field, watcher, heartbeat, registry, role, or lifecycle",
         ):
             with self.subTest(orchestration_phrase=phrase):

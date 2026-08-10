@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import fcntl
 import hashlib
@@ -114,12 +115,14 @@ LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS = {
         "sha256": "70bb814182f566459a644b461b218c091cf0e24db4355d2a199edee5849be6e0",
         "missing_from_binding": frozenset({"terminal_event_id", "terminal_path"}),
         "allow_missing_startup_authority_mirror": True,
+        "allow_missing_executor_continuation_phase_mirror": True,
     },
     "/private/tmp/TERM-SMI-E1-OPTSTATE-RETURN-GAP4-V4-R1-ATTEMPT007-ROOT-CONTRACT-AUTHORIZED-IMPLEMENTATION-PROFILE-EXECUTOR-20260808-001.json": {
         "bytes": 15581,
         "sha256": "b0262f0302d7c126d73c63b4fe11d46885bd92cb257a26f31a2eb213963f1acb",
         "missing_from_binding": frozenset(),
         "allow_missing_startup_authority_mirror": True,
+        "allow_missing_executor_continuation_phase_mirror": True,
     },
     "/private/tmp/TERM-SMI-E1-OPTSTATE-RETURN-GAP4-V4-R1-ATTEMPT008-AUTHORITY-RECEIVER-LOCAL-ORCHESTRATION-BOUNDARY-AUDIT-20260808-001.json": {
         "bytes": 159707,
@@ -133,6 +136,7 @@ LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS = {
         "sha256": "104fed10aa4758532ffa7473914dc9c54e09639bb3f861220a9c3b9aa6478440",
         "missing_from_binding": frozenset(),
         "allow_missing_startup_authority_mirror": True,
+        "allow_missing_executor_continuation_phase_mirror": True,
         "missing_startup_authority_requires_unbound_objective": True,
     },
     "/private/tmp/TERM-FPA-DP1-INTERNAL-PRESERVING-WITNESS-R1-EXECUTOR-20260809-001.json": {
@@ -140,6 +144,7 @@ LEGACY_TERMINAL_COMPLETION_BINDING_PROJECTIONS = {
         "sha256": "6ece649999d5fde20df870e062723f68866abacfc0773cd4dea95bac9c1aefe7",
         "missing_from_binding": frozenset(),
         "allow_missing_startup_authority_mirror": True,
+        "allow_missing_executor_continuation_phase_mirror": True,
         "missing_startup_authority_requires_unbound_objective": True,
     },
 }
@@ -616,6 +621,8 @@ def _read_bound_terminal(
     require_startup_authority_mirror: bool = False,
     expected_executor_continuation_phase: Any = _EXECUTOR_PHASE_UNSPECIFIED,
     allow_executor_continuation_phase_mirror: bool = False,
+    require_executor_continuation_phase_mirror: bool = False,
+    allow_missing_executor_continuation_phase_mirror: bool = False,
 ) -> tuple[bytes, dict[str, Any]]:
     _validate_completion_binding(expected_binding, "expected_completion_binding")
     data = _read_immutable_terminal(path)
@@ -703,6 +710,17 @@ def _read_bound_terminal(
             "expected_executor_continuation_phase",
         )
         body_has_phase = "executor_continuation_phase" in terminal_body
+        if require_executor_continuation_phase_mirror and not body_has_phase:
+            if not (
+                allow_missing_executor_continuation_phase_mirror is True
+                and compatibility_projection.get(
+                    "allow_missing_executor_continuation_phase_mirror"
+                )
+                is True
+            ):
+                raise StateError(
+                    "Executor terminal must explicitly bind executor_continuation_phase"
+                )
         if expected_phase == "NONE":
             if body_has_phase and terminal_body["executor_continuation_phase"] != "NONE":
                 raise StateError(
@@ -721,6 +739,24 @@ def _read_bound_terminal(
                 raise StateError(
                     "terminal executor_continuation_phase does not match current objective phase"
                 )
+    elif require_executor_continuation_phase_mirror:
+        body_has_phase = "executor_continuation_phase" in terminal_body
+        if not body_has_phase:
+            if not (
+                allow_missing_executor_continuation_phase_mirror is True
+                and compatibility_projection.get(
+                    "allow_missing_executor_continuation_phase_mirror"
+                )
+                is True
+            ):
+                raise StateError(
+                    "Executor terminal must explicitly bind executor_continuation_phase"
+                )
+        else:
+            _executor_continuation_phase(
+                terminal_body["executor_continuation_phase"],
+                "terminal.executor_continuation_phase",
+            )
     elif "executor_continuation_phase" in terminal_body and not allow_executor_continuation_phase_mirror:
         raise StateError(
             "non-Executor terminal must not carry executor_continuation_phase"
@@ -920,6 +956,51 @@ def _objective_executor_continuation_phase(
     if "executor_continuation_phase" not in objective:
         return "NONE"
     return _executor_continuation_phase(objective["executor_continuation_phase"], where)
+
+
+_SAME_OWNER_TERMINAL_RECOVERY_PREFIX = "SAME_OWNER_TERMINAL_RECOVERY:v1:"
+
+
+def _same_owner_terminal_recovery_next_action(
+    owner_thread_id: str,
+    source_cursor: str,
+    previous_next_action: str,
+) -> str:
+    encoded_previous = base64.urlsafe_b64encode(
+        previous_next_action.encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    return (
+        f"{_SAME_OWNER_TERMINAL_RECOVERY_PREFIX}{owner_thread_id}:"
+        f"{source_cursor}:{encoded_previous}"
+    )
+
+
+def _parse_same_owner_terminal_recovery(
+    next_action: Any,
+) -> tuple[str, str, str] | None:
+    if not isinstance(next_action, str) or not next_action.startswith(
+        _SAME_OWNER_TERMINAL_RECOVERY_PREFIX
+    ):
+        return None
+    fields = next_action.split(":")
+    if len(fields) < 5 or fields[0] != "SAME_OWNER_TERMINAL_RECOVERY" or fields[1] != "v1":
+        return None
+    owner_thread_id = fields[2]
+    source_cursor = ":".join(fields[3:-1])
+    encoded_previous = fields[-1]
+    if not owner_thread_id or not source_cursor or not encoded_previous:
+        return None
+    padded = encoded_previous + "=" * (-len(encoded_previous) % 4)
+    try:
+        previous_next_action = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+    except (UnicodeDecodeError, ValueError, base64.binascii.Error):
+        return None
+    canonical_encoded = base64.urlsafe_b64encode(
+        previous_next_action.encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    if canonical_encoded != encoded_previous:
+        return None
+    return owner_thread_id, source_cursor, previous_next_action
 
 
 def _validate_executor_continuation(
@@ -2242,10 +2323,19 @@ def cmd_rebuild_add_objective(args: argparse.Namespace) -> None:
         for pending in state["pending_absorptions"]
     ):
         raise StateError("terminal_event_id is already pending absorption")
+    allow_missing_executor_continuation_phase_mirror = bool(
+        getattr(args, "allow_missing_executor_continuation_phase_mirror", False)
+    )
     terminal_data, terminal_body = _read_bound_terminal(
         Path(completion_binding["terminal_path"]),
         completion_binding,
         allow_executor_continuation_phase_mirror=args.owner_role == "Executor",
+        require_executor_continuation_phase_mirror=args.owner_role == "Executor",
+        allow_missing_executor_continuation_phase_mirror=(
+            allow_missing_executor_continuation_phase_mirror
+            if args.owner_role == "Executor"
+            else False
+        ),
     )
     terminal_bytes = len(terminal_data)
     terminal_sha256 = hashlib.sha256(terminal_data).hexdigest()
@@ -2272,10 +2362,17 @@ def cmd_rebuild_add_objective(args: argparse.Namespace) -> None:
     terminal_has_startup_authority = "startup_chain_authority" in terminal_body
     recovered_startup_authority = terminal_body.get("startup_chain_authority")
     if args.owner_role == "Executor":
-        recovered_continuation_phase = _executor_continuation_phase(
-            terminal_body.get("executor_continuation_phase", "NONE"),
-            "terminal.executor_continuation_phase",
-        )
+        if "executor_continuation_phase" in terminal_body:
+            recovered_continuation_phase = _executor_continuation_phase(
+                terminal_body["executor_continuation_phase"],
+                "terminal.executor_continuation_phase",
+            )
+        elif allow_missing_executor_continuation_phase_mirror:
+            recovered_continuation_phase = "NONE"
+        else:
+            raise StateError(
+                "reconstructed Executor terminal must explicitly bind executor_continuation_phase"
+            )
         objective["executor_continuation_phase"] = recovered_continuation_phase
         if not terminal_has_startup_authority:
             raise StateError(
@@ -3391,6 +3488,9 @@ def cmd_advance_cursors(args: argparse.Namespace) -> None:
         raise StateError("cursor updates must be a non-empty list")
     roles = {role["thread_id"]: role for role in state["managed_roles"]}
     seen: set[str] = set()
+    recoveries: list[dict[str, str]] = []
+    recovery_materialized = 0
+    ordinary_updates = 0
     for index, update in enumerate(updates):
         where = f"cursor_updates[{index}]"
         if not isinstance(update, dict):
@@ -3456,12 +3556,104 @@ def cmd_advance_cursors(args: argparse.Namespace) -> None:
                 and job.get("wake_delivery")
                 == {"state": "NONE", "claim_token": None, "observation_id": None}
             ]
-            if len(active_jobs) != 1:
+            if len(active_jobs) > 1:
                 raise StateError(
                     f"{where} FINAL NON_TERMINAL Executor requires exactly one active registered remote job"
                 )
+            if not active_jobs:
+                matching_pending = [
+                    pending
+                    for pending in state["pending_absorptions"]
+                    if pending.get("objective_id") == objective["objective_id"]
+                    and pending.get("owner_thread_id") == thread_id
+                ]
+                if matching_pending:
+                    raise StateError(
+                        f"{where} FINAL NON_TERMINAL Executor has a matching terminal pending absorption"
+                    )
+                terminal_path = objective["completion_binding"]["terminal_path"]
+                try:
+                    Path(terminal_path).lstat()
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    raise StateError(
+                        f"{where} FINAL NON_TERMINAL Executor terminal path cannot be checked"
+                    ) from exc
+                else:
+                    raise StateError(
+                        f"{where} FINAL NON_TERMINAL Executor has a matching terminal; observe-terminal first"
+                    )
+                existing_recovery = _parse_same_owner_terminal_recovery(
+                    objective.get("next_action")
+                )
+                if (
+                    existing_recovery is None
+                    and isinstance(objective.get("next_action"), str)
+                    and objective["next_action"].startswith(
+                        _SAME_OWNER_TERMINAL_RECOVERY_PREFIX
+                    )
+                ):
+                    raise StateError(
+                        f"{where} existing same-owner terminal recovery is malformed"
+                    )
+                if existing_recovery is not None:
+                    recovery_owner, recovery_cursor, _ = existing_recovery
+                    if (
+                        recovery_owner != thread_id
+                        or recovery_cursor != update["new_cursor"]
+                    ):
+                        raise StateError(
+                            f"{where} cannot overwrite existing recovery with a different FINAL cursor"
+                        )
+                    recoveries.append(
+                        {
+                            "owner_thread_id": thread_id,
+                            "source_cursor": update["new_cursor"],
+                        }
+                    )
+                    continue
+                previous_next_action = objective["next_action"]
+                objective["next_action"] = _same_owner_terminal_recovery_next_action(
+                    thread_id,
+                    update["new_cursor"],
+                    previous_next_action,
+                )
+                recoveries.append(
+                    {
+                        "owner_thread_id": thread_id,
+                        "source_cursor": update["new_cursor"],
+                    }
+                )
+                recovery_materialized += 1
+                continue
         role["cursor"] = update["new_cursor"]
+        ordinary_updates += 1
+    if recoveries and recovery_materialized == 0 and ordinary_updates == 0:
+        payload: dict[str, Any] = {
+            "status": "RECOVERY_REQUIRED",
+            "revision": state["revision"],
+            "recoveries": recoveries,
+        }
+        if len(recoveries) == 1:
+            payload.update(recoveries[0])
+        print(
+            json.dumps(payload, sort_keys=True)
+        )
+        return
     result = write_state(path, state, args.expected_revision)
+    if recoveries:
+        payload = {
+            "status": "RECOVERY_REQUIRED",
+            "revision": result["revision"],
+            "recoveries": recoveries,
+        }
+        if len(recoveries) == 1:
+            payload.update(recoveries[0])
+        print(
+            json.dumps(payload, sort_keys=True)
+        )
+        return
     print(json.dumps({"status": "PASS", "revision": result["revision"], "advanced": len(updates)}, sort_keys=True))
 
 
@@ -3977,6 +4169,10 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild.add_argument("--completion-binding-json", required=True)
     rebuild.add_argument("--terminal-bytes", type=int, required=True)
     rebuild.add_argument("--terminal-sha256", required=True)
+    rebuild.add_argument(
+        "--allow-missing-executor-continuation-phase-mirror",
+        action="store_true",
+    )
     rebuild.set_defaults(handler=cmd_rebuild_add_objective)
     migrate = subparsers.add_parser("migrate-v2")
     migrate.add_argument("--state", required=True)

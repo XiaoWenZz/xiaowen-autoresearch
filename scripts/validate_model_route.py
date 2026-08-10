@@ -100,6 +100,7 @@ def validate_receipt(
             raise ValueError("same-thread route is missing durable turn identity")
         if not expected_route_dispatch_id:
             raise ValueError("same-thread route requires an expected route dispatch")
+        validate_route_dispatch_id(expected_route_dispatch_id)
         if receipt.route_dispatch_id != expected_route_dispatch_id:
             raise ValueError(
                 "same-thread route dispatch mismatch: "
@@ -135,24 +136,111 @@ def _object(value: Any, where: str) -> dict[str, Any]:
     return value
 
 
-def _user_message_text(event: dict[str, Any]) -> str:
+def _user_message_bytes(event: dict[str, Any]) -> bytes | None:
+    """Return one user message's one text body without joining content items."""
+
     if event.get("type") != "response_item":
-        return ""
+        return None
     payload = event.get("payload")
     if not isinstance(payload, dict):
-        return ""
+        return None
     if payload.get("type") != "message" or payload.get("role") != "user":
-        return ""
+        return None
     content = payload.get("content")
-    if not isinstance(content, list):
-        return ""
-    return "\n".join(
-        item["text"]
-        for item in content
-        if isinstance(item, dict)
-        and item.get("type") in {"input_text", "text"}
-        and isinstance(item.get("text"), str)
-    )
+    if not isinstance(content, list) or len(content) != 1:
+        return None
+    item = content[0]
+    if (
+        not isinstance(item, dict)
+        or item.get("type") not in {"input_text", "text"}
+        or not isinstance(item.get("text"), str)
+    ):
+        return None
+    return item["text"].encode("utf-8")
+
+
+_ENVELOPE_ELEMENT_PATTERN = re.compile(
+    r"<(?P<tag>[A-Za-z_][A-Za-z0-9_.:-]*)>(?P<body>[^<>]*)</(?P=tag)>"
+)
+
+
+def _envelope_metadata_only(text: str) -> bool:
+    """Accept only whitespace and closed non-reserved metadata elements."""
+
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor].isspace():
+            cursor += 1
+            continue
+        match = _ENVELOPE_ELEMENT_PATTERN.match(text, cursor)
+        if match is None or match.group("tag") in {"input", "codex_delegation"}:
+            return False
+        cursor = match.end()
+    return True
+
+
+def _matches_supported_envelope(text: str, canonical_prompt: bytes) -> bool:
+    """Match the only supported delegation envelope around exact canonical bytes."""
+
+    opening = "<codex_delegation>"
+    closing = "</codex_delegation>"
+    if (
+        text.count(opening) != 1
+        or text.count(closing) != 1
+        or text.count(ROUTE_DISPATCH_MARKER) != 1
+        or text.count(LEGACY_ROUTE_DISPATCH_MARKER) != 0
+    ):
+        return False
+    left_trimmed = text.lstrip()
+    if not left_trimmed.startswith(opening):
+        return False
+    prefix_length = len(text) - len(left_trimmed)
+    start = prefix_length + len(opening)
+    end = text.rfind(closing)
+    if end < start or text[end + len(closing) :].strip():
+        return False
+    interior = text[start:end]
+    input_open = "<input>"
+    input_close = "</input>"
+    if interior.count(input_open) != 1 or interior.count(input_close) != 1:
+        return False
+    input_start = interior.find(input_open)
+    input_end = interior.find(input_close)
+    if input_end < input_start:
+        return False
+    before = interior[:input_start]
+    after = interior[input_end + len(input_close) :]
+    if not _envelope_metadata_only(before) or not _envelope_metadata_only(after):
+        return False
+    if (
+        ROUTE_DISPATCH_MARKER in before
+        or ROUTE_DISPATCH_MARKER in after
+        or LEGACY_ROUTE_DISPATCH_MARKER in before
+        or LEGACY_ROUTE_DISPATCH_MARKER in after
+    ):
+        return False
+    body = interior[input_start + len(input_open) : input_end]
+    try:
+        return body.encode("utf-8") == canonical_prompt
+    except UnicodeEncodeError:
+        return False
+
+
+def _matches_canonical_user_message(
+    event: dict[str, Any], canonical_prompt: bytes
+) -> bool:
+    """Accept raw canonical bytes or one exact supported delegation envelope."""
+
+    body = _user_message_bytes(event)
+    if body is None:
+        return False
+    if body == canonical_prompt:
+        return True
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return _matches_supported_envelope(text, canonical_prompt)
 
 
 def _has_exact_route_dispatch(
@@ -309,23 +397,35 @@ def load_rollout_receipt(
     decision_ambiguity: bool,
     route_mode: str = "named_child",
     expected_route_dispatch_id: str | None = None,
+    capsule_path: str | Path | None = None,
 ) -> RouteReceipt:
     """Read only durable routing fields; never trust worker prose."""
 
+    if action_class not in ROUTES:
+        raise ValueError(f"unknown action class: {action_class}")
+    if route_mode not in {"named_child", "same_thread"}:
+        raise ValueError(f"unknown route mode: {route_mode}")
+    if route_mode == "same_thread":
+        if expected_route_dispatch_id is None:
+            raise ValueError("same-thread rollout load requires an expected route dispatch")
+        if capsule_path is None:
+            raise ValueError("same-thread rollout load requires --capsule-path")
+        canonical_prompt = build_same_thread_prompt_bytes(
+            expected_route_dispatch_id,
+            capsule_path,
+            action_class=action_class,
+        )
+    elif capsule_path is not None:
+        raise ValueError("capsule path is forbidden for named-child route")
+
     session_meta: dict[str, Any] | None = None
     turn_context: dict[str, Any] | None = None
-    user_messages: list[tuple[int, str, str | None]] = []
+    user_messages: list[tuple[int, dict[str, Any], str | None]] = []
     with rollout_path.open("r", encoding="utf-8") as handle:
         for line_number, raw in enumerate(handle, start=1):
             if not any(
                 marker in raw
                 for marker in ('"session_meta"', '"turn_context"', '"response_item"')
-            ):
-                continue
-            if '"response_item"' in raw and (
-                route_mode != "same_thread"
-                or not expected_route_dispatch_id
-                or expected_route_dispatch_id not in raw
             ):
                 continue
             try:
@@ -343,13 +443,13 @@ def load_rollout_receipt(
             elif event.get("type") == "turn_context":
                 turn_context = payload
             elif event.get("type") == "response_item":
-                text = _user_message_text(event)
-                if text:
-                    metadata = payload.get("internal_chat_message_metadata_passthrough")
-                    message_turn_id = (
-                        metadata.get("turn_id") if isinstance(metadata, dict) else None
-                    )
-                    user_messages.append((line_number, text, message_turn_id))
+                if payload.get("type") != "message" or payload.get("role") != "user":
+                    continue
+                metadata = payload.get("internal_chat_message_metadata_passthrough")
+                message_turn_id = (
+                    metadata.get("turn_id") if isinstance(metadata, dict) else None
+                )
+                user_messages.append((line_number, event, message_turn_id))
     if session_meta is None or turn_context is None:
         raise ValueError("rollout is missing session_meta or turn_context routing metadata")
 
@@ -362,26 +462,20 @@ def load_rollout_receipt(
         raise ValueError("turn_context.effort is missing")
     route_dispatch_id: str | None = None
     if route_mode == "same_thread":
-        if not expected_route_dispatch_id:
-            raise ValueError("same-thread rollout load requires an expected route dispatch")
         if not isinstance(turn_id, str) or not turn_id:
             raise ValueError("same-thread turn_context.turn_id is missing")
         matches = [
             line_number
-            for line_number, text, message_turn_id in user_messages
+            for line_number, event, message_turn_id in user_messages
             if message_turn_id == turn_id
-            and _has_exact_route_dispatch(
-                text,
-                expected_route_dispatch_id,
-                action_class=action_class,
-                allow_legacy_luna=(
-                    action_class == "frozen_deterministic"
-                    and not decision_ambiguity
-                    and not protected_exposed
-                ),
-            )
+            and _matches_canonical_user_message(event, canonical_prompt)
         ]
-        if len(matches) != 1:
+        current_turn_messages = [
+            line_number
+            for line_number, _event, message_turn_id in user_messages
+            if message_turn_id == turn_id
+        ]
+        if len(current_turn_messages) != 1 or len(matches) != 1:
             raise ValueError("same-thread route dispatch marker is missing or ambiguous")
         route_dispatch_id = expected_route_dispatch_id
     return RouteReceipt(
@@ -463,10 +557,10 @@ def main() -> int:
             return 0
         if args.action_class is None:
             raise ValueError("--action-class is required for receipt validation")
-        if args.route_dispatch_id is not None or args.capsule_path is not None:
-            raise ValueError(
-                "--route-dispatch-id and --capsule-path require same-thread prompt mode"
-            )
+        if args.route_dispatch_id is not None:
+            raise ValueError("--route-dispatch-id requires same-thread prompt mode")
+        if args.capsule_path is not None and args.route_mode != "same_thread":
+            raise ValueError("--capsule-path is forbidden for named-child route")
         if args.rollout_path:
             if args.model is not None or args.effort is not None:
                 raise ValueError("rollout metadata and direct model/effort are mutually exclusive")
@@ -478,6 +572,7 @@ def main() -> int:
                 decision_ambiguity=args.decision_ambiguity,
                 route_mode=args.route_mode,
                 expected_route_dispatch_id=args.expected_route_dispatch_id,
+                capsule_path=args.capsule_path,
             )
         else:
             if not args.model or not args.effort:
