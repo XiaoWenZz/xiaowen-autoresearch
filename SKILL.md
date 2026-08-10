@@ -168,7 +168,7 @@ Never default to
 Choose cheapest capable; ties use Luna; role never selects effort. Route remaining
 work; one continuous Sol owner retains objective/budget/effects/terminal. With edits/
 acceptance/exposure/budget/stop frozen, Sol may invoke one no-history named
-`agent_type=luna_worker`/max child for patch/tests. Returns diff+tests:
+`agent_type=luna_worker`/max child for patch/tests. Returns diff+tests to Sol:
 no commit/deploy/authority/terminal or remote/GPU/model/data/protected/science access.
 Sol reruns acceptance. Same-thread is Sol-only; never interrupt auth/PTY/carrier.
 Use `scripts/validate_model_route.py --build-route-prompt` with explicit route

@@ -32,17 +32,27 @@ LEGACY_ROUTE_DISPATCH_MARKER = "LUNA_ROUTE_DISPATCH_ID="
 _ROUTE_DISPATCH_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
 
 
-def _same_thread_prompt_preamble(action_class: str) -> str:
+def _route_prompt_preamble(route_mode: str, action_class: str) -> str:
     try:
         model, effort = ROUTES[action_class]
     except KeyError as exc:
         raise ValueError(f"unknown action class: {action_class}") from exc
-    return f"PASS_MODEL_ROUTE: {model}/{effort}\nawait-successor-activation\n"
-
-
-SAME_THREAD_PROMPT_PREAMBLE = _same_thread_prompt_preamble(
-    "frozen_deterministic"
-)
+    if route_mode == "same_thread":
+        if action_class not in SAME_THREAD_ACTION_CLASSES:
+            raise ValueError(
+                "same-thread prompt requires explicit bounded_engineering, "
+                "real_carrier, or scientific_decision action_class"
+            )
+        continuation = "await-successor-activation"
+    elif route_mode == "named_child":
+        if action_class != "frozen_deterministic":
+            raise ValueError(
+                "named-child prompt requires frozen_deterministic action_class"
+            )
+        continuation = "return-diff-and-validation-to-parent"
+    else:
+        raise ValueError(f"unknown route mode: {route_mode}")
+    return f"PASS_MODEL_ROUTE: {model}/{effort}\n{continuation}\n"
 
 
 @dataclass(frozen=True)
@@ -69,12 +79,13 @@ class RouteReceipt:
 def expected_route(receipt: RouteReceipt) -> tuple[str, str]:
     if receipt.action_class not in ROUTES:
         raise ValueError(f"unknown action class: {receipt.action_class}")
-    if receipt.protected_exposed and receipt.action_class == "frozen_deterministic":
-        raise ValueError("protected-exposed work cannot be routed to Luna")
-    if receipt.decision_ambiguity:
-        return ROUTES["scientific_decision"]
-    if receipt.action_class == "frozen_deterministic" and not receipt.context_eligible:
-        raise ValueError("Luna requires a frozen oracle and eligible visible context")
+    if receipt.action_class == "frozen_deterministic":
+        if receipt.protected_exposed:
+            raise ValueError("protected-exposed work cannot be routed to Luna")
+        if receipt.decision_ambiguity:
+            raise ValueError("decision-ambiguous work cannot be routed to Luna")
+        if not receipt.context_eligible:
+            raise ValueError("Luna requires a frozen oracle and eligible visible context")
     return ROUTES[receipt.action_class]
 
 
@@ -347,13 +358,14 @@ def validate_route_dispatch_id(route_dispatch_id: str) -> str:
     return route_dispatch_id
 
 
-def _validate_same_thread_prompt_any(
+def _validate_route_prompt_any(
     prompt: str | bytes,
     route_dispatch_id: str,
     *,
+    route_mode: str,
     action_class: str,
 ) -> None:
-    """Fail closed unless *prompt* has one canonical first-line dispatch marker.
+    """Fail closed unless *prompt* is one canonical route prompt.
 
     This is intentionally a pure check.  It does not read or write files and
     does not accept a marker buried in prose or in a capsule body.
@@ -368,7 +380,7 @@ def _validate_same_thread_prompt_any(
     if not isinstance(prompt, str):
         raise ValueError("same-thread prompt must be text or UTF-8 bytes")
 
-    canonical_prefix = _same_thread_prompt_preamble(action_class)
+    canonical_prefix = _route_prompt_preamble(route_mode, action_class)
     if LEGACY_ROUTE_DISPATCH_MARKER in prompt:
         raise ValueError("legacy Luna route dispatch marker is not accepted")
     marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}"
@@ -402,8 +414,11 @@ def validate_same_thread_prompt(
         raise ValueError(
             "same-thread prompt requires explicit bounded_engineering, real_carrier, or scientific_decision action_class"
         )
-    _validate_same_thread_prompt_any(
-        prompt, route_dispatch_id, action_class=action_class
+    _validate_route_prompt_any(
+        prompt,
+        route_dispatch_id,
+        route_mode="same_thread",
+        action_class=action_class,
     )
 
 
@@ -433,26 +448,60 @@ def _read_capsule(capsule_path: str | Path) -> tuple[bytes, str]:
     return capsule_bytes, capsule_text
 
 
-def _build_same_thread_prompt_bytes(
+def _build_route_prompt_bytes(
     route_dispatch_id: str,
     capsule_path: str | Path,
     *,
+    route_mode: str,
     action_class: str,
 ) -> bytes:
-    """Build the canonical stdout payload for one same-thread route turn."""
+    """Build the canonical stdout payload for one explicit route turn."""
 
     route_dispatch_id = validate_route_dispatch_id(route_dispatch_id)
-    preamble = _same_thread_prompt_preamble(action_class)
+    preamble = _route_prompt_preamble(route_mode, action_class)
     capsule_bytes, capsule_text = _read_capsule(capsule_path)
     if ROUTE_DISPATCH_MARKER in capsule_text or LEGACY_ROUTE_DISPATCH_MARKER in capsule_text:
         raise ValueError("capsule already contains a route dispatch marker")
 
     marker = f"{ROUTE_DISPATCH_MARKER}{route_dispatch_id}\n".encode("utf-8")
     prompt_bytes = marker + preamble.encode("utf-8") + capsule_bytes
-    _validate_same_thread_prompt_any(
-        prompt_bytes, route_dispatch_id, action_class=action_class
+    _validate_route_prompt_any(
+        prompt_bytes,
+        route_dispatch_id,
+        route_mode=route_mode,
+        action_class=action_class,
     )
     return prompt_bytes
+
+
+def _build_same_thread_prompt_bytes(
+    route_dispatch_id: str,
+    capsule_path: str | Path,
+    *,
+    action_class: str,
+) -> bytes:
+    """Build one canonical same-thread Sol prompt."""
+
+    return _build_route_prompt_bytes(
+        route_dispatch_id,
+        capsule_path,
+        route_mode="same_thread",
+        action_class=action_class,
+    )
+
+
+def build_named_child_prompt_bytes(
+    route_dispatch_id: str,
+    capsule_path: str | Path,
+) -> bytes:
+    """Build one canonical frozen deterministic Luna child prompt."""
+
+    return _build_route_prompt_bytes(
+        route_dispatch_id,
+        capsule_path,
+        route_mode="named_child",
+        action_class="frozen_deterministic",
+    )
 
 
 def build_same_thread_prompt_bytes(
@@ -532,10 +581,9 @@ def load_rollout_receipt(
             raise ValueError("Luna named-child route requires an expected route dispatch")
         if capsule_path is None:
             raise ValueError("Luna named-child route requires --capsule-path")
-        canonical_prompt = _build_same_thread_prompt_bytes(
+        canonical_prompt = build_named_child_prompt_bytes(
             expected_route_dispatch_id,
             capsule_path,
-            action_class=action_class,
         )
     capsule_bytes: int | None = None
     capsule_sha256: str | None = None
@@ -801,11 +849,17 @@ def main() -> int:
                 raise ValueError(
                     "named-child prompt requires frozen_deterministic action_class"
                 )
-            prompt_bytes = _build_same_thread_prompt_bytes(
-                args.route_dispatch_id,
-                args.capsule_path,
-                action_class=args.action_class,
-            )
+            if build_route_mode == "same_thread":
+                prompt_bytes = _build_same_thread_prompt_bytes(
+                    args.route_dispatch_id,
+                    args.capsule_path,
+                    action_class=args.action_class,
+                )
+            else:
+                prompt_bytes = build_named_child_prompt_bytes(
+                    args.route_dispatch_id,
+                    args.capsule_path,
+                )
             sys.stdout.buffer.write(prompt_bytes)
             return 0
         if args.route_dispatch_id is not None:

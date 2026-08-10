@@ -13,6 +13,7 @@ from scripts.validate_model_route import (
     ROUTE_DISPATCH_MARKER,
     RouteReceipt,
     _build_same_thread_prompt_bytes,
+    build_named_child_prompt_bytes,
     build_same_thread_prompt,
     build_same_thread_prompt_bytes,
     load_rollout_receipt,
@@ -75,10 +76,9 @@ class ModelRouteTest(unittest.TestCase):
             else:
                 session[key] = value
         path = root / "rollout.jsonl"
-        canonical = _build_same_thread_prompt_bytes(
+        canonical = build_named_child_prompt_bytes(
             route_dispatch_id,
             capsule_path,
-            action_class="frozen_deterministic",
         ).decode("utf-8")
         events = (
             {"type": "session_meta", "payload": session},
@@ -119,15 +119,15 @@ class ModelRouteTest(unittest.TestCase):
         self,
         root: Path,
         *,
-        action_class: str = "frozen_deterministic",
+        action_class: str = "bounded_engineering",
         thread_id: str = "executor-1",
         route_dispatch_id: str = "luna-route-1",
         duplicate_marker: bool = False,
         stale_marker: bool = False,
         marker_before_context: bool = False,
         omit_marker_turn_id: bool = False,
-        model: str = "gpt-5.6-luna",
-        effort: str = "max",
+        model: str = "gpt-5.6-sol",
+        effort: str = "high",
         name: str = "same-thread-rollout.jsonl",
         marker_text: str | None = None,
     ) -> Path:
@@ -436,8 +436,14 @@ class ModelRouteTest(unittest.TestCase):
             )
             for route_mode, action_class in cases:
                 with self.subTest(route_mode=route_mode):
-                    expected = _build_same_thread_prompt_bytes(
-                        route_dispatch_id, path, action_class=action_class
+                    expected = (
+                        _build_same_thread_prompt_bytes(
+                            route_dispatch_id, path, action_class=action_class
+                        )
+                        if route_mode == "same_thread"
+                        else build_named_child_prompt_bytes(
+                            route_dispatch_id, path
+                        )
                     )
                     result = subprocess.run(
                         [
@@ -459,6 +465,15 @@ class ModelRouteTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr.decode())
                     self.assertEqual(result.stdout, expected)
                     self.assertEqual(result.stderr, b"")
+                    if route_mode == "named_child":
+                        self.assertIn(
+                            b"return-diff-and-validation-to-parent\n",
+                            result.stdout,
+                        )
+                        self.assertNotIn(
+                            b"await-successor-activation\n",
+                            result.stdout,
+                        )
             missing_action = subprocess.run(
                 [
                     sys.executable,
@@ -534,13 +549,13 @@ class ModelRouteTest(unittest.TestCase):
                 expected_route_dispatch_id="dispatch-1",
             )
 
-    def test_decision_ambiguity_forces_sol_max(self) -> None:
+    def test_decision_ambiguity_never_silently_retiers_explicit_sol_class(self) -> None:
         self.assertEqual(
             validate_receipt(
                 RouteReceipt(
-                    "bounded_engineering",
+                    "real_carrier",
                     "gpt-5.6-sol",
-                    "max",
+                    "xhigh",
                     decision_ambiguity=True,
                     receipt_source="durable_rollout",
                     route_mode="same_thread",
@@ -551,8 +566,17 @@ class ModelRouteTest(unittest.TestCase):
                 expected_thread_id="thread-1",
                 expected_route_dispatch_id="dispatch-1",
             ),
-            ("gpt-5.6-sol", "max"),
+            ("gpt-5.6-sol", "xhigh"),
         )
+        with self.assertRaisesRegex(ValueError, "decision-ambiguous"):
+            validate_receipt(
+                self.luna_receipt(decision_ambiguity=True),
+                expected_parent_thread_id="parent-1",
+                expected_thread_id="child-1",
+                expected_turn_id="turn-1",
+                expected_first_turn_id="turn-1",
+                expected_route_dispatch_id="luna-route-1",
+            )
 
     def test_protected_exposure_and_unfrozen_context_reject_luna(self) -> None:
         for receipt in (
@@ -701,6 +725,32 @@ class ModelRouteTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "no-history"):
                 self.load_named_rollout_for_test(history, capsule)
+
+            successor_preamble = root / "successor-preamble.jsonl"
+            successor_preamble.write_text(
+                base.read_text(encoding="utf-8").replace(
+                    "return-diff-and-validation-to-parent",
+                    "await-successor-activation",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+                self.load_named_rollout_for_test(successor_preamble, capsule)
+
+            missing_context = root / "missing-context-eligible.jsonl"
+            context_lines = base.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(context_lines):
+                event = json.loads(line)
+                if event.get("type") == "turn_context":
+                    event["payload"].pop("context_eligible")
+                    context_lines[index] = json.dumps(event)
+                    break
+            missing_context.write_text(
+                "\n".join(context_lines) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "durable context eligibility"):
+                self.load_named_rollout_for_test(missing_context, capsule)
 
     def test_luna_v2_named_child_rejects_wrong_role_model_and_parent(self) -> None:
         cases = (

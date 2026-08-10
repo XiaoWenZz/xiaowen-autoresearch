@@ -597,7 +597,9 @@ recovery, an isolated context, or an auditable evidence trail across turns.
 At each bounded runtime dispatch or continuation boundary, derive model/effort from
 the remaining work segment and visible context, never the umbrella candidate, role
 or predecessor. Pass both explicitly for Sol routes; omission or inheritance from
-the predecessor fails admission. A role name never selects effort by itself. Keep
+the predecessor fails admission. The validator never retiers an explicit action
+class from a boolean flag; the Sol owner changes class only at a safe turn boundary.
+A role name never selects effort by itself. Keep
 one continuous Sol owner for scientific/real-carrier work. After diagnosis freezes
 one deterministic edit/test surface, that Sol owner may invoke at most one short,
 no-history named `agent_type=luna_worker` at Luna/max; same-thread Luna is forbidden.
@@ -616,6 +618,9 @@ missing, duplicate, hidden or legacy markers fail before delivery.
 authorizes an effect. Only raw canonical bytes or the fixed two-field
 `codex_delegation(source_thread_id,input)` envelope are accepted; unknown tags,
 extra instructions/inputs, prefix or suffix fail closed.
+The same-thread preamble ends in `await-successor-activation`; the named-child
+preamble ends in `return-diff-and-validation-to-parent` and never enters the
+Managed successor lifecycle.
 
 Before any effect, validate durable rollout metadata with the same exact capsule.
 Same-thread is Sol-only and binds thread, current turn, dispatch and capsule.
