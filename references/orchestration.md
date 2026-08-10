@@ -807,6 +807,10 @@ chain the run will use through a controlled zero-utility barrier:
 command/environment -> coordinator -> worker/bootstrap/import -> exact
 isolation/device/runtime -> READY_BEFORE_FIRST_UTILITY -> controlled exit`.
 
+Before that barrier exits, exercise every pre-utility branch/operator that
+consumes runtime objects with the exact production object types. Synthetic
+container or shape substitutes do not close a runtime adapter.
+
 The witness must use the production shell, heredoc, environment expansion,
 entrypoint and runtime—not a unit mock. Its generated required-environment
 projection comes from the same launcher function as release; it is not a second
