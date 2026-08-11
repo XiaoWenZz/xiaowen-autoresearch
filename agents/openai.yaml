@@ -1,4 +1,4 @@
 interface:
   display_name: "Xiaowen AutoResearch"
-  short_description: "Control bounded research, not frozen pure execution"
-  default_prompt: "Use $xiaowen-autoresearch to select one research-control route, load only its direct references, freeze the smallest valid contract, and delegate any fully frozen pure implementation task without loading the research skill or parent history."
+  short_description: "Freeze and qualify decision-critical research evidence"
+  default_prompt: "Use $xiaowen-autoresearch only at a scientific contract, protected release, evidence, claim, closure, long-job, or external-block boundary, and keep reversible engineering with one continuous owner."
