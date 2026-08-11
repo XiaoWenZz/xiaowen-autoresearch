@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 from pathlib import Path
 import re
 import unittest
-
-import yaml
 
 
 ROOT = Path(__file__).parents[1]
@@ -36,7 +35,23 @@ def skill_body() -> str:
 
 
 def frontmatter() -> dict[str, object]:
-    return yaml.safe_load(skill_text().split("---", 2)[1])
+    raw = skill_text().split("---", 2)[1]
+    name_match = re.search(r"(?m)^name:\s*(\S+)\s*$", raw)
+    description_match = re.search(r"(?ms)^description:\s*>-\s*\n(?P<body>(?:  .*\n?)+)$", raw)
+    if name_match is None or description_match is None:
+        raise AssertionError("Skill frontmatter is not the expected minimal scalar shape")
+    description = " ".join(line.strip() for line in description_match.group("body").splitlines())
+    return {"name": name_match.group(1), "description": description}
+
+
+def interface_metadata() -> dict[str, str]:
+    result: dict[str, str] = {}
+    for match in re.finditer(r'(?m)^  (?P<key>[a-z_]+):\s+(?P<value>".*")$', INTERFACE.read_text(encoding="utf-8")):
+        value = json.loads(match.group("value"))
+        if not isinstance(value, str):
+            raise AssertionError("Interface metadata values must be strings")
+        result[match.group("key")] = value
+    return result
 
 
 def sections() -> dict[str, str]:
@@ -85,7 +100,8 @@ class SkillRouterTest(unittest.TestCase):
         )
 
     def test_interface_metadata_matches_the_kernel(self) -> None:
-        metadata = yaml.safe_load(INTERFACE.read_text(encoding="utf-8"))["interface"]
+        metadata = interface_metadata()
+        self.assertEqual(set(metadata), {"display_name", "short_description", "default_prompt"})
         self.assertEqual(metadata["display_name"], "Xiaowen AutoResearch")
         self.assertGreaterEqual(len(metadata["short_description"]), 25)
         self.assertLessEqual(len(metadata["short_description"]), 64)
